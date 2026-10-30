@@ -1,0 +1,30 @@
+- role: I_1_send
+  operations:
+  - compute:
+    - mI1 = sign(<$I, $R>, ltkI)
+  - send:
+    - mI1
+- role: R_1_receive
+  operations:
+  - receive:
+    - mR1
+  - compute:
+    - mR1 = sign(<$I, $R>, ltkI)
+  - send: []
+- role: R_2_send
+  operations:
+  - generate_nonces:
+    - ~rn
+  - compute:
+    - mR2 = sign(<$I, $R>, ltkR)
+  - send:
+    - mR2
+    - ~rn
+- role: I_2_receive
+  operations:
+  - receive:
+    - mI2
+    - rn
+  - compute:
+    - mI2 = sign(<$I, $R>, ltkR)
+  - send: <END>

@@ -1,0 +1,42 @@
+theory SymmetricKeyEncapsulationAux
+begin
+
+builtins: symmetric-encryption
+
+functions: tag_aux/2
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+  --[ Create($I, ~k), Create($R, ~k) ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Initiator_Send_Encapsulation:
+  [ !SharedKey($I, $R, k), Fr(~sec), Fr(~pub) ]
+  --[ Test1(), SentCipher($I, $R, senc(<~sec, ~pub>, k)), Secret($I, $R, ~sec) ]->
+  [ Out(senc(<~sec, ~pub>, k)), St_I_Sent($I, $R, ~sec, ~pub, k) ]
+
+rule Responder_Process_Encapsulation:
+  let auxr = tag_aux(sec, pub) in
+  [ !SharedKey($I, $R, k), In(senc(<sec, pub>, k)) ]
+  --[ Test2(), ReceivedCipher($I, $R, senc(<sec, pub>, k)), AuxComputed($R, $I, auxr) ]->
+  [ Out(pub), St_R_Done($R, $I, sec, pub, auxr) ]
+
+restriction Accepted_Encapsulation_Was_Sent:
+  "All I R c #i.
+     ReceivedCipher(I, R, c) @ i
+   ==> Ex #j. SentCipher(I, R, c) @ j & j < i"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All I R sec #i.
+     Secret(I, R, sec) @ i
+   ==>
+     not (Ex #j. K(sec) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

@@ -1,0 +1,37 @@
+theory BSKT begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: pk/1
+
+equations: adec(aenc(m, pk(sk)), sk) = m
+
+rule Generate_Server_Keys:
+  [ Fr(~skS) ]
+  --[ ServerKeyGen($S, ~skS) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), ClientStart($S, ~k) ]->
+  [ Out(aenc(~k, pkS)) ]
+
+rule RuleStep2:
+  [ In(c), !Ltk($S, skS) ]
+  let k' = adec(c, skS) in
+  --[ Test2(), ServerDecrypt($S, k') ]->
+  [ Out(h(k')) ]
+
+rule RuleStep3:
+  [ In(m2), !Pk($S, pkS), ClientStart($S, ~k) ]
+  let expected = h(~k) in
+  --[ Test3(), ClientVerify($S, ~k, m2) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

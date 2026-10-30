@@ -1,0 +1,72 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule ProvisionKey:
+  [ Fr(~k) ]
+  --[ Honest($Tag), Honest($Reader), Secret($Reader, $Tag, ~k) ]->
+  [ !Ltk($Tag, ~k), !Ltk($Reader, ~k) ]
+
+rule LtkReveal:
+  [ !Ltk(X, ltk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(ltk) ]
+
+rule RuleStep1:
+  [ Fr(~r0) ]
+  --[ Test1() ]->
+  [ Out(~r0), !ReaderState($Reader, ~r0) ]
+
+rule RuleStep2:
+  let
+    tag_mac = h(~r0 XOR ~r1 XOR k)
+  in
+  [ In(~r0), Fr(~r1), !Ltk($Tag, k) ]
+  --[ Test2(), Running($Tag, $Reader, <~r0, ~r1>) ]->
+  [ Out(< 'TAG_HDR', ~r1, tag_mac >), !TagState($Tag, ~r0, ~r1, tag_mac) ]
+
+rule RuleStep3:
+  let
+    reader_mac = h(tag_mac XOR k XOR r0)
+  in
+  [ In(< 'TAG_HDR', r1, tag_mac >), !Ltk($Reader, k), !ReaderState($Reader, r0) ]
+  --[ Test3(), Commit($Reader, $Tag, <r0, r1>) ]->
+  [ Out(reader_mac) ]
+
+rule RuleStep4:
+  let
+    expected = h(tag_mac XOR k XOR r0)
+  in
+  [ In(reader_mac), !Ltk($Tag, k), !TagState($Tag, r0, r1, tag_mac) ]
+  --[ Test4(), Commit($Tag, $Reader, <r0, r1>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag_authenticates_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader_authenticates_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

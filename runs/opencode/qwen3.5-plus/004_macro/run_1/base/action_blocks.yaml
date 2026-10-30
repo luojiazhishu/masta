@@ -1,0 +1,24 @@
+- role: Client_Init
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: Server_Respond
+  operations:
+  - receive:
+    - ct
+  - compute:
+    - k = adec(ct, skS)
+  - send:
+    - h(k)
+- role: Client_Verify
+  operations:
+  - receive:
+    - hk
+  - assert:
+    - hk = h(~k)
+  - send: []
+- role: Server_Commit
+  operations:
+  - send: <END>

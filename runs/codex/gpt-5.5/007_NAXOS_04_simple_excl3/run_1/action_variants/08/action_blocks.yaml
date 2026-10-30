@@ -1,0 +1,30 @@
+- role: Initiator_1
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tidI
+  - compute:
+    - exI = h1(<~eskI, ltkI>)
+    - X = h1(<'g_to', h1(<~eskI, ltkI>)>)
+  - send:
+    - X
+- role: Responder_2
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+    - ~tidR
+  - compute:
+    - exR = h1(<~eskR, ltkR>)
+    - Y = h1(<'g_to', h1(<~eskR, ltkR>)>)
+    - kR = h2(<h1(<pkI, h1(<~eskR, ltkR>)>), h1(<X, ltkR>), 'I', 'R', 'channelV1'>)
+  - send:
+    - Y
+- role: Initiator_3
+  operations:
+  - receive:
+    - Y
+  - compute:
+    - kI = h2(<h1(<Y, ltkI>), h1(<pkR, exI>), 'I', 'R', 'channelV1'>)
+  - send: <END>

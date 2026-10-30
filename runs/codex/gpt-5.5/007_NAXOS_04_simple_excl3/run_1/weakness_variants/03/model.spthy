@@ -1,0 +1,59 @@
+theory SimplifiedNaxos
+begin
+
+builtins: diffie-hellman, hashing
+
+rule Register_Initiator:
+  [ Fr(~lkI) ]
+  --[ Test1(), Create($I, ~lkI) ]->
+  [ !Ltk($I, ~lkI), !Directory($I, 'g'^~lkI, ~lkI), Out(<$I, 'g'^~lkI, ~lkI>) ]
+
+rule Register_Responder:
+  [ Fr(~lkR) ]
+  --[ Test2(), Create($R, ~lkR) ]->
+  [ !Ltk($R, ~lkR), !Directory($R, 'g'^~lkR, ~lkR), Out(<$R, 'g'^~lkR, ~lkR>) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, lk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(lk) ]
+
+rule Initiator_Send_Message1:
+  let exI = h(<'h1', ~eskI, lkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk(I, lkI), !Directory(R, pkR, lkR) ]
+  --[ Test3(), Running(I, R, <'init', hkI, pkR, I, R>) ]->
+  [ Out(<I, R, hkI>), St_I_1(I, R, lkI, lkR, pkR, exI, hkI) ]
+
+rule Responder_Receive_Message1_Send_Message2:
+  let exR = h(<'h1', ~eskR, lkR>)
+      hkR = 'g'^exR
+      kR = h(<'h2', hkI, hkR, lkI, lkR, I, R>)
+  in
+  [ Fr(~eskR), !Ltk(R, lkR), !Directory(I, pkI, lkI), In(<I, R, hkI>) ]
+  --[ Test4(), Running(R, I, <'resp', hkI, hkR, kR, I, R>), Commit(R, I, <'resp', hkI, hkR, kR, I, R>), Secret(I, R, kR), Honest(I), Honest(R) ]->
+  [ Out(<R, I, hkR>) ]
+
+rule Initiator_Receive_Message2:
+  let kI = h(<'h2', hkI, hkR, lkI, lkR, I, R>)
+  in
+  [ St_I_1(I, R, lkI, lkR, pkR, exI, hkI), In(<R, I, hkR>) ]
+  --[ Test5(), Commit(I, R, <'init', hkI, hkR, kI, I, R>), Secret(I, R, kI), Honest(I), Honest(R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

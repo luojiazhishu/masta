@@ -1,0 +1,56 @@
+theory SimplifiedNaxosSimpleExcl3
+begin
+
+builtins: hashing, diffie-hellman
+
+functions: h1/2, h2/1, dh/2, ge/1
+
+rule Create_Party:
+  [ Fr(~ltk) ]
+  --[ Create($P, ~ltk) ]->
+  [ !Ltk($P, ~ltk), !Pk($P, ge(~ltk)), Out(ge(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(P, ltk) ]
+  --[ LtkReveal(P) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Send_Message1:
+  let exI = h1(~eskI, lkI)
+      hkI = ge(exI)
+  in
+  [ Fr(~eskI), !Ltk(I, lkI), !Pk(R, pkR) ]
+  --[ Test1() ]->
+  [ Out(hkI), Sent_Message1(I, R, hkI), St_I_1(I, R, lkI, exI, pkR) ]
+
+rule Responder_Send_Message2:
+  let exR = h1(~eskR, lkR)
+      hkR = ge(exR)
+      kR = h2(<dh(pkI, exR), dh(X, lkR), I, R>)
+  in
+  [ Fr(~eskR), Fr(~SessionCorrelator), Sent_Message1(I, R, X), !Ltk(R, lkR), !Pk(I, pkI) ]
+  --[ Test2(), Running(R, I, kR) ]->
+  [ Out(<hkR, ~SessionCorrelator>), Sent_Message2(I, R, hkR, ~SessionCorrelator) ]
+
+rule Initiator_Receive_Message2:
+  let kI = h2(<dh(Y, lkI), dh(pkR, exI), I, R>)
+  in
+  [ St_I_1(I, R, lkI, exI, pkR), Sent_Message2(I, R, Y, SessionCorrelator) ]
+  --[ Test3(), Commit(I, R, kI), Secret(kI) ]->
+  [ ]
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All k #i.
+     Secret(k) @ #i
+   ==>
+     not (Ex #j. K(k) @ #j)
+   | (Ex X #r. LtkReveal(X) @ #r & #r < #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

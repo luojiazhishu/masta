@@ -1,0 +1,91 @@
+theory Iso979844MutualChallengeResponse
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Create('IdA', 'IdB'), Create('IdB', 'IdA') ]->
+  [ !Ltk('IdA', 'IdB', ~k), !Ltk('IdB', 'IdA', ~k) ]
+
+rule Reveal_A:
+  [ !Ltk('IdA', 'IdB', k) ]
+  --[ LtkReveal('IdA') ]->
+  [ Out(k) ]
+
+rule Reveal_B:
+  [ !Ltk('IdB', 'IdA', k) ]
+  --[ LtkReveal('IdB') ]->
+  [ Out(k) ]
+
+rule Responder_Challenge:
+  [ Fr(~rb), Fr(~text1), !Ltk('IdB', 'IdA', k) ]
+  --[ Test1(), Running('IdB', 'IdA', <'B_challenge', ~rb>) ]->
+  [ Out(<~rb, ~text1>), St_B_1('IdB', 'IdA', k, ~rb) ]
+
+rule Initiator_TokenAB:
+  [ In(<rb, text1>), Fr(~text2), Fr(~text3), !Ltk('IdA', 'IdB', k) ]
+  --[ Test2(), Running('IdA', 'IdB', <'A_token', 'ra_dup', rb>) ]->
+  [ Out(<'ra_dup', ~text3, <'sid1_mut_cr', 'ra_dup', rb, 'IdB', ~text2>, mac(<'sid1_mut_cr', 'ra_dup', rb, 'IdB'>, k)>),
+    St_A_1('IdA', 'IdB', k, 'ra_dup', rb) ]
+
+rule Responder_TokenBA:
+  [ St_B_1('IdB', 'IdA', k, rb),
+    In(<ra, text3, <'sid1_mut_cr', ra, rb, 'IdB', text2>, mac(<'sid1_mut_cr', ra, rb, 'IdB'>, k)>),
+    Fr(~text4), Fr(~text5) ]
+  --[ Test3(), Commit('IdB', 'IdA', <'B_auth', ra, rb>), Running('IdB', 'IdA', <'B_token', ra, rb>) ]->
+  [ Out(<~text5, mac(<'sid2_mut_cr', rb, ra>, k), 'token_ba'>) ]
+
+rule Initiator_Finish:
+  [ St_A_1('IdA', 'IdB', k, ra, rb),
+    In(<text5, mac(<'sid2_mut_cr', rb, ra>, k), 'token_ba'>) ]
+  --[ Test4(), Commit('IdA', 'IdB', <'A_auth', ra, rb>) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All a b ra rb #i.
+     Commit(a, b, <'A_auth', ra, rb>) @ #i
+   ==>
+     (Ex #j. Running(b, a, <'B_token', ra, rb>) @ #j)
+   | (Ex x #r. LtkReveal(x) @ #r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All b a ra rb #i.
+     Commit(b, a, <'B_auth', ra, rb>) @ #i
+   ==>
+     (Ex #j. Running(a, b, <'A_token', ra, rb>) @ #j)
+   | (Ex x #r. LtkReveal(x) @ #r)"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All a b ra rb #i.
+     Commit(a, b, <'A_auth', ra, rb>) @ #i
+   ==>
+     ( (Ex #j. Running(b, a, <'B_token', ra, rb>) @ #j
+            & #j < #i
+            & not (Ex a2 b2 #i2. Commit(a2, b2, <'A_auth', ra, rb>) @ #i2
+                                & not (#i2 = #i))) )
+   | (Ex x #r. LtkReveal(x) @ #r)"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All b a ra rb #i.
+     Commit(b, a, <'B_auth', ra, rb>) @ #i
+   ==>
+     ( (Ex #j. Running(a, b, <'A_token', ra, rb>) @ #j
+            & #j < #i
+            & not (Ex b2 a2 #i2. Commit(b2, a2, <'B_auth', ra, rb>) @ #i2
+                                & not (#i2 = #i))) )
+   | (Ex x #r. LtkReveal(x) @ #r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

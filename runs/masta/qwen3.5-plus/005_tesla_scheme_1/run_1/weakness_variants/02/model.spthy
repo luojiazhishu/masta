@@ -1,0 +1,124 @@
+theory TESLA_Scheme1 begin
+
+builtins: hashing, signing
+
+functions: MAC/2
+
+rule GenerateKeys:
+  [ Fr(~ltk_S) ]
+  --[ Honest('S'),
+      Create('S', ~ltk_S) ]->
+  [ !Ltk('S', ~ltk_S),
+    Out(pk(~ltk_S)) ]
+
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1(),
+      Create('R', ~n_R) ]->
+  [ Out(<'R', 'S', ~n_R>) ]
+
+rule RuleStep2:
+  let commitment = h(~k_1)
+      signature = sign(<commitment, n_R>, ~ltk_S)
+  in
+  [ In(<'R', 'S', n_R>),
+    Fr(~k_1),
+    !Ltk('S', ~ltk_S) ]
+  --[ Test2(),
+      Running('S', 'R', commitment),
+      Secret(~k_1) ]->
+  [ Out(<'S', 'R', commitment, signature>),
+    !Commitment('R', commitment),
+    !StreamState('S', ~k_1),
+    !StoredKey('S', ~k_1) ]
+
+rule RuleStep3:
+  [ In(<'S', 'R', commitment, signature>) ]
+  --[ Test3() ]->
+  [ !SetupComplete('R', commitment) ]
+
+rule RuleStep4:
+  let D_1 = <~m_1, h(~k_2)>
+      mac_1 = MAC(~k_1, D_1)
+  in
+  [ !StreamState('S', ~k_1),
+    Fr(~k_2),
+    Fr(~m_1) ]
+  --[ Test4(),
+      Secret(~k_2) ]->
+  [ Out(<D_1, mac_1>),
+    !StreamState('S', ~k_2) ]
+
+rule RuleStep5:
+  [ In(<D_1, mac_1>) ]
+  --[ Test5() ]->
+  [ !CachedPayload('R', D_1, mac_1) ]
+
+rule RuleStep6:
+  let D_2 = <~m_2, h(~k_3), k_1>
+      mac_2 = MAC(~k_2, D_2)
+  in
+  [ !StreamState('S', ~k_2),
+    !StoredKey('S', k_1),
+    Fr(~k_3),
+    Fr(~m_2) ]
+  --[ Test6(),
+      Secret(~k_3),
+      Disclose(k_1) ]->
+  [ Out(<D_2, mac_2>),
+    !StreamState('S', ~k_3),
+    !RevealedKey('S', k_1) ]
+
+rule RuleStep7:
+  [ In(<prev_m, k_1, next_commit>),
+    !CachedPayload('R', <prev_m, prev_commit>, prev_mac),
+    !SetupComplete('R', prev_commit) ]
+  --[ Test7(),
+      Commit('R', 'S', prev_commit) ]->
+  [ !Authenticated('R', prev_m) ]
+
+rule LtkReveal:
+  [ !Ltk('S', ltk) ]
+  --[ LtkReveal('S') ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_commitment_chain_integrity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_initial_commitment_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_key_secrecy_until_disclosure:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_payload_binding_limitation:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

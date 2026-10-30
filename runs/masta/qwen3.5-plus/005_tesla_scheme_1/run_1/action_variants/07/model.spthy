@@ -1,0 +1,94 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: mac/2, f/1
+
+rule SetupLtk:
+  [ Fr(~SK_S) ]
+  --[ Secret($S, $S, ~SK_S) ]->
+  [ !Ltk($S, ~SK_S), !Pk($S, pk(~SK_S)) ]
+
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1(), Honest($R) ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+rule RuleStep2:
+  [ In(<$R, $S, ~n_R>)
+  , Fr(~k_1)
+  ]
+  --[ Test2(), Honest($S), Running($S, $R, <f(~k_1), ~n_R>), Secret($S, $R, ~k_1) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), ~n_R>, $SK_S)>)
+  , !SenderState($S, $R, ~k_1)
+  ]
+
+rule RuleStep3:
+  [ !SenderState($S, $R, ~k_1)
+  , Fr(~k_2)
+  , Fr(~m_1)
+  ]
+  --[ Test3(), Running($S, $R, ~m_1), Secret($S, $R, ~k_2) ]->
+  [ Out(< <~m_1, f(~k_2)>, mac(~k_1, <~m_1, f(~k_2)>), 'data1_marker' >)
+  , !SenderState($S, $R, ~k_2)
+  ]
+
+rule RuleStep4:
+  [ In(<D_1, mac_1, 'data1_marker'>)
+  , Fr(~tid_R)
+  ]
+  --[ Test4(), Commit($R, $S, D_1) ]->
+  [ !ReceiverState(~tid_R, D_1, mac_1)
+  ]
+
+rule RuleStep5:
+  [ !SenderState($S, $R, ~k_curr)
+  , Fr(~k_next)
+  , Fr(~m_n)
+  ]
+  --[ Test5(), Running($S, $R, ~m_n), Secret($S, $R, ~k_next) ]->
+  [ Out(< <~m_n, f(~k_next), ~k_curr>, mac(~k_curr, <~m_n, f(~k_next), ~k_curr>) >)
+  , !SenderState($S, $R, ~k_next)
+  ]
+
+rule RuleStep6:
+  [ In(<D_n, mac_n>)
+  , Fr(~tid_R2)
+  ]
+  --[ Test6(), Commit($R, $S, D_n) ]->
+  [ !ReceiverState(~tid_R2, D_n, mac_n)
+  ]
+
+rule LtkReveal:
+  [ !Ltk($S, $SK_S) ]
+  --[ LtkReveal($S) ]->
+  [ Out($SK_S) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_authenticity_of_broadcast_messages:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+      (Ex #j. Running(b, a, t) @ j)
+    | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_mac_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: secrecy
+lemma secrecy_signing_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

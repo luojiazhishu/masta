@@ -1,0 +1,32 @@
+- role: Client_Send_KeyTransport
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~tid
+  - compute:
+    - m1 = aenc(~k, pkS)
+  - send:
+    - $C
+    - $S
+    - m1
+- role: Server_Process_KeyTransport
+  operations:
+  - receive:
+    - C
+    - $S
+    - aenc(k, pk(skS))
+  - generate_nonces:
+    - ~stid
+  - compute:
+    - m2 = h(k)
+  - send:
+    - $S
+    - C
+    - m2
+- role: Client_Receive_KeyConfirm
+  operations:
+  - receive:
+    - $S
+    - $C
+    - h(k)
+  - send: <END>

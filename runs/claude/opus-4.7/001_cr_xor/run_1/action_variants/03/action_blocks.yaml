@@ -1,0 +1,30 @@
+- role: I_Send_Challenge
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: R_Send_Response
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(na XOR k XOR ~nb)
+  - send:
+    - tag
+    - ~nb
+    - '''Resp'''
+- role: I_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+    - marker
+  - compute:
+    - tag_expected = h(~na XOR k XOR nb)
+  - assert:
+    - marker = 'Resp'
+    - tag = tag_expected
+  - send: <END>

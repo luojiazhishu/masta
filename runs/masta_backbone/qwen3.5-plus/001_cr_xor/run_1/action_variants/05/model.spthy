@@ -1,0 +1,61 @@
+theory CR_XOR_RAudit begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+// Pre-shared key setup
+rule Setup_PSK:
+  [ Fr(~k) ]
+  -->
+  [ !PSK('I', 'R', ~k) ]
+
+// RuleStep1: Initiator sends na
+rule RuleStep1:
+  [ Fr(~na), !PSK('I', 'R', ~k) ]
+  --[ Test1(), Honest('I') ]->
+  [ Out(~na), State_I('I', 'R', ~k, ~na) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag and response
+rule RuleStep2:
+  let tag = h(~na XOR ~k XOR ~nb)
+  in
+  [ In(~na), Fr(~nb), !PSK('I', 'R', ~k) ]
+  --[ Test2(), Audit_R(bar(~nb)), Create('R', ~nb), Running('R', 'I', <~na, ~nb>), Honest('R') ]->
+  [ Out(<tag, ~nb>), State_R('I', 'R', ~k, ~na, ~nb) ]
+
+// RuleStep3: Initiator receives response, verifies tag, completes
+rule RuleStep3:
+  let t_prime = h(~na XOR ~k XOR nb)
+  in
+  [ State_I('I', 'R', ~k, ~na), In(<tag, nb>) ]
+  --[ Test3(), Verify_I(t_prime, tag), Commit('I', 'R', <~na, nb>), Honest('I') ]->
+  [ End_I('I', 'R', ~na) ]
+
+// LTK Reveal rule for PSK compromise
+rule PSKReveal:
+  [ !PSK('I', 'R', ~k) ]
+  --[ LtkReveal('R') ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All t #i.
+     Commit('I', 'R', t) @ i
+   ==>
+       (Ex id #j. Create('R', id) @ j)
+     | (Ex #r. LtkReveal('R') @ r & Honest('R') @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag:
+  "All t #i.
+     Commit('I', 'R', t) @ i
+   ==>
+       (Ex #j. Running('R', 'I', t) @ j)
+     | (Ex #r. LtkReveal('R') @ r & Honest('R') @ i)"
+
+end

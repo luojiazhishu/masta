@@ -1,0 +1,68 @@
+theory Lak06
+begin
+
+builtins: hashing, xor
+
+rule Provision:
+  [ Fr(~k), Fr(~tid) ]
+  --[ Test1(), Create('Reader', ~tid), Create('Tag', ~tid), Secret('Reader', 'Tag', ~tid), Honest('Reader'), Honest('Tag') ]->
+  [ !Ltk('Reader', 'Tag', ~k), !Ltk('Tag', 'Reader', ~k), !TagId('Tag', ~tid) ]
+
+rule Reveal_Reader_Tag_Key:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk('Reader', 'Tag', k) ]
+  --[ Test2(), Create('Reader', ~r0) ]->
+  [ Out(~r0), Msg_R0(k, ~r0), St_R_1(k, ~r0) ]
+
+rule Tag_Respond:
+  let tag_mac = h(<'tag_mac', r0, ~r1, k>) in
+  [ Fr(~r1), !Ltk('Tag', 'Reader', k), Msg_R0(k, r0) ]
+  --[ Test3(), Create('Tag', ~r1), Running('Tag', 'Reader', <'reader_accepts_tag', r0, ~r1>) ]->
+  [ Out(<~r1, tag_mac>), Msg_T1(k, r0, ~r1, tag_mac), St_T_1(k, r0, ~r1, tag_mac) ]
+
+rule Reader_Finish:
+  let tag_mac = h(<'tag_mac', r0, r1, k>)
+      reader_mac = h(<'reader_mac', tag_mac, k, r0>) in
+  [ St_R_1(k, r0), Msg_T1(k, r0, r1, tag_mac) ]
+  --[ Test4(), Running('Tag', 'Reader', <'reader_accepts_tag', r0, r1>), Commit('Reader', 'Tag', <'reader_accepts_tag', r0, r1>), Running('Reader', 'Tag', <'tag_accepts_reader', r0, r1>), Honest('Reader'), Honest('Tag') ]->
+  [ Out(reader_mac), Msg_R1(k, r0, r1, tag_mac, reader_mac) ]
+
+rule Tag_Finish:
+  let reader_mac = h(<'reader_mac', tag_mac, k, r0>) in
+  [ St_T_1(k, r0, r1, tag_mac), Msg_R1(k, r0, r1, tag_mac, reader_mac) ]
+  --[ Test5(), Running('Reader', 'Tag', <'tag_accepts_reader', r0, r1>), Commit('Tag', 'Reader', <'tag_accepts_reader', r0, r1>), Honest('Tag'), Honest('Reader') ]->
+  [ ]
+
+// category: secrecy
+lemma tag_identifier_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All t #i.
+     Commit('Tag', 'Reader', t) @ i
+   ==>
+       (Ex #j. Running('Reader', 'Tag', t) @ j)"
+
+// category: noninjective_agreement
+lemma reader_noninjective_agreement:
+  "All t #i.
+     Commit('Reader', 'Tag', t) @ i
+   ==>
+       (Ex #j. Running('Tag', 'Reader', t) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

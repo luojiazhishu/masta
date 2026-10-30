@@ -1,0 +1,85 @@
+theory LAK06_Weakness2
+begin
+
+builtins: hashing, xor
+
+// Long-term symmetric key shared between a Reader and a Tag (provisioning).
+rule Setup_Pair:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk($R, $T, ~k) ]
+
+// Adversary may compromise a long-term key (forward security is not provided).
+rule Reveal_Ltk:
+  [ !Ltk(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+  [ Out(k) ]
+
+// Action block 1: Reader draws a fresh r0 and transmits R0.
+rule Reader_Send_R0:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1(),
+      Create($R, ~r0) ]->
+  [ ReaderState($R, $T, k, ~r0), Out(~r0) ]
+
+// Action block 2: Tag receives R0, draws a fresh r1, computes tag_mac,
+// transmits T1 and commits the session locally without waiting for R1.
+rule Tag_Recv_R0_Send_T1:
+  let
+    tag_mac = h(r0 XOR ~r1 XOR k)
+  in
+  [ In(r0), Fr(~r1), !Ltk($T, $R, k) ]
+  --[ Test2(),
+      Create($T, ~r1),
+      Running($T, $R, <'tag', r0, ~r1>),
+      Commit($T, $R, <'reader', r0, ~r1>),
+      Secret($T, $R, k),
+      Honest($T), Honest($R) ]->
+  [ Out(<~r1, tag_mac>) ]
+
+// Action block 3: Reader receives T1, verifies tag_mac, computes
+// reader_mac and transmits R1 (informational on the air interface).
+rule Reader_Recv_T1_Send_R1:
+  let
+    expected = h(~r0 XOR r1 XOR k)
+    reader_mac = h(expected XOR k XOR ~r0)
+  in
+  [ ReaderState($R, $T, k, ~r0), In(<r1, expected>) ]
+  --[ Test3(),
+      Running($R, $T, <'reader', ~r0, r1>),
+      Commit($R, $T, <'tag', ~r0, r1>),
+      Secret($R, $T, k),
+      Honest($R), Honest($T) ]->
+  [ Out(reader_mac) ]
+
+// Safety properties
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i. Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b r0 r1 #i. Commit(a, b, <'reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b r0 r1 #i. Commit(a, b, <'tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable witness: chain of all action-block step-marking facts.
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

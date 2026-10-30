@@ -1,0 +1,32 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - send:
+    - '''JoinRequest'''
+    - $D
+    - $S
+    - ~devnonce
+    - mac(appkey, <'JoinRequest', $D, $S, ~devnonce>)
+- role: Server_Process_JoinRequest
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - $D
+    - $S
+    - devnonce
+    - mac(appkey, <'JoinRequest', $D, $S, devnonce>)
+  - generate_nonces:
+    - ~joinnonce
+    - ~sessioncorrelator
+  - send:
+    - senc(<'JoinAccept', ~joinnonce, 'DevAddr', mac(appkey, <'JoinAccept', ~joinnonce,
+      'DevAddr'>)>, appkey)
+    - ~sessioncorrelator
+- role: Device_Process_JoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinnonce, 'DevAddr', mac(appkey, <'JoinAccept', joinnonce,
+      'DevAddr'>)>, appkey)
+    - sessioncorrelator
+  - send: <END>

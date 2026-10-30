@@ -1,0 +1,87 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nR
+    - ~tagR
+  - send:
+    - '''setup_request'''
+    - $R
+    - $S
+    - ~nR
+    - ~tagR
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - '''setup_request'''
+    - R
+    - S
+    - nR
+    - tagR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+  - compute:
+    - commitment1 = h(~k1)
+    - sig = sign(<h(~k1), nR, tagR>, ltkS)
+  - send:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - sig
+- role: Receiver_Verify_Setup
+  operations:
+  - receive:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - sig
+  - assert:
+    - verify(sig, <commitment1, nR, tagR>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_First
+  operations:
+  - generate_nonces:
+    - ~m1
+  - compute:
+    - commitment2 = h(k2)
+    - data1 = <'data', ~m1, h(k2), 'none'>
+    - tag1 = mac(k1, <'data', ~m1, h(k2), 'none'>)
+  - send:
+    - '''stream'''
+    - data1
+    - tag1
+- role: Receiver_Cache_First
+  operations:
+  - receive:
+    - '''stream'''
+    - data1
+    - tag1
+  - send: []
+- role: Sender_Broadcast_Disclosure
+  operations:
+  - generate_nonces:
+    - ~k3
+    - ~m2
+  - compute:
+    - commitment3 = h(~k3)
+    - data2 = <'data', ~m2, h(~k3), k1>
+    - tag2 = mac(k2, <'data', ~m2, h(~k3), k1>)
+  - send:
+    - '''stream'''
+    - data2
+    - tag2
+    - k1
+- role: Receiver_Accept_First
+  operations:
+  - receive:
+    - '''stream'''
+    - <'data', m2, commitment3, k1>
+    - tag2
+  - compute:
+    - data1 = <'data', m1, commitment2, 'none'>
+  - assert:
+    - h(k1) = commitment1
+    - tag1 = mac(k1, data1)
+  - send: <END>

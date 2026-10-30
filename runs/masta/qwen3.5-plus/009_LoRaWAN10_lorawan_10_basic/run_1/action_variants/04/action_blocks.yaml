@@ -1,0 +1,41 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - audit = com(~DevEUI, ~DevNonce)
+    - reqmac = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - reqmac
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - ~RequestMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - respmac = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, ~DevAddr, respmac>, ~AppKey)
+- role: RuleStep3
+  operations:
+  - receive:
+    - ~EncryptedJoinAccept
+  - compute:
+    - joinaccept = sdec(~EncryptedJoinAccept, ~AppKey)
+    - joinnonce = fst(snd(sdec(~EncryptedJoinAccept, ~AppKey)))
+    - devaddr = fst(snd(snd(sdec(~EncryptedJoinAccept, ~AppKey))))
+    - respmac = snd(snd(snd(sdec(~EncryptedJoinAccept, ~AppKey))))
+    - appskey = senc(<cst1, ~DevNonce, fst(snd(sdec(~EncryptedJoinAccept, ~AppKey)))>,
+      ~AppKey)
+    - nwkskey = senc(<cst2, ~DevNonce, fst(snd(sdec(~EncryptedJoinAccept, ~AppKey)))>,
+      ~AppKey)
+  - send: <END>

@@ -1,0 +1,70 @@
+theory NaxosSimpleWeakness01
+begin
+
+builtins: diffie-hellman
+
+functions: h1/2, h2/1
+
+rule Register_Ltk:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($A, ~lk), !Pk($A, exp('g', ~lk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+// Action block 1: Initiator starts exchange
+rule Init_1:
+  let exI = h1(~eskI, lkI)
+      hkI = exp('g', exI)
+  in
+  [ Fr(~eskI), !Ltk($I, lkI) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ Out(hkI), St_I_1($I, $R, ~eskI, lkI) ]
+
+// Action block 2: Responder processes Message 1, sends Message 2, computes kR
+rule Resp_1:
+  let exR = h1(~eskR, lkR)
+      hkR = exp('g', exR)
+      kR = h2(<exp(pkI, exR), exp(X, lkR), $I, $R>)
+  in
+  [ In(X), Fr(~eskR), !Ltk($R, lkR), !Pk($I, pkI) ]
+  --[ Test2(), Create($R, ~eskR), Running($R, $I, <'resp', kR>),
+      Secret($R, $I, kR), Honest($R), Honest($I) ]->
+  [ Out(hkR) ]
+
+// Action block 3: Initiator processes Message 2, computes kI, emits kI on wire
+rule Init_2:
+  let exI = h1(~eskI, lkI)
+      kI = h2(<exp(Y, lkI), exp(pkR, exI), $I, $R>)
+  in
+  [ St_I_1($I, $R, ~eskI, lkI), In(Y), !Pk($R, pkR) ]
+  --[ Test3(), Commit($I, $R, <'resp', kI>),
+      Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ Out(kI) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

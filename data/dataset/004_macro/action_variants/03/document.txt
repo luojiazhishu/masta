@@ -1,0 +1,186 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 27, 2026                                         FAMED
+                                                         April 25, 2026
+
+
+       Public-Key Session Key Transport with Init Tag (BSKT-I)
+                       draft-famed-bskti-00
+
+Abstract
+
+   This document specifies a public-key session key transport
+   protocol in which a client conveys a freshly generated session
+   key to a server using the server's long-term public key, and the
+   server confirms successful receipt by returning a one-way hash of
+   the transported key.  The KeyTransport message carries a fixed
+   message-type tag "init" that allows server-side dispatch logic to
+   distinguish session-key transport from other public-key payloads
+   that may share the same listening socket.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 27, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ................................................. 2
+   2. Conventions and Definitions .................................. 2
+   3. Protocol Overview ............................................ 3
+   4. Message Format ............................................... 4
+   5. Processing Rules ............................................. 5
+   6. Security Considerations ...................................... 6
+   7. References ................................................... 7
+
+1. Introduction
+
+   This document defines a minimal public-key session key transport
+   exchange that is suitable for deployments in which the server
+   accepts several distinct public-key payload types over a single
+   transport endpoint and needs a coarse, in-the-clear discriminator
+   to dispatch incoming messages to the correct handler.
+
+   The client generates a fresh symmetric session key, encrypts it
+   under the server's long-term public key, and prepends a fixed
+   message-type tag with the value "init" to the resulting
+   ciphertext.  The server inspects the tag, dispatches the message
+   to the session-key transport handler, decrypts the payload, and
+   returns a one-way hash of the recovered key as confirmation.
+
+2. Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   The following notation is used throughout this document.
+
+      C, S         The client and the server.
+      sk(S), pk(S) The long-term private and public key of S.
+      k            A fresh, uniformly random session key drawn by C.
+      aenc, adec   Asymmetric encryption and decryption.
+      h(x)         A one-way hash function.
+      "init"       The fixed octet string identifying a session-key
+                   transport message at the dispatch layer.
+      <a, b>       The ordered concatenation of a and b.
+
+3. Protocol Overview
+
+         Client                                       Server
+         ------                                       ------
+         k  = fresh random
+         m1 = <aenc(k, pk(S)), "init">
+                          ----- m1 ----->
+                                                check m1.tag == "init"
+                                                k  = adec(.,sk(S))
+                                                m2 = h(k)
+                          <---- m2 ------
+         verify m2 == h(k)
+
+   On successful completion both parties hold the same session key
+   k.  The "init" tag does not appear in m2; the confirmation
+   message is unambiguous as the response to a single in-flight
+   request.
+
+4. Message Format
+
+   The KeyTransport message m1 carries the asymmetric encryption of
+   the session key followed by a fixed message-type tag.
+
+      struct {
+          opaque ciphertext<1..2^16-1>;
+          opaque tag[4];                  /* the four octets "init" */
+      } KeyTransport;
+
+   The KeyConfirm message m2 carries the one-way hash of the
+   recovered session key.
+
+      struct {
+          opaque digest<1..2^8-1>;
+      } KeyConfirm;
+
+   The value of the tag field is fixed for the protocol defined by
+   this document and MUST be the four-octet ASCII string "init".
+
+5. Processing Rules
+
+   On initiation, C generates k uniformly at random, computes
+   ciphertext = aenc(k, pk(S)), constructs m1 with tag set to
+   "init", and transmits m1 to S.
+
+   On receipt of a candidate m1, S inspects the tag field.  If the
+   tag does not equal "init", S MUST defer dispatch to a handler
+   defined elsewhere or, if no such handler is defined, MUST
+   discard m1 and abort the run.  Otherwise S computes
+   k' = adec(ciphertext, sk(S)).  If decryption fails or yields a
+   value that does not conform to the expected key format, S MUST
+   discard m1 and abort the run.  Otherwise S computes m2 = h(k')
+   and transmits m2 to C.
+
+   On receipt of m2, C computes h(k) for the retained k and
+   compares it for equality with m2.  If the values match, C MAY
+   consider k to be accepted by S; otherwise C MUST discard k and
+   abort the run.
+
+6. Security Considerations
+
+   Confidentiality of the session key against a network adversary
+   that does not hold sk(S) follows from the IND-CCA security of
+   the underlying asymmetric scheme and the preimage resistance of
+   h.  The "init" tag is public and contributes nothing to
+   confidentiality; an adversary observing m1 learns only that the
+   message is intended for the session-key transport handler.
+
+   Server authentication is established by the fact that no party
+   other than the holder of sk(S) is able to compute h(k) without
+   first recovering k.  The protocol does not authenticate C.
+
+   Replay of a previously observed KeyTransport message causes S
+   to recompute the same digest; because k is fresh in every run,
+   a replay cannot cause C to accept a session key it did not
+   itself generate.  An adversary that flips the tag to a value
+   other than "init" causes S to dispatch the message elsewhere or
+   to discard it; such an adversary cannot use the dispatch logic
+   to gain information about k.
+
+   The protocol does not provide forward secrecy with respect to
+   compromise of sk(S).  Implementations that require forward
+   secrecy SHOULD compose this protocol with an ephemeral key
+   agreement step.
+
+   Implementations should be aware that the dispatch tag exposes
+   the message type to traffic analysis.  Operators that consider
+   message-type confidentiality material SHOULD run this protocol
+   over a transport that itself conceals the protocol identifier.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2. Informative References
+
+   [RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
+              Protocol Version 1.3", RFC 8446, August 2018.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Transported Session Key
+8.2 Non-injective Agreement on the Transported Key
+8.3 Injective Agreement on the Transported Key

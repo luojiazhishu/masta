@@ -1,0 +1,84 @@
+theory H1MutualAuth
+begin
+
+builtins: signing
+
+functions: com/2
+
+rule Register_Ltk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+// Action Block 1: Initiator computes mI = sign(<I, R>, ltkI) and sends it
+rule Initiator_Send:
+  [ !Ltk($I, ~ltkI) ]
+  --[ Test1(),
+      Create($I, <'I', $I, $R>),
+      Running($I, $R, <'responder', $I, $R>) ]->
+  [ Out(sign(<$I, $R>, ~ltkI)),
+    St_I_1($I, $R) ]
+
+// Action Block 2: Responder verifies mI, sends mR and audit_marker
+rule Responder_Send:
+  [ !Ltk($R, ~ltkR), !Pk($I, pkI), In(mI) ]
+  --[ Test2(),
+      Eq(verify(mI, <$I, $R>, pkI), true),
+      Create($R, <'R', $I, $R>),
+      Running($R, $I, <'initiator', $I, $R>),
+      Commit($R, $I, <'responder', $I, $R>),
+      Honest($I), Honest($R) ]->
+  [ Out(sign(<$I, $R>, ~ltkR)),
+    Out(com($R, $I)) ]
+
+// Action Block 3: Initiator receives mR, verifies, accepts
+rule Initiator_Finish:
+  [ St_I_1($I, $R), !Pk($R, pkR), In(mR) ]
+  --[ Test3(),
+      Eq(verify(mR, <$I, $R>, pkR), true),
+      Commit($I, $R, <'initiator', $I, $R>),
+      Honest($I), Honest($R) ]->
+  [ ]
+
+restriction Eq:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

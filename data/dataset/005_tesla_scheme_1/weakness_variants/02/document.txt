@@ -1,0 +1,199 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-w02
+
+Abstract
+
+   This document specifies a profile of Scheme 1 of the TESLA
+   broadcast authentication protocol.  In this profile the
+   delayed MAC verification step that ordinarily authenticates a
+   cached payload upon disclosure of the corresponding key is
+   omitted.  The receiver still caches each broadcast payload
+   together with its accompanying MAC, but it accepts the cached
+   payload as authentic upon receipt of the next broadcast that
+   discloses any key consistent with the previously held
+   commitment, regardless of whether the cached MAC actually
+   matches the disclosed key.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies a profile of Scheme 1 in
+   which the receiver does not recompute the MAC of a cached
+   payload at the moment the corresponding key is disclosed.
+
+   The profile is intended for low-power receivers that cannot
+   afford to recompute MACs at the rate the broadcast arrives.  In
+   such receivers the cached MAC is retained for an out-of-band
+   audit pipeline; the live receive loop forwards the cached
+   payload to the application as soon as the disclosure step
+   reveals the relevant key, without waiting for the MAC
+   comparison to complete.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+      (R accepts cached D_{n-1} upon arrival of Msg n without
+       recomputing the MAC under the disclosed key)
+
+4. Message Format
+
+   Set-up and stream messages have the same structure as standard
+   TESLA Scheme 1.
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;
+          opaque   signature;
+      } SetupResponse;
+
+      struct {
+          opaque   payload;          /* m_i */
+          opaque   next_commitment;
+          opaque   disclosed_key;    /* absent for i = 1 */
+          opaque   mac;
+      } StreamMessage;
+
+5. Processing Rules
+
+   The set-up phase is processed exactly as in standard TESLA
+   Scheme 1.
+
+   When receiving a stream message that contains a disclosed_key
+   the receiver:
+
+   1.  Reads payload, next_commitment, disclosed_key, and mac
+       from the broadcast.
+
+   2.  Verifies that f(disclosed_key) matches the previously
+       cached commitment.  Frames whose disclosed_key fails this
+       check MUST be discarded.
+
+   3.  Promotes the cached payload from the previous slot to
+       authenticated state and delivers it to the application.
+       The receiver MUST NOT recompute MAC over the cached
+       payload using disclosed_key before the promotion; that
+       computation, if performed at all, is performed by an
+       out-of-band audit pipeline.
+
+   4.  Updates the expected commitment for the next slot to the
+       newly received next_commitment.
+
+6. Security Considerations
+
+   This profile does not provide source authentication of the
+   broadcast stream on its own.  Receivers operating under this
+   profile rely solely on f(k_{i-1}) matching the cached
+   commitment as evidence that the cached payload is authentic;
+   that evidence does not depend on the cached payload itself, and
+   the cached MAC is therefore unbound from the payload.  An
+   adversary that can inject a single forged broadcast for slot
+   i-1 in the receiver's cache, without modifying any subsequent
+   real broadcast, can cause the receiver to accept arbitrary
+   content as authentic at slot i.
+
+   The protocol described in this document does not protect
+   against payload substitution by an active adversary.  Operators
+   who deploy this profile MUST run the audit pipeline of step 3
+   and MUST treat the live output of the receiver as untrusted
+   until the audit pipeline has confirmed the corresponding MAC.
+
+   The remaining considerations of TESLA Scheme 1 still apply.
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed
+   at the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack, a one-way function f with adequate preimage resistance,
+   and, for the audit pipeline, a MAC algorithm that resists
+   forgery without knowledge of the key.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

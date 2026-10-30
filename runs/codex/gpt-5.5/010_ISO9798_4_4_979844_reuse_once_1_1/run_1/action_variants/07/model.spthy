@@ -1,0 +1,104 @@
+theory MutualChallengeResponse
+begin
+
+builtins: hashing
+
+functions: aux1/1
+
+rule Provision:
+  [ Fr(~kAB) ]
+  --[ Create('IdA', 'init'), Create('IdB', 'resp'), Honest('IdA'), Honest('IdB') ]->
+  [ !Ltk('IdA', 'IdB', ~kAB), !Ltk('IdB', 'IdA', ~kAB) ]
+
+rule Responder_Start:
+  let auxB1 = aux1(~text1)
+  in
+  [ Fr(~rb), Fr(~text1) ]
+  --[ Test1(), Running('IdB', 'IdA', <'B_start', ~rb>), LogAux('IdB', auxB1) ]->
+  [ Out(<~rb, ~text1>), St_B_1('IdB', 'IdA', ~rb) ]
+
+rule Initiator_Duplicate_Random_Source:
+  [ Fr(~ra) ]
+  --[ ]->
+  [ !DupRA(~ra) ]
+
+rule Initiator_Send_Token:
+  let tagged1 = <'sid1_mut_cr', ra, rb, 'IdB', ~text2>
+      mac1 = h(<'sid1_mut_cr', ra, rb, 'IdB', kAB>)
+  in
+  [ In(<rb, text1>), !Ltk('IdA', 'IdB', kAB), !DupRA(ra), Fr(~text2), Fr(~text3) ]
+  --[ Test2(), Running('IdA', 'IdB', <'session', ra, rb>) ]->
+  [ Out(<ra, ~text3, tagged1, mac1>), St_A_1('IdA', 'IdB', ra, rb) ]
+
+rule Responder_Verify_Token:
+  let tagged1 = <'sid1_mut_cr', ra, rb, 'IdB', text2>
+      mac1 = h(<'sid1_mut_cr', ra, rb, 'IdB', kAB>)
+      mac2 = h(<'sid2_mut_cr', rb, ra, kAB>)
+  in
+  [ St_B_1('IdB', 'IdA', rb), In(<ra, text3, tagged1, mac1>), !Ltk('IdB', 'IdA', kAB), Fr(~text4), Fr(~text5) ]
+  --[ Test3(), Running('IdB', 'IdA', <'session', ra, rb>), Commit('IdB', 'IdA', <'session', ra, rb>) ]->
+  [ Out(<~text5, mac2>) ]
+
+rule Initiator_Verify_Token:
+  let mac2 = h(<'sid2_mut_cr', rb, ra, kAB>)
+  in
+  [ St_A_1('IdA', 'IdB', ra, rb), In(<text5, mac2>), !Ltk('IdA', 'IdB', kAB) ]
+  --[ Test4(), Commit('IdA', 'IdB', <'session', ra, rb>) ]->
+  [ ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+     & a = 'IdA'
+   ==>
+       (Ex #j. Running(b, a, t) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+     & a = 'IdB'
+   ==>
+       (Ex #j. Running(b, a, t) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r)"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+     & a = 'IdA'
+   ==>
+       ( (Ex #j. Running(b, a, t) @ #j
+             & #j < #i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ #i2
+                                & a2 = 'IdA'
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r)"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+     & a = 'IdB'
+   ==>
+       ( (Ex #j. Running(b, a, t) @ #j
+             & #j < #i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ #i2
+                                & a2 = 'IdB'
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

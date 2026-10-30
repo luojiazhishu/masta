@@ -1,0 +1,36 @@
+- role: Reader_Send_Challenge
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR k)
+    - local_fp = bar(~r1)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Verify_Respond
+  operations:
+  - receive:
+    - r1
+    - expected
+  - compute:
+    - expected = h(~r0 XOR r1 XOR k)
+    - reader_mac = h(h(~r0 XOR r1 XOR k) XOR k XOR ~r0)
+  - send:
+    - reader_mac
+- role: Tag_Verify
+  operations:
+  - receive:
+    - expected
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR k)
+    - expected = h(h(r0 XOR ~r1 XOR k) XOR k XOR r0)
+  - send: <END>

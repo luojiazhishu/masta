@@ -1,0 +1,59 @@
+theory CR_XOR_RRtx begin
+
+builtins: hashing, xor
+
+rule Setup_PSK:
+  [ Fr(~k) ]
+  --[ SetupPSK() ]->
+  [ !PSK('I', 'R', ~k) ]
+
+rule RuleStep1:
+  [ Fr(~na) ]
+  --[ Test1(), Create('I', ~na), Honest('I') ]->
+  [ Out(~na), !StateI(~na) ]
+
+rule RuleStep2:
+  let t = h(~na ⊕ ~k ⊕ ~nb)
+  in
+  [ In(~na), Fr(~nb), !PSK('I', 'R', ~k) ]
+  --[ Test2(), Create('R', ~nb), Running('R', 'I', t), Honest('R') ]->
+  [ Out(<t, ~nb>), Out(<t, ~nb>) ]
+
+rule RuleStep3:
+  let t_prime = h(~na ⊕ ~k ⊕ nb)
+  in
+  [ In(<t_prime, nb>), !StateI(~na), !PSK('I', 'R', ~k) ]
+  --[ Test3(), Commit('I', 'R', t_prime) ]->
+  [ Out('END') ]
+
+rule PSK_Reveal:
+  [ !PSK('I', 'R', k) ]
+  --[ PSK_Reveal() ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t0 #t1 #t2 #t3. SetupPSK() @ #t0 & Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t0 < #t1 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+// Per document.txt Section 6: protocol provides aliveness "at some point in time"
+// PSK compromise breaks all guarantees, so escape clause is appropriate
+lemma aliveness_aliveness_of_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex #r. PSK_Reveal() @ r)"
+
+// category: noninjective_agreement
+// Per document.txt Section 6: protocol does NOT provide agreement on per-session
+// parameters due to XOR bilinearity replay attack. This lemma should be falsified
+// to correctly reflect the protocol weakness. No PSK_Reveal escape - we want to
+// show the attack works even without key compromise.
+lemma noninjective_agreement_noninjective_agreement_on_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

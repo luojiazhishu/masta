@@ -1,0 +1,94 @@
+theory LoRaWAN10_Weakness
+begin
+
+builtins: symmetric-encryption, hashing
+
+equations:
+  sdec(senc(m, k), k) = m
+
+rule Device_Init:
+  [ Fr(~AppKey), Fr(~DevEUI), Fr(~JoinEUI) ]
+  --[ Test1(), Create(~DevEUI, ~AppKey) ]->
+  [ !Ltk(~DevEUI, ~AppKey), St_D(~DevEUI, ~JoinEUI, ~AppKey) ]
+
+rule Device_SendJoinRequest:
+  [ St_D(~DevEUI, ~JoinEUI, ~AppKey), Fr(~DevNonce) ]
+  --[ Test2(), Running(~DevEUI, ~JoinEUI, <'Device', ~DevEUI, ~JoinEUI, ~DevNonce>) ]->
+  [ Out(<~DevEUI, ~JoinEUI, ~DevNonce, h(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)>),
+    St_D_Wait(~DevEUI, ~JoinEUI, ~AppKey, ~DevNonce) ]
+
+rule Server_ReceiveJoinRequest:
+  [ Fr(~JoinNonce), Fr(~DevAddr), Fr(~ServerAppKey),
+    In(<deveui, joineui, devnonce, h('public', <'JoinRequest', deveui, joineui, devnonce>)>) ]
+  --[ Test3(), Running(joineui, deveui, <'Server', deveui, joineui, devnonce>) ]->
+  [ Out(senc(<joineui, ~JoinNonce, ~DevAddr, h(~ServerAppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)>, ~ServerAppKey)),
+    St_S(deveui, joineui, devnonce, ~JoinNonce, ~DevAddr, ~ServerAppKey) ]
+
+rule Device_ReceiveJoinAccept:
+  [ St_D_Wait(~DevEUI, ~JoinEUI, ~AppKey, ~DevNonce),
+    In(senc(<~JoinEUI, JoinNonce, DevAddr, h(~AppKey, <'JoinAccept', JoinNonce, DevAddr>)>, ~AppKey)) ]
+  --[ Test4(),
+      Commit(~DevEUI, ~JoinEUI, <'Device', ~DevEUI, ~JoinEUI, ~DevNonce, JoinNonce, DevAddr>),
+      Secret(~DevEUI, ~JoinEUI, senc(<'cst1', ~DevNonce, JoinNonce>, ~AppKey)),
+      Secret(~DevEUI, ~JoinEUI, senc(<'cst2', ~DevNonce, JoinNonce>, ~AppKey)),
+      Honest(~DevEUI), Honest(~JoinEUI) ]->
+  [ ]
+
+rule Server_Commit:
+  [ St_S(deveui, joineui, devnonce, JoinNonce, DevAddr, ~AppKey) ]
+  --[ Test5(),
+      Commit(joineui, deveui, <'Server', deveui, joineui, devnonce, JoinNonce, DevAddr>),
+      Secret(joineui, deveui, senc(<'cst1', devnonce, JoinNonce>, ~AppKey)),
+      Secret(joineui, deveui, senc(<'cst2', devnonce, JoinNonce>, ~AppKey)),
+      Honest(joineui), Honest(deveui) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(X, k) ]
+  --[ LtkReveal(X) ]->
+  [ Out(k) ]
+
+rule Honest:
+  [ !Ltk(X, k) ]
+  --[ Honest(X) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_AppSKey:
+  "All D S k #i.
+     Secret(D, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_NwkSKey:
+  "All D S k #i.
+     Secret(D, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_Server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

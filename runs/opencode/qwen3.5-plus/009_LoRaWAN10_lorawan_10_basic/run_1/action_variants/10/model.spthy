@@ -1,0 +1,90 @@
+theory LoRaWAN10
+begin
+
+builtins: symmetric-encryption, hashing
+
+rule Setup:
+  [ Fr(~AppKey) ]
+  --[ ]->
+  [ !Ltk(~AppKey) ]
+
+rule Device_JoinRequest:
+  [ Fr(~DevNonce), Fr(~Dev), !Ltk(AppKey) ]
+  --[ Test1(), Create(~Dev, ~DevNonce), Running_D(~Dev, ~DevNonce) ]->
+  [ Out(<~Dev, ~DevNonce, h(<AppKey, 'JoinRequest', ~Dev, ~DevNonce>)>), St_Dev(~Dev, ~DevNonce) ]
+
+rule Server_JoinAccept:
+  [ Fr(~JoinNonce), Fr(~Server), In(<d, dn, macVal>), !Ltk(AppKey) ]
+  --[ Test2(), Create(~Server, ~JoinNonce), Running_S(~Server, d, dn) ]->
+  [ Out(senc(<~Server, ~JoinNonce, 'channelV1'>, AppKey)), St_Serv(~Server, d, dn, ~JoinNonce) ]
+
+rule Server_Commit:
+  [ St_Serv(s, c, dn, jn) ]
+  --[ Commit_S(s, c, dn, jn), Honest(s) ]->
+  [ ]
+
+rule Device_Commit:
+  [ St_Dev(d, dn), In(msg), !Ltk(AppKey) ]
+  --[ Test3(), Commit_D(d, dn), Honest(d),
+      Secret_AppSKey(d),
+      Secret_NwkSKey(d) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(AppKey) ]
+  --[ LtkReveal(AppKey) ]->
+  [ Out(AppKey) ]
+
+// category: secrecy
+lemma secrecy_AppSKey:
+  "All A #i.
+     Secret_AppSKey(A) @ i
+   ==>
+       (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_NwkSKey:
+  "All A #i.
+     Secret_NwkSKey(A) @ i
+   ==>
+       (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_Device:
+  "All a dn #i.
+     Commit_D(a, dn) @ i
+   ==>
+       (Ex b #j. Running_S(b, a, dn) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_Server:
+  "All a b dn jn #i.
+     Commit_S(a, b, dn, jn) @ i
+   ==>
+       (Ex #j. Running_D(b, dn) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_Device:
+  "All a dn #i.
+     Commit_D(a, dn) @ i
+   ==>
+       (Ex b id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_Server:
+  "All a b dn jn #i.
+     Commit_S(a, b, dn, jn) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

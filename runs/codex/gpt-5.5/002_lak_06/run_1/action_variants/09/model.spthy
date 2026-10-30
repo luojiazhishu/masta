@@ -1,0 +1,79 @@
+theory RFID_Tag_Domain_Xor begin
+
+builtins: hashing, xor
+functions: tag_mac/4, reader_mac/3
+
+rule Provision_Shared_Key:
+  [ Fr(~k) ]
+  --[ Test1(), Create($R, <'reader_tag_pair', $T>), Create($T, <'tag_reader_pair', $R>) ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+rule Reveal_Reader_Key:
+  [ !SharedKey(R, T, k) ]
+  --[ LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Reveal_Tag_Key:
+  [ !SharedKey(R, T, k) ]
+  --[ LtkReveal(T) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !SharedKey($R, $T, k) ]
+  --[ Test2(), Create($R, <'reader_session', ~r0>), Secret($R, $T, k), Honest($R), Honest($T) ]->
+  [ Out(~r0), Honest_R0($R, $T, ~r0), St_Reader_1($R, $T, k, ~r0) ]
+
+rule Tag_Send_T1:
+  let tm = h(tag_mac(r0, ~r1, k, 'TAG_TAG'))
+  in
+  [ Fr(~r1), !SharedKey($R, $T, k), Honest_R0($R, $T, r0) ]
+  --[ Test3(), Create($T, <'tag_session', r0, ~r1>), Running($T, $R, <'tag', r0, ~r1, tm>) ]->
+  [ Out(<~r1, tm>), Honest_T1($T, $R, r0, ~r1, tm), St_Tag_1($T, $R, k, r0, ~r1, tm) ]
+
+rule Reader_Send_R1:
+  let tm = h(tag_mac(r0, r1, k, 'TAG_TAG'))
+      rm = h(reader_mac(tm, k, r0))
+  in
+  [ St_Reader_1($R, $T, k, r0), Honest_T1($T, $R, r0, r1, tm) ]
+  --[ Test4(), Running($R, $T, <'reader', r0, r1, tm>), Commit($R, $T, <'reader_accepts_tag', r0, r1, tm>), Honest($R), Honest($T) ]->
+  [ Out(rm), Honest_R1($R, $T, rm) ]
+
+rule Tag_Accept_R1:
+  let tm = h(tag_mac(r0, r1, k, 'TAG_TAG'))
+      rm = h(reader_mac(tm, k, r0))
+  in
+  [ St_Tag_1($T, $R, k, r0, r1, tm), Honest_R1($R, $T, rm) ]
+  --[ Test5(), Commit($T, $R, <'tag', r0, r1, tm>), Honest($T), Honest($R) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma tag_reader_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_authenticates_reader:
+  "All a b r0 r1 mac #i.
+     Commit(a, b, <'tag', r0, r1, mac>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1, mac>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

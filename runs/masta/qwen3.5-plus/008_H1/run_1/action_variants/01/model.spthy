@@ -1,0 +1,115 @@
+theory MutualAuth begin
+
+builtins: signing
+
+// PKI: Generate long-term signing keys for Initiator and Responder
+rule Generate_Keys:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ Honest('I'), Honest('R') ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', pk(~ltkI))
+  , !Ltk('R', ~ltkR), !Pk('R', pk(~ltkR))
+  , Out(pk(~ltkI)), Out(pk(~ltkR))
+  ]
+
+// RuleStep1: Initiator generates nonce, signs <I,R>, sends <mI, rn>
+rule RuleStep1:
+  let mI = sign(< 'I', 'R' >, ~ltkI)
+  in
+  [ Fr(~rn)
+  , !Ltk('I', ~ltkI)
+  ]
+  --[ Test1(), Running('I', 'R', <'I', 'R'>) ]->
+  [ Out( < mI, ~rn > )
+  ]
+
+// RuleStep2: Responder receives <s, rn>, verifies signature, signs <I,R>, sends mR
+rule RuleStep2:
+  let mR = sign(< 'I', 'R' >, ~ltkR)
+  in
+  [ In( < s, rn > )
+  , !Ltk('R', ~ltkR)
+  ]
+  --[ Test2(), Running('R', 'I', <'I', 'R'>), Commit('R', 'I', <'I', 'R'>) ]->
+  [ Out( mR )
+  ]
+
+// RuleStep3: Initiator receives mR, verifies signature, terminates
+rule RuleStep3:
+  [ In( mR )
+  , !Ltk('I', ~ltkI)
+  , !Pk('R', pkR)
+  ]
+  --[ Test3(), Commit('I', 'R', <'I', 'R'>) ]->
+  [ Out( '<END>' )
+  ]
+
+// LtkReveal rules for long-term key compromise
+rule LtkReveal_I:
+  [ !Ltk('I', ltk) ]
+  --[ LtkReveal('I') ]->
+  [ Out(ltk) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', ltk) ]
+  --[ LtkReveal('R') ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

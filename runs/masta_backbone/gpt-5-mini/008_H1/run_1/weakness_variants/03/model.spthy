@@ -1,0 +1,46 @@
+theory model begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~ltkI) ]
+  --[ Test1(), Honest($I), Commit($I,$R,'msg') ]->
+  [ Out(sign(<$I,$R>,~ltkI)), InitKey(~ltkI,$I,$R) ]
+
+rule RuleStep2:
+  [ In(sign(<$I,$R>,ltkI)), InitKey(ltkI,$I,$R), Fr(~ltkR) ]
+  --[ Test2(), Honest($R), Running($R,$I,'msg') ]->
+  [ Out(sign('msg',~ltkR)) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+      Test1() @ #t1
+    & Test2() @ #t2
+    & #t1 < #t2"
+
+// category: weak_agreement
+lemma weak_agreement_responder_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_responder_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+// category: injective_agreement
+lemma injective_agreement_responder_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )"
+
+end

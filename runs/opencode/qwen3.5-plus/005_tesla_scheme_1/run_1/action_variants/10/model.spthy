@@ -1,0 +1,74 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing
+
+rule SetupRequest:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ StR_Pending(~n_R) ]
+
+rule SetupResponse:
+  [ StR_Pending(~n_R), Fr(~k_1), Fr(~fc1) ]
+  --[ Test2(), Running('S', 'R', ~fc1), 
+      Commit('S', 'R', ~fc1) ]->
+  [ StS_Key(~k_1), StS_FC(~fc1), StR_Pending2(~fc1) ]
+
+rule ReceiverVerify1:
+  [ StR_Pending2(~fc1) ]
+  --[ Test3(), Running('R', 'S', ~fc1),
+      Commit('R', 'S', ~fc1) ]->
+  [ StR_Verified(~fc1) ]
+
+rule StreamMsg1:
+  [ StS_Key(~k_1), StS_FC(~fc1), StR_Verified(~fc1), Fr(~m_1), Fr(~k_2), Fr(~fc2) ]
+  --[ Test4(), Running('S', 'R', ~fc2),
+      Secret('S', 'R', ~k_1) ]->
+  [ StS_Key(~k_2), StS_FC(~fc2), StS_Disclose(~k_1), StR_Msg1(~m_1, ~fc2) ]
+
+rule StreamMsg2:
+  [ StS_Key(~k_2), StS_FC(~fc2), StS_Disclose(~k_1), StR_Verified(~fc1), Fr(~m_2), Fr(~k_3), Fr(~fc3) ]
+  --[ Test5(), Running('S', 'R', ~fc3),
+      Secret('S', 'R', ~k_2) ]->
+  [ StS_Key(~k_3), StS_FC(~fc3), StS_Disclose(~k_2), StR_Msg2(~m_2, ~fc3) ]
+
+rule ReceiverVerifyStream1:
+  [ StR_Msg1(~m_1, ~fc2), StR_Verified(~fc1) ]
+  --[ Test6(), Commit('R', 'S', ~fc2) ]->
+  [ StR_Key(~fc2) ]
+
+rule ReceiverVerifyStream2:
+  [ StR_Msg2(~m_2, ~fc3), StR_Key(~fc2) ]
+  --[ Test7(), Commit('R', 'S', ~fc3) ]->
+  [ StR_Key(~fc3) ]
+
+// category: secrecy
+lemma secrecy_key:
+  "All k #i.
+     Secret('S', 'R', k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// category: aliveness
+lemma aliveness:
+  "All a b k #i.
+     Commit(a, b, k) @ i
+   ==>
+       (Ex #j. Running(b, a, k) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b k #i.
+     Commit(a, b, k) @ i
+   ==>
+       (Ex #j. Running(b, a, k) @ j & j < i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

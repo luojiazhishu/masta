@@ -1,0 +1,51 @@
+- role: Client_GetEndpoints
+  operations:
+  - generate_nonces:
+    - ~clientSk
+    - ~tid_c
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpoints_Response
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~serverSk
+    - ~tid_s
+  - send:
+    - '''GERes'''
+    - pk(~serverSk)
+    - '''Sign'''
+    - '''policy'''
+- role: Client_OpenSecureChannel
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverPk
+    - '''Sign'''
+    - '''policy'''
+  - generate_nonces:
+    - ~clientNonce
+  - send:
+    - pk(clientSk)
+    - <'OSCReq', pk(clientSk), ~clientNonce>
+    - sign(<'OSCReq', pk(clientSk), ~clientNonce>, clientSk)
+- role: Server_OpenSecureChannel_Response
+  operations:
+  - receive:
+    - <clientPk, <'OSCReq', clientPk, clientNonce>, sig>
+  - generate_nonces:
+    - ~serverNonce
+    - ~securityToken
+    - ~ttl
+  - send:
+    - pk(serverSk)
+    - <'OSCRes', ~serverNonce, ~securityToken, ~ttl, 'channelV1'>
+    - sign(<'OSCRes', ~serverNonce, ~securityToken, ~ttl, 'channelV1'>, serverSk)
+- role: Client_OpenSecureChannel_Verify
+  operations:
+  - receive:
+    - serverPk
+    - <'OSCRes', serverNonce, securityToken, ttl, 'channelV1'>
+    - sig
+  - send: <END>

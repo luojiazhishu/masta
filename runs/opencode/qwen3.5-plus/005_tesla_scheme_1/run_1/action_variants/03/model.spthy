@@ -1,0 +1,91 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: f/1, MAC/2
+
+rule LtkReveal:
+  [ !Ltk(sk) ]
+  --[ LtkReveal(sk) ]->
+  [ Out(sk) ]
+
+rule Honest:
+  [ !Ltk(sk) ]
+  --[ Honest(sk) ]->
+  [ !Ltk(sk) ]
+
+rule Test1_Init:
+  [ Fr(~n_R), Fr(~sk_S), Fr(~pk_S) ]
+  --[ Test1(), Create('R', ~n_R) ]->
+  [ Out(<'R', 'S', ~n_R>), !St1(~n_R) ]
+
+rule Test2_Respond:
+  [ Fr(~k_1), Fr(~sk_S), In(<'R', 'S', n_R>), !St1(n_R) ]
+  --[ Test2(), Create('S', ~k_1), Running('S', 'R', <'setup', n_R>) ]->
+  [ Out(<'S', 'R', f(~k_1), sign(<f(~k_1), n_R>, ~sk_S)>), !St2(~k_1) ]
+
+rule Test3_Verify:
+  [ In(<'S', 'R', f_k1, sig>), !St2(k_1) ]
+  --[ Test3(), Commit('R', 'S', <'setup', k_1, f_k1>) ]->
+  [ !St3(k_1) ]
+
+rule Test4_Stream1:
+  [ Fr(~k_2), Fr(~m_1), Fr(~r_1), !St2(k_1) ]
+  --[ Test4(), Running('S', 'R', <'stream1', k_1, ~m_1>) ]->
+  [ Out(<~m_1, f(~k_2), MAC(k_1, <~m_1, f(~k_2)>), ~r_1>), !St4(k_1, ~k_2) ]
+
+rule Test5_Stream1Recv:
+  [ !St3(k_1), In(<m_1, f_k2, mac_1, r_1>) ]
+  --[ Test5(), Commit('R', 'S', <'stream1', k_1, m_1, f_k2>) ]->
+  [ !St5(m_1, f_k2) ]
+
+rule Test6_StreamN:
+  [ Fr(~m_n), Fr(~k_n), Fr(~k_next), !St4(k_1, k_2) ]
+  --[ Test6(), Running('S', 'R', <'streamN', k_2, ~m_n, ~k_n>) ]->
+  [ Out(<~m_n, f(~k_next), MAC(~k_n, <~m_n, f(~k_next), ~k_n>), k_2>), !St6(k_2, ~k_n, ~k_next) ]
+
+rule Test7_StreamNRecv:
+  [ !St5(m_1, f_k2), In(<m_n, f_k_next, mac_n, k_disclosed>) ]
+  --[ Test7(), Eq(f(k_disclosed), f_k2), Eq(MAC(k_disclosed, <m_n, f_k_next, k_disclosed>), mac_n), Commit('R', 'S', <'streamN', k_disclosed, m_n>) ]->
+  [ !St7(m_n, f_k_next) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: aliveness
+lemma aliveness_setup:
+  "All R S n_R f_k1 #i.
+       Commit(R, S, <'setup', n_R, f_k1>) @ i
+    ==>
+        (Ex id #j. Create(S, id) @ j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_setup:
+  "All R S n_R f_k1 #i.
+       Commit(R, S, <'setup', n_R, f_k1>) @ i
+    ==>
+        (Ex #j. Running(S, R, <'setup', n_R>) @ j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_stream1:
+  "All R S k_1 m_1 f_k2 #i.
+       Commit(R, S, <'stream1', k_1, m_1, f_k2>) @ i
+    ==>
+        not (Ex #j. K(m_1) @ j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_streamN:
+  "All R S k_disclosed m_n #i.
+       Commit(R, S, <'streamN', k_disclosed, m_n>) @ i
+    ==>
+        not (Ex #j. K(m_n) @ j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

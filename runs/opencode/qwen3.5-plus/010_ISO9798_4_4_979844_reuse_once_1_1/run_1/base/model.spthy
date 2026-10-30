@@ -1,0 +1,112 @@
+theory ISO9798_4_4_MutualCR
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Setup:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk('IdA', ~kAB), !Ltk('IdB', ~kAB) ]
+
+rule B_Start:
+  [ Fr(~rb)
+  , !Ltk('IdB', ~kAB)
+  ]
+  --[ Test1()
+    , Create('IdB', ~rb)
+    ]->
+  [ Out(<~rb, 'Text1'>)
+  , St_B_1('IdB', ~rb, ~kAB)
+  ]
+
+rule A_Respond:
+  let tagged1 = <'sid1_mut_cr', ~ra, rb, 'IdB', 'Text2'>
+      mac1 = mac(tagged1, ~kAB)
+  in
+  [ In(<rb, text1>)
+  , Fr(~ra)
+  , Fr(~tid)
+  , !Ltk('IdA', ~kAB)
+  ]
+  --[ Test2()
+    , Running('IdA', 'IdB', <~ra, rb>)
+    ]->
+  [ Out(<~ra, 'Text3', tagged1, mac1>)
+  , St_A_2(~tid, 'IdA', 'IdB', ~ra, rb, ~kAB)
+  ]
+
+rule B_Verify:
+  let tagged2 = <'sid2_mut_cr', ~rb, ra>
+      mac2 = mac(tagged2, ~kAB)
+      ra_tagged = <'sid1_mut_cr', ra, ~rb, 'IdB', 'Text2'>
+  in
+  [ St_B_1('IdB', ~rb, ~kAB)
+  , In(<ra, text3, ra_tagged, mac(ra_tagged, ~kAB)>)
+  ]
+  --[ Test3()
+    , Running('IdB', 'IdA', <ra, ~rb>)
+    , Commit('IdB', 'IdA', <ra, ~rb>)
+    ]->
+  [ Out(<'Text5', mac2>)
+  ]
+
+rule A_Verify:
+  let tagged2 = <'sid2_mut_cr', rb, ~ra>
+  in
+  [ St_A_2(tid, 'IdA', 'IdB', ~ra, rb, ~kAB)
+  , In(<text5, mac(tagged2, ~kAB)>)
+  ]
+  --[ Test4()
+    , Commit('IdA', 'IdB', <~ra, rb>)
+    ]->
+  [ ]
+
+rule LtkReveal_A:
+  [ !Ltk('IdA', ~kAB) ]
+  --[ LtkReveal('IdA') ]->
+  [ Out(~kAB) ]
+
+rule LtkReveal_B:
+  [ !Ltk('IdB', ~kAB) ]
+  --[ LtkReveal('IdB') ]->
+  [ Out(~kAB) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex #r. LtkReveal(a) @ r)
+     | (Ex #r. LtkReveal(b) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex #r. LtkReveal(a) @ r)
+     | (Ex #r. LtkReveal(b) @ r)"
+
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a t #i.
+     Commit('IdB', a, t) @ i
+   ==>
+       ( (Ex #j. Running(a, 'IdB', t) @ j
+             & j < i
+             & not (Ex a2 #i2. Commit('IdB', a2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal('IdB') @ r)
+     | (Ex #r. LtkReveal(a) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

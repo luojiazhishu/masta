@@ -1,0 +1,91 @@
+theory LoRaWAN10_Join_PublicMAC begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule Register_Device:
+  [ Fr(~appkey) ]
+  --[ Create($Device, ~appkey) ]->
+  [ !Device($Device, $Server, ~appkey, 'DevAddr') ]
+
+rule Reveal_AppKey:
+  [ !Device(Device, Server, appkey, devaddr) ]
+  --[ LtkReveal(Device) ]->
+  [ Out(appkey) ]
+
+rule Device_Send_JoinRequest:
+  let body = <'JoinRequest', Device, Server, ~devnonce>
+      request_mac = mac(appkey, body)
+  in
+  [ Fr(~devnonce)
+  , !Device(Device, Server, appkey, devaddr)
+  ]
+  --[ Test1()
+    , Running(Device, Server, <'JoinRequest', Device, Server, ~devnonce>)
+    , Honest(Device)
+    ]->
+  [ Out(<'JoinRequest', Device, Server, ~devnonce, request_mac>)
+  , Device_Started(Device, Server, appkey, devaddr, ~devnonce)
+  ]
+
+rule Server_Receive_JoinRequest_Send_Accept:
+  let body = <'JoinRequest', Device, Server, devnonce>
+      request_mac = mac('public', body)
+      app_s_key = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwk_s_key = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+      response_body = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept', ~joinnonce, devaddr, devnonce>)>
+  in
+  [ In(<'JoinRequest', Device, Server, devnonce, request_mac>)
+  , Fr(~joinnonce)
+  , !Device(Device, Server, appkey, devaddr)
+  ]
+  --[ Test2()
+    , Commit(Server, Device, <'JoinRequest', Device, Server, devnonce>)
+    , Secret(Server, Device, app_s_key)
+    , Secret(Server, Device, nwk_s_key)
+    , Honest(Device)
+    , Honest(Server)
+    ]->
+  [ Out(senc(response_body, appkey)) ]
+
+rule Device_Receive_JoinAccept:
+  let response_body = <'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce, devaddr, devnonce>)>
+      app_s_key = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwk_s_key = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ In(senc(response_body, appkey))
+  , Device_Started(Device, Server, appkey, devaddr, devnonce)
+  ]
+  --[ Test3()
+    , Commit(Device, Server, <'JoinAccept', Device, Server, devnonce, joinnonce, devaddr>)
+    , Running(Server, Device, <'JoinAccept', Device, Server, devnonce, joinnonce, devaddr>)
+    , Secret(Device, Server, app_s_key)
+    , Secret(Device, Server, nwk_s_key)
+    , Honest(Device)
+    ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma server_noninjective_agreement_on_join_request:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

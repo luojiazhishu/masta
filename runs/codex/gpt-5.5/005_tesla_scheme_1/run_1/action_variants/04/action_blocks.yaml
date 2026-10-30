@@ -1,0 +1,83 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - '''setup_request'''
+    - $R
+    - $S
+    - ~nR
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - '''setup_request'''
+    - R
+    - S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+    - ~k3
+    - ~stream
+  - compute:
+    - commitment1 = h(~k1)
+    - sig = sign(<h(~k1), nR>, ltkS)
+  - send:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - sig
+- role: Receiver_Verify_Setup
+  operations:
+  - receive:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - sig
+  - compute:
+    - sig = sign(<commitment1, nR>, ltkS)
+  - send: []
+- role: Sender_First_Broadcast
+  operations:
+  - generate_nonces:
+    - ~m1
+  - compute:
+    - commitment2 = h(k2)
+    - d1 = <~m1, h(k2)>
+    - tagless = <'msg1', stream, <~m1, h(k2)>, mac(k1, <~m1, h(k2)>)>
+  - send:
+    - tagless
+- role: Sender_Tagged_Broadcast
+  operations:
+  - generate_nonces:
+    - ~m2
+    - ~r2
+  - compute:
+    - commitment3 = h(k3)
+    - d2 = <~m2, h(k3), k1>
+    - mac2 = mac(k2, <~m2, h(k3), k1>)
+  - send:
+    - '''msg2'''
+    - stream
+    - d2
+    - mac2
+    - ~r2
+- role: Receiver_Accept_First
+  operations:
+  - receive:
+    - '''msg1'''
+    - stream
+    - d1
+    - mac(k1, d1)
+    - '''msg2'''
+    - stream
+    - d2
+    - mac2
+    - packet_tag
+  - compute:
+    - commitment1 = h(k1)
+    - d1 = <m1, commitment2>
+    - d2 = <m2, commitment3, k1>
+  - send: <END>

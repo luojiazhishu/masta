@@ -1,0 +1,26 @@
+theory famed_h1 begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~ltkI) ]
+  --[ Test1() ]->
+  [ Out(sign(<$I,$R>, ~ltkI)), LtkI(~ltkI) ]
+
+rule RuleStep2:
+  [ In(sign(<$I,$R>, ~ltkI)), LtkI(~ltkI), Fr(~ltkR) ]
+  --[ Test2() ]->
+  [ Out(sign(<$I,$R>, ~ltkR)), LtkR(~ltkR) ]
+
+rule RuleStep3:
+  [ In(sign(<$I,$R>, ~ltkR)), LtkR(~ltkR) ]
+  --[ Test3() ]->
+  [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

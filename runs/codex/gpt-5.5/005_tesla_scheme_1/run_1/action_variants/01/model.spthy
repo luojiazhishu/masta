@@ -1,0 +1,97 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~ltkS) ]
+  --[ KeyCreate($S, ~ltkS), Create($S, ~ltkS) ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR), Fr(~tagR) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<'setup_request', $R, $S, ~nR, ~tagR>), St_R_Setup($R, $S, ~nR, ~tagR) ]
+
+rule Sender_Setup_Response:
+  let commitment1 = h(~k1)
+      sig = sign(<commitment1, nR, tagR>, ltkS)
+  in
+  [ In(<'setup_request', R, S, nR, tagR>), !Ltk(S, ltkS), Fr(~k1), Fr(~k2) ]
+  --[ Test2(), Running(S, R, <'setup', commitment1, nR, tagR>) ]->
+  [ Out(<'setup_response', S, R, commitment1, sig>),
+    St_S_Stream(S, R, ~k1, ~k2),
+    SentSetup(S, R, commitment1, nR, tagR) ]
+
+rule Receiver_Verify_Setup:
+  [ St_R_Setup(R, S, nR, tagR), !Pk(S, pkS), In(<'setup_response', S, R, commitment1, sig>) ]
+  --[ Test3(), Eq(verify(sig, <commitment1, nR, tagR>, pkS), true), Commit(R, S, <'setup', commitment1, nR, tagR>), Honest(S) ]->
+  [ St_R_Ready(R, S, commitment1) ]
+
+rule Sender_Broadcast_First:
+  let commitment2 = h(k2)
+      data1 = <'data', ~m1, commitment2, 'none'>
+      tag1 = mac(k1, data1)
+  in
+  [ St_S_Stream(S, R, k1, k2), Fr(~m1) ]
+  --[ Test4(), Running(S, R, <'payload', ~m1, commitment2, k1>) ]->
+  [ Out(<'stream', data1, tag1>), St_S_Disclose(S, R, k1, k2, ~m1, commitment2), !BroadcastFirst(S, R, ~m1, commitment2, k1, data1, tag1) ]
+
+rule Receiver_Cache_First:
+  [ St_R_Ready(R, S, h(k1)), In(<'stream', data1, tag1>), !BroadcastFirst(S, R, m1, commitment2, k1, data1, tag1) ]
+  --[ Test5() ]->
+  [ St_R_Cached(R, S, h(k1), data1, tag1) ]
+
+rule Sender_Broadcast_Disclosure:
+  let commitment3 = h(~k3)
+      data2 = <'data', ~m2, commitment3, k1>
+      tag2 = mac(k2, data2)
+  in
+  [ St_S_Disclose(S, R, k1, k2, m1, commitment2), Fr(~k3), Fr(~m2) ]
+  --[ Test6() ]->
+  [ Out(<'stream', data2, tag2>), Out(k1), SentPayload(S, R, m1, commitment2, k1) ]
+
+rule Receiver_Accept_First:
+  let data1 = <'data', m1, commitment2, 'none'>
+  in
+  [ St_R_Cached(R, S, commitment1, data1, tag1), In(<'stream', <'data', m2, commitment3, k1>, tag2>) ]
+  --[ Test7(), Eq(h(k1), commitment1), Eq(tag1, mac(k1, data1)), Commit(R, S, <'payload', m1, commitment2, k1>), Honest(S) ]->
+  [ Accepted(R, S, m1) ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction UniqueSenderKey:
+  "All S k1 k2 #i #j. KeyCreate(S, k1) @ i & KeyCreate(S, k2) @ j ==> k1 = k2"
+
+// category: weak_agreement
+lemma setup_authentication:
+  "All r s t #i.
+     Commit(r, s, t) @ i & (Ex c n tag. t = <'setup', c, n, tag>)
+   ==>
+       (Ex r2 #j. Running(s, r2, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma payload_authentication:
+  "All r s t #i.
+     Commit(r, s, t) @ i & (Ex m c k. t = <'payload', m, c, k>)
+   ==>
+       (Ex #j. Running(s, r, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

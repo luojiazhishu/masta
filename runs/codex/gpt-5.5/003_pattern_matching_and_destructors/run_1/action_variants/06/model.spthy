@@ -1,0 +1,46 @@
+theory RepeatedInitiatorOutput begin
+
+builtins: symmetric-encryption
+
+functions: k/0 [private]
+
+rule Initiator_Send_First:
+  [ Fr(~sec), Fr(~pub), Fr(~tid) ]
+--[ Test1(), Create('I', ~tid), Running('I', 'R', <'initiator', ~sec, ~pub, k>), Secret('I', 'R', ~sec), Honest('I'), Honest('R') ]->
+  [ InitState(~tid, ~sec, ~pub, senc(<~sec, ~pub>, k)), Out(senc(<~sec, ~pub>, k)) ]
+
+rule Initiator_Send_Duplicate:
+  [ InitState(tid, sec, pub, msg) ]
+--[ Test2() ]->
+  [ InitDone(tid, sec, pub, msg), Out(msg) ]
+
+rule Responder_Process_First:
+  [ Fr(~tid), In(senc(<sec, pub>, k)) ]
+--[ Test3(), Create('R', ~tid), Commit('R', 'I', <'initiator', sec, pub, k>), Honest('I'), Honest('R') ]->
+  [ RespState(~tid, sec, pub, senc(<sec, pub>, k)), Out(pub) ]
+
+rule Responder_Drop_Duplicate:
+  [ RespState(tid, sec, pub, msg), In(msg) ]
+--[ Test4() ]->
+  [ RespDone(tid, sec, pub, msg) ]
+
+restriction secret_payload_not_revealed:
+  "All A B x #i #j.
+     Secret(A, B, x) @ i & K(x) @ j
+   ==>
+     F"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

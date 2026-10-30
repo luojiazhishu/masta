@@ -1,0 +1,42 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+    - ~stag_S
+    - ~tid_S
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R>, ~sk_S)
+    - ~stag_S
+- role: RuleStep3
+  operations:
+  - receive:
+    - $S
+    - $R
+    - commitment
+    - signature
+    - stag_S
+  - send:
+    - '''verify_ok'''
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+    - ~tid_S2
+  - send: <END>

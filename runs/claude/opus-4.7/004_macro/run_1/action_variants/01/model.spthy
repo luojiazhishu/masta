@@ -1,0 +1,77 @@
+theory PublicKeySessionKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+/* Long-term key registration for the server */
+rule Register_Server_Key:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+/* Action Block 1: Client generates session key ~k and correlation nonce ~rc,
+   sends m1 = <aenc(~k, pk(S)), ~rc> */
+rule Client_Send:
+  [ Fr(~k), Fr(~rc), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(<aenc(~k, pkS), ~rc>),
+    St_C_1($C, $S, pkS, ~k, ~rc) ]
+
+/* Action Block 2: Server receives m1, decrypts to get k,
+   sends m2 = <h(k), rc> */
+rule Server_Recv_Send:
+  let k = adec(ct, ~sk) in
+  [ In(<ct, rc>), !Ltk($S, ~sk), !Pk($S, pk(~sk)) ]
+  --[ Test2(),
+      Running($S, pk(~sk), k) ]->
+  [ Out(<h(k), rc>) ]
+
+/* Action Block 3: Client receives m2, verifies h(k) matches digest,
+   accepts session key */
+rule Client_Recv:
+  [ St_C_1($C, $S, pkS, ~k, ~rc), In(<h(~k), ~rc>) ]
+  --[ Test3(),
+      Commit($C, $S, pkS, ~k),
+      Secret($C, $S, ~k),
+      Honest($C), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All C S pkS k #i.
+     Commit(C, S, pkS, k) @ i
+   ==>
+       (Ex #j. Running(S, pkS, k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All C S pkS k #i.
+     Commit(C, S, pkS, k) @ i
+   ==>
+       ( (Ex #j. Running(S, pkS, k) @ j
+             & j < i
+             & not (Ex C2 S2 pk2 #i2. Commit(C2, S2, pk2, k) @ i2
+                                    & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

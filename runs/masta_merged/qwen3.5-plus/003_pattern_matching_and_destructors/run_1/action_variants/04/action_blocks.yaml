@@ -1,0 +1,19 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~k
+  - send:
+    - senc(<~sec, 'pub'>, ~k)
+- role: RuleStep2
+  operations:
+  - receive:
+    - ciphertext
+  - generate_nonces:
+    - ~tid
+    - k
+  - compute:
+    - decrypted = sdec(ciphertext, k)
+    - sec = fst(sdec(ciphertext, k))
+    - pub = snd(sdec(ciphertext, k))
+  - send: <END>

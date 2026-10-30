@@ -1,0 +1,59 @@
+theory SimplifiedNAXOS
+begin
+
+builtins: diffie-hellman
+
+functions: h1/2, h2/1, g/0
+
+rule Register_Ltk:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($A, ~lk), !Pk($A, g ^ ~lk) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+rule Init_1:
+  let exI = h1(~eskI, ~lkI)
+      hkI = g ^ exI
+  in
+  [ !Ltk($I, ~lkI), Fr(~eskI) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ Out(hkI), St_Init_1($I, $R, ~eskI, ~lkI) ]
+
+rule Resp_1:
+  let exR = h1(~eskR, ~lkR)
+      hkR = g ^ exR
+      kR  = h2(<pkI ^ exR, X ^ ~lkR, $I, $R, 'channelV1'>)
+  in
+  [ !Ltk($R, ~lkR), !Pk($I, pkI), Fr(~eskR), In(X) ]
+  --[ Test2(), Create($R, ~eskR), Running($R, $I, <'resp', $I, $R, kR>),
+      Secret($R, $I, kR), Honest($I), Honest($R) ]->
+  [ Out(hkR) ]
+
+rule Init_2:
+  let exI = h1(~eskI, ~lkI)
+      kI  = h2(<Y ^ ~lkI, pkR ^ exI, $I, $R, 'channelV1'>)
+  in
+  [ St_Init_1($I, $R, ~eskI, ~lkI), !Pk($R, pkR), In(Y) ]
+  --[ Test3(), Commit($I, $R, <'init', $I, $R, kI>),
+      Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

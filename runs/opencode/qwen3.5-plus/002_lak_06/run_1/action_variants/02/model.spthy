@@ -1,0 +1,69 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+functions:
+  xor_op/2
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ Create('Tag', ~k) ]->
+  [ !Ltk('Tag', ~k) ]
+
+rule Reader_Start:
+  [ !Ltk('Tag', k), Fr(~r0) ]
+  --[ Test1(), Running('Reader', 'Tag', ~r0, k, k) ]->
+  [ Out(~r0), St_R1(k, ~r0) ]
+
+rule Tag_Respond:
+  [ In(r0), !Ltk('Tag', k), Fr(~r1), Fr(~r1_aux) ]
+  --[ Test2(), Running('Tag', 'Reader', r0, ~r1, k), Secret('Tag', 'Reader', k) ]->
+  [ Out(~r1), Out(h(xor_op(xor_op(r0, ~r1), k))), Out(~r1_aux), St_T1(k, r0, ~r1, ~r1_aux) ]
+
+rule Reader_Verify:
+  [ St_R1(k, r0), In(r1), In(tag_mac), In(r1_aux), !Ltk('Tag', k) ]
+  --[ Test3(), Eq(tag_mac, h(xor_op(xor_op(r0, r1), k))), Commit('Reader', 'Tag', r0, r1, k) ]->
+  [ Out(h(xor_op(tag_mac, xor_op(k, r0)))) ]
+
+rule Tag_Verify:
+  [ St_T1(k, r0, r1, r1_aux), In(reader_mac), !Ltk('Tag', k) ]
+  --[ Test4(), Eq(reader_mac, h(xor_op(h(xor_op(xor_op(r0, r1), k)), xor_op(k, r0)))), Commit('Tag', 'Reader', r0, r1, k) ]->
+  [ ]
+
+rule Ltk_Reveal:
+  [ !Ltk('Tag', k) ]
+  --[ LtkReveal('Tag') ]->
+  [ Out(k) ]
+
+lemma secrecy:
+  // category: secrecy
+  "All a b k #i.
+     Secret(a, b, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & (X = a | X = b))"
+
+lemma noninjective_agreement_tag:
+  // category: noninjective_agreement
+  "All a b t1 t2 t3 #i.
+     Commit(a, b, t1, t2, t3) @ i
+   ==>
+       (Ex #j. Running(b, a, t1, t2, t3) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & (X = a | X = b))"
+
+lemma noninjective_agreement_reader:
+  // category: noninjective_agreement
+  "All a b t1 t2 t3 #i.
+     Commit(a, b, t1, t2, t3) @ i
+   ==>
+       (Ex #j. Running(b, a, t1, t2, t3) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & (X = a | X = b))"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

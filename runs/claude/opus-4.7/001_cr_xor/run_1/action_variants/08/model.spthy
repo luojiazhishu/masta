@@ -1,0 +1,61 @@
+theory CRXorIRtx
+begin
+
+builtins: xor, hashing
+
+rule Setup:
+  [ Fr(~k) ]
+--[ OnlyOnce() ]->
+  [ !InitLTK(~k), !RespLTK(~k) ]
+
+rule initiator:
+  [ Fr(~na) ]
+--[ Create('I', ~na)
+  , Test1() ]->
+  [ Out(~na), Out(~na), Initiated(~na) ]
+
+rule responder:
+  [ In(na), Fr(~nb), !RespLTK(~k) ]
+--[ Create('R', ~nb)
+  , Running('R', 'I', <'IR', na, ~nb, ~k>)
+  , Neq(na, zero)
+  , Test2() ]->
+  [ Out(<h(na XOR ~k XOR ~nb), ~nb>) ]
+
+rule initiator2:
+  [ Initiated(~na), !InitLTK(~k), In(<m, nb>) ]
+--[ Commit('I', 'R', <'IR', ~na, nb, ~k>)
+  , Eq(h(~na XOR ~k XOR nb), m)
+  , Test3() ]->
+  [ ]
+
+restriction equality:
+  "All x y #i. Eq(x,y)@i ==> x=y"
+
+restriction unique:
+  "All #i #j. OnlyOnce() @i & OnlyOnce() @j ==> #i = #j"
+
+restriction inequality:
+  "not (Ex x #i. Neq(x,x)@i)"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j & j < i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

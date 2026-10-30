@@ -1,0 +1,71 @@
+theory SimplifiedNaxos
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: tag/1, h1/1, h2/1
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, 'g'^~ltk), Out('g'^~ltk) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Send_Message1:
+  let exI = h1(<~eskI, ltkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk($I, ltkI), !Pk($R, pkR) ]
+  --[ Test1(), Running($I, $R, <'initiator', hkI, pkR>) ]->
+  [ Out(hkI), St_I_1($I, $R, ltkI, pkR, exI, hkI) ]
+
+rule Responder_Send_Message2:
+  let exR = h1(<~eskR, ltkR>)
+      hkR = 'g'^exR
+      kR = h2(<exR, ltkR, hkI, $I, $R>)
+  in
+  [ Fr(~eskR), !Ltk($R, ltkR), !Pk($I, pkI), In(hkI) ]
+  --[ Test2(), Running($R, $I, <'responder', hkI, hkR, kR>), Commit($R, $I, <'responder', hkI, hkR, kR>), Secret($R, $I, kR), Honest($R), Honest($I) ]->
+  [ Out(hkR) ]
+
+rule Initiator_Log_PeerKeyTag:
+  let peer_key_tag = tag(pkR)
+  in
+  [ St_I_1($I, $R, ltkI, pkR, exI, hkI), In(hkR) ]
+  --[ Test3() ]->
+  [ Audit($I, $R, peer_key_tag), St_I_2($I, $R, ltkI, pkR, exI, hkI, hkR, peer_key_tag) ]
+
+rule Initiator_Compute_Key:
+  let kI = h2(<exI, ltkI, hkR, $I, $R>)
+  in
+  [ St_I_2($I, $R, ltkI, pkR, exI, hkI, hkR, peer_key_tag) ]
+  --[ Test4(), Commit($I, $R, <'initiator', hkI, hkR, kI>), Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ SessionKey($I, $R, kI) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: aliveness
+lemma aliveness_session_peer:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex id #j. Create(b, id) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

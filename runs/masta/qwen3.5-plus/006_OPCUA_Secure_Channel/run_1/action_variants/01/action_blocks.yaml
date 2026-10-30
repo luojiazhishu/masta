@@ -1,0 +1,72 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~RequestId
+  - send:
+    - '''GEReq'''
+    - ~RequestId
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+    - RequestId
+  - send:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - SecurityMode
+    - SecurityPolicy
+    - UserTokenPolicy
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - RequestBody = <'OSCReq', pk(~skC), ~Nc>
+    - RequestBodyDigest = h(<'OSCReq', pk(~skC), ~Nc>)
+    - RequestSignature = sign(h(<'OSCReq', pk(~skC), ~Nc>), ~skC)
+  - send:
+    - ClientCert
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - ClientCert
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+  - generate_nonces:
+    - ~Ns
+    - ~SecurityToken
+    - ~TokenLifetime
+  - compute:
+    - ResponseBody = <'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>)
+    - ResponseSignature = sign(h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>),
+      ~skS)
+    - RequestBody = <'OSCReq', ClientPubKey, Nc>
+    - RequestBodyDigest = h(<'OSCReq', ClientPubKey, Nc>)
+  - send:
+    - ServerCert
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - ServerCert
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+  - compute:
+    - ChannelBinding = h(<Nc, Ns>)
+    - ResponseBody = <'OSCRes', Ns, SecurityToken, TokenLifetime>
+    - ResponseBodyDigest = h(<'OSCRes', Ns, SecurityToken, TokenLifetime>)
+  - send: <END>

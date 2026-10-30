@@ -1,0 +1,32 @@
+- role: B_Send_Challenge
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+    - ~nonceb1
+  - send:
+    - ~rb
+    - ~text1
+    - ~nonceb1
+- role: A_Send_Token_Fresh
+  operations:
+  - generate_nonces:
+    - ~ra
+    - ~text2
+    - ~text3
+  - send:
+    - ~ra
+    - ~text3
+    - <'sid1_mut_cr', ~ra, rb, $B, ~text2>
+    - mac(<'sid1_mut_cr', ~ra, rb, $B>, k)
+- role: B_Send_Response
+  operations:
+  - generate_nonces:
+    - ~text4
+    - ~text5
+  - send:
+    - ~text5
+    - mac(<'sid2_mut_cr', rb, ra>, k)
+- role: A_Verify_Response
+  operations:
+  - send: <END>

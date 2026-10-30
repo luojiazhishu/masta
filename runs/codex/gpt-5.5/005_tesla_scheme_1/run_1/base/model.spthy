@@ -1,0 +1,94 @@
+theory TeslaSchemeOne
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~ltk) ]
+  --[ Create($S, ~ltk) ]->
+  [ !Ltk($S, ~ltk), Out(pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Sender_Init:
+  [ Fr(~k1) ]
+  --[ Test1(), Running($S, $R, <'sender_init', h(~k1)>), Secret($S, $R, ~k1) ]->
+  [ Sender_Stream($S, ~k1, h(~k1)) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~rid), Fr(~nR) ]
+  --[ Test2(), Create($R, ~rid) ]->
+  [ Out(<'setup_request', $R, $S, ~nR>), Receiver_Wait($R, $S, ~rid, ~nR) ]
+
+rule Sender_Setup_Response:
+  [ Sender_Stream(S, k1, c1), !Ltk(S, ltk), In(<'setup_request', R, S, nR>) ]
+  --[ Test3(), Running(S, R, <'setup', c1, nR>) ]->
+  [ Out(<'setup_response', S, R, c1, sign(<c1, nR>, ltk)>), Sender_Ready(S, R, k1, c1) ]
+
+rule Receiver_Setup_Accept:
+  [ Receiver_Wait(R, S, rid, nR), !Ltk(S, ltk), In(<'setup_response', S, R, c1, sign(<c1, nR>, ltk)>) ]
+  --[ Test4(), Commit(R, S, <'setup', c1, nR>), Honest(S) ]->
+  [ Receiver_Ready(R, S, rid, c1) ]
+
+rule Sender_Send_First:
+  [ Sender_Ready(S, R, k1, c1), Fr(~k2), Fr(~m1) ]
+  --[ Test5(), Running(S, R, <'broadcast', ~m1, c1>) ]->
+  [ Out(<'stream1', ~m1, h(~k2), mac(k1, <~m1, h(~k2)>)>), Sender_After_First(S, k1, ~k2, h(~k2), ~m1) ]
+
+rule Receiver_Cache_First:
+  [ Receiver_Ready(R, S, rid, c1), In(<'stream1', m1, c2, tag1>) ]
+  --[ Test6(), Cache(c1) ]->
+  [ Receiver_Cached(R, S, rid, c1, m1, c2, tag1) ]
+
+rule Sender_Send_Second_Disclose:
+  [ Sender_After_First(S, k1, k2, c2, m1), Fr(~k3), Fr(~m2) ]
+  --[ Test7(), Disclose(h(k1)) ]->
+  [ Out(<'stream2', ~m2, h(~k3), k1, mac(k2, <~m2, h(~k3), k1>)>), Sender_After_Second(S, k2, ~k3, h(~k3)) ]
+
+rule Receiver_Verify_First:
+  [ Receiver_Cached(R, S, rid, c1, m1, c2, tag1), In(<'stream2', m2, c3, k1, tag2>) ]
+  --[ Test8(), Eq(c1, h(k1)), Eq(tag1, mac(k1, <m1, c2>)), Commit(R, S, <'broadcast', m1, c1>), Honest(S) ]->
+  [ Receiver_Accepted(R, S, rid, m1, c2) ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction CacheBeforeDisclosure:
+  "All c #i #j. Cache(c) @ #i & Disclose(c) @ #j ==> #i < #j"
+
+// category: aliveness
+lemma setup_sender_aliveness:
+  "All r s c n #i.
+     Commit(r, s, <'setup', c, n>) @ #i
+   ==>
+       (Ex id #j. Create(s, id) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All r s m c #i.
+     Commit(r, s, <'broadcast', m, c>) @ #i
+   ==>
+       (Ex r2 #j. Running(s, r2, <'broadcast', m, c>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: secrecy
+lemma first_key_initial_secrecy:
+  "All s r k #i.
+     Secret(s, r, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j & #j < #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7 #t8.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7 & Test8() @ #t8
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7 & #t7 < #t8"
+
+end

@@ -1,0 +1,81 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+// Long-term key provisioning
+rule Setup:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk(~k) ]
+
+// LtkReveal rule for key compromise
+rule LtkReveal:
+  [ !Ltk(~k) ]
+  --[ LtkReveal(~k) ]->
+  [ Out(~k) ]
+
+// RuleStep1: Reader sends R0 (challenge r0)
+rule RuleStep1:
+  [ Fr(~r0),
+    !Ltk(~k) ]
+  --[ Test1(), Honest('Reader'), Secret('Reader', 'Tag', ~k) ]->
+  [ Out(~r0),
+    !ReaderState1(~k, ~r0) ]
+
+// RuleStep2: Tag receives R0, generates r1, computes tag_mac, sends T1
+rule RuleStep2:
+  [ In(~r0),
+    Fr(~r1),
+    !Ltk(~k) ]
+  --[ Test2(), Honest('Tag'), Running('Tag', 'Reader', <~r0, ~r1>) ]->
+  [ Out(<~r1, h(~r0 XOR ~r1 XOR ~k XOR 'TAG_TAG')>),
+    !TagState1(~k, ~r0, ~r1) ]
+
+// RuleStep3: Reader receives T1, verifies tag_mac, computes reader_mac, sends R1
+rule RuleStep3:
+  [ In(<~r1, tag_mac>),
+    !ReaderState1(~k, ~r0) ]
+  --[ Test3(), Honest('Reader'), Running('Reader', 'Tag', <~r0, ~r1>), Commit('Reader', 'Tag', <~r0, ~r1>) ]->
+  [ Out(h(tag_mac XOR ~k XOR ~r0)),
+    !ReaderState2(~k, ~r0, ~r1, tag_mac) ]
+
+// RuleStep4: Tag receives R1, verifies reader_mac, completes protocol
+rule RuleStep4:
+  let
+      tag_mac = h(~r0 XOR ~r1 XOR ~k XOR 'TAG_TAG')
+      expected = h(tag_mac XOR ~k XOR ~r0)
+  in
+  [ In(expected),
+    !TagState1(~k, ~r0, ~r1) ]
+  --[ Test4(), Honest('Tag'), Commit('Tag', 'Reader', <~r0, ~r1>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All x #i.
+     Secret('Reader', 'Tag', x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex #r. LtkReveal(x) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag_authenticates_reader:
+  "All t #i.
+     Commit('Tag', 'Reader', t) @ i
+   ==>
+       (Ex #j. Running('Reader', 'Tag', t) @ j)
+     | (Ex k #r. LtkReveal(k) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader_authenticates_tag:
+  "All t #i.
+     Commit('Reader', 'Tag', t) @ i
+   ==>
+       (Ex #j. Running('Tag', 'Reader', t) @ j)
+     | (Ex k #r. LtkReveal(k) @ r)"
+
+end

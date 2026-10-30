@@ -1,0 +1,44 @@
+theory CR_XOR_RAudit begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+rule RuleStep1:
+  [
+    Fr(~na),
+    Fr(~k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~na),
+    !PSK(~k),
+    !Na(~na)
+  ]
+
+rule RuleStep2:
+  [
+    In(~na),
+    Fr(~nb),
+    !PSK(~k)
+  ]
+  --[ Test2(), AuditR(bar(~nb)) ]->
+  [
+    Out(<h(~na XOR ~k XOR ~nb), ~nb>)
+  ]
+
+rule RuleStep3:
+  [
+    In(<h(~na XOR ~k XOR nb), nb>),
+    !PSK(~k),
+    !Na(~na)
+  ]
+  --[ Test3(), Verified() ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

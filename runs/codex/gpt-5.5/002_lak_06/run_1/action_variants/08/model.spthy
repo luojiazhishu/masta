@@ -1,0 +1,78 @@
+theory LakRfid
+begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Create($R, ~k), Create($T, ~k), Honest($R), Honest($T), Secret($R, $T, ~k) ]->
+  [ !Ltk($R, $T, ~k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1(), Create($R, ~r0) ]->
+  [ Out(~r0), St_R_1($R, $T, k, ~r0) ]
+
+rule Tag_Send_T1:
+  let
+    tag_mac = h(<r0, ~r1, k>)
+    local_fp = bar(~r1)
+  in
+  [ Fr(~r1), In(r0), !Ltk($R, $T, k) ]
+  --[ Test2(), Create($T, ~r1), Running($T, $R, <'tag', r0, ~r1, tag_mac>) ]->
+  [ Out(<~r1, tag_mac>), St_T_1($T, $R, k, r0, ~r1, tag_mac, local_fp), ValidTagMac($R, $T, k, r0, ~r1, tag_mac), OffsetSource($R, $T, k, r0, ~r1, tag_mac) ]
+
+rule Xor_Offset_Malleability:
+  [ Fr(~r0_offset), Fr(~r1_offset), OffsetSource(R, T, k, r0, r1, tag_mac) ]
+  --[ ]->
+  [ Out(<~r1_offset, tag_mac>), ValidTagMac(R, T, k, ~r0_offset, ~r1_offset, tag_mac) ]
+
+rule Reader_Send_R1:
+  let
+    reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ St_R_1($R, $T, k, r0), ValidTagMac($R, $T, k, r0, r1, tag_mac), In(<r1, tag_mac>) ]
+  --[ Test3(), Running($R, $T, <'reader', r0, r1, tag_mac>), Commit($R, $T, <'reader', r0, r1, tag_mac>), Honest($R), Honest($T) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Accept_R1:
+  let
+    reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ St_T_1($T, $R, k, r0, r1, tag_mac, local_fp), In(reader_mac) ]
+  --[ Test4(), Commit($T, $R, <'tag', r0, r1, tag_mac>), Honest($T), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma tag_authenticates_reader:
+  "All a b r0 r1 tag_mac #i.
+     Commit(a, b, <'tag', r0, r1, tag_mac>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1, tag_mac>) @ j)"
+
+// category: injective_agreement
+lemma reader_injective_agreement:
+  "All a b r0 r1 tag_mac #i.
+     Commit(a, b, <'reader', r0, r1, tag_mac>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'tag', r0, r1, tag_mac>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'reader', r0, r1, tag_mac>) @ i2
+                                & not (#i2 = #i))) )"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

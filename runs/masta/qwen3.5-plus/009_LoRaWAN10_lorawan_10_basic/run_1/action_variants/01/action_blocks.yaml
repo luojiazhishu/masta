@@ -1,0 +1,34 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - ~TransportId
+  - send:
+    - '''JoinRequest'''
+    - DevEUI
+    - JoinEUI
+    - ~DevNonce
+    - mac(AppKey, <'JoinRequest', DevEUI, JoinEUI, ~DevNonce>)
+    - ~TransportId
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - DevEUI
+    - JoinEUI
+    - ~DevNonce
+    - RequestMAC
+    - ~TransportId
+  - generate_nonces:
+    - ~JoinNonce
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, DevAddr, mac(AppKey, <'JoinAccept', ~JoinNonce,
+      DevAddr>)>, AppKey)
+- role: RuleStep2_Commit
+  operations:
+  - send: []
+- role: RuleStep3
+  operations:
+  - receive:
+    - senc(<'JoinAccept', JoinNonce, DevAddr, ResponseMAC>, AppKey)
+  - send: <END>

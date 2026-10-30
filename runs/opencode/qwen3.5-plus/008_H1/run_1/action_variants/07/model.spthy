@@ -1,0 +1,71 @@
+theory MutualAuthResend
+begin
+
+builtins: signing
+
+rule Initiator_Start:
+  [ Fr(~ltkI), Fr(~sid), Fr(~ltkR) ]
+  --[ Test1(), Create('I', ~sid), Running('I', 'R', <'init', ~sid>), Honest('I'), Honest('R') ]->
+  [ St_I_1(~sid, ~ltkI, ~ltkR), Out(<sign(<'I', 'R'>, ~ltkI), pk(~ltkI)>), !LtkI(~ltkI), !LtkR(~ltkR) ]
+
+rule Initiator_Resend:
+  [ St_I_1(~sid, ltkI, ltkR), !LtkI(ltkI), !LtkR(ltkR) ]
+  --[ Test2() ]->
+  [ St_I_2(~sid, ltkI, ltkR), Out(<sign(<'I', 'R'>, ltkI), pk(ltkI)>), !LtkI(ltkI), !LtkR(ltkR) ]
+
+rule Responder_Receive:
+  [ In(<mI, pkI>), Fr(~sidR), Fr(~ltkR2) ]
+  --[ Test3(), Create('R', ~sidR), Running('R', 'I', <'resp', ~sidR>), Honest('R'), Honest('I') ]->
+  [ St_R_1(~sidR, mI, pkI, ~ltkR2), Out(sign(<'I', 'R'>, ~ltkR2)), !LtkR(~ltkR2) ]
+
+rule Initiator_Finish:
+  [ St_I_2(~sid, ltkI, ltkR), In(sign(<'I', 'R'>, ltkR)), !LtkI(ltkI), !LtkR(ltkR) ]
+  --[ Test4(), Commit('I', 'R', <'init', ~sid>), Honest('I'), Honest('R') ]->
+  [ !LtkI(ltkI), !LtkR(ltkR) ]
+
+rule Responder_Commit:
+  [ St_R_1(~sidR, mI, pkI, ltkR), !LtkR(ltkR) ]
+  --[ Commit('R', 'I', <'resp', ~sidR>), Honest('R'), Honest('I') ]->
+  [ !LtkR(ltkR) ]
+
+rule LtkReveal_I:
+  [ !LtkI(ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(ltkI), !LtkI(ltkI) ]
+
+rule LtkReveal_R:
+  [ !LtkR(ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(ltkR), !LtkR(ltkR) ]
+
+// category: aliveness
+lemma aliveness_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,17 @@
+- role: Client_1
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - encrypt(~k, pkS)
+- role: Serv_1
+  operations:
+  - receive:
+    - request
+  - send:
+    - h(<decrypt(request, ~ltkS), 'session'>)
+- role: Client_2
+  operations:
+  - receive:
+    - h(<k, 'session'>)
+  - send: <END>

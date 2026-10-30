@@ -1,0 +1,99 @@
+theory MutualAuth begin
+
+builtins: signing
+
+// PKI: long-term keys for Initiator and Responder
+rule GenerateKeys_I:
+  [ Fr(~ltkI) ]
+  -->
+  [ !Ltk($I, ~ltkI)
+  , !Pk($I, pk(~ltkI))
+  , Out(pk(~ltkI))
+  ]
+
+rule GenerateKeys_R:
+  [ Fr(~ltkR) ]
+  -->
+  [ !Ltk($R, ~ltkR)
+  , !Pk($R, pk(~ltkR))
+  , Out(pk(~ltkR))
+  ]
+
+// RuleStep1: Initiator sends mI = sign(<I, R>, ltkI)
+rule RuleStep1:
+  [ !Ltk($I, ~ltkI) ]
+  --[ Test1(), Honest($I) ]->
+  [ Out(sign(<$I, $R>, ~ltkI))
+  ]
+
+// RuleStep2: Responder receives signature, generates nonce, sends response
+rule RuleStep2:
+  [ In(s)
+  , Fr(~rn)
+  , Fr(~id)
+  , !Ltk($R, ~ltkR)
+  ]
+  --[ Test2(), Create($R, ~id), Running($R, $I, <$I, $R>), Honest($R) ]->
+  [ Out(<sign(<$I, $R>, ~ltkR), ~rn>)
+  ]
+
+// RuleStep3: Initiator receives response, verifies, accepts (terminal)
+rule RuleStep3:
+  [ In(<s, rn>)
+  ]
+  --[ Test3(), Commit($I, $R, <$I, $R>) ]->
+  [ ]
+
+// LtkReveal rules for long-term key compromise
+rule LtkReveal_I:
+  [ !Ltk($I, ltk) ]
+  --[ LtkReveal($I) ]->
+  [ Out(ltk) ]
+
+rule LtkReveal_R:
+  [ !Ltk($R, ltk) ]
+  --[ LtkReveal($R) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

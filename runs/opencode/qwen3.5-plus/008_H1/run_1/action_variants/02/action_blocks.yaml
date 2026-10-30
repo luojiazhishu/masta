@@ -1,0 +1,22 @@
+- role: Initiator_Send
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+- role: Responder_Receive
+  operations:
+  - receive:
+    - mI
+  - send: []
+- role: Responder_Send
+  operations:
+  - generate_nonces:
+    - ~rn
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+    - ~rn
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - s
+    - rcvd_rn
+  - send: <END>

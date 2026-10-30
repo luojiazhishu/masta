@@ -1,0 +1,87 @@
+theory SymmetricKeyEncapsulationWithPublicTag
+begin
+
+builtins: symmetric-encryption
+
+rule Initiator_Send:
+  [
+    Fr(~k),
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~tag),
+    Fr(~I),
+    Fr(~R)
+  ]
+  --[
+    Test1(),
+    Create(~I, ~sec),
+    Secret(~I, ~R, ~sec)
+  ]->
+  [
+    Out(<senc(<~sec, ~pub>, ~k), ~tag>),
+    St_I(~I, ~R, ~k, ~sec)
+  ]
+
+rule Responder_Receive:
+  [
+    In(<msg, tag>),
+    Fr(~k),
+    Fr(~I),
+    Fr(~R)
+  ]
+  --[
+    Test2(),
+    Running(~R, ~I, <'resp', tag>)
+  ]->
+  [
+    !Ltk(~R, ~k),
+    St_R(~R, ~I, tag)
+  ]
+
+rule Responder_Decrypt:
+  [
+    !Ltk(R, k),
+    St_R(R, I, tag),
+    In(<senc(<sec, pub>, k), tag>)
+  ]
+  --[
+    Commit(R, I, <'resp', tag>),
+    Honest(R)
+  ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !Ltk(I, k)
+  ]
+  --[
+    LtkReveal(I)
+  ]->
+  [
+    Out(k)
+  ]
+
+lemma secrecy_sec:
+  // category: secrecy
+  "All I R sec #i.
+     Secret(I, R, sec) @ i
+   ==>
+       not (Ex #j. K(sec) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma aliveness:
+  // category: aliveness
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

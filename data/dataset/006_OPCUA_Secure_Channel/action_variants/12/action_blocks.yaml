@@ -1,0 +1,59 @@
+- role: Init
+  operations:
+  - compute:
+    - m = 'GEReq'
+  - send:
+    - m
+    - m
+- role: Resp_Init
+  operations:
+  - receive:
+    - m
+  - compute:
+    - m = 'GEReq'
+    - m2 = <'GERes', pk(~x), 'Sign', $SP, $UP>
+  - send:
+    - m2
+- role: Resp_Client
+  operations:
+  - receive:
+    - m
+  - generate_nonces:
+    - ~nc
+  - compute:
+    - m = <'GERes', keyS, 'Sign', sp, up>
+    - m2 = <'OSCReq', pk(~x), ~nc>
+  - send:
+    - pk(~x)
+    - m2
+    - sign(<h(m2)>, ~x)
+    - h(m2)
+- role: Resp_Server
+  operations:
+  - receive:
+    - keyC
+    - m
+    - signature
+    - h(m)
+  - generate_nonces:
+    - ~ns
+  - compute:
+    - m = <'OSCReq', keyC, nc>
+    - m2 = <'OSCRes', ~ns, $ST, $TTL>
+  - assert:
+    - verify(signature, h(<'OSCReq', keyC, nc>), keyC) = true
+  - send:
+    - pk(~x)
+    - m2
+    - sign(<h(m2)>, ~x)
+    - h(m2)
+- role: Auth_Client
+  operations:
+  - receive:
+    - m
+    - signature
+  - compute:
+    - m = <keys, 'OSCRes', ns, st, ttl>
+  - assert:
+    - verify(signature, h(<'OSCRes', ns, st, ttl>), keys) = true
+  - send: <END>

@@ -1,0 +1,23 @@
+- role: Client_Init
+  operations:
+  - generate_nonces:
+    - ~k
+  - compute:
+    - ct = aenc(~k, pkS)
+  - send:
+    - ct
+    - '''init'''
+- role: Server_Respond
+  operations:
+  - receive:
+    - ct
+    - '''init'''
+  - compute:
+    - k = adec(ct, ~sk)
+  - send:
+    - h(k)
+- role: Client_Finish
+  operations:
+  - receive:
+    - h(~k)
+  - send: <END>

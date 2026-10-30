@@ -1,0 +1,42 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption
+
+// RuleStep1: Initiator generates nonces and sends first msg
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~k)
+  ]
+  --[ Test1(), Out(senc(<~sec, ~pub>, ~k)) ]->
+  [
+    !StI(~sec, ~pub, ~k)
+  ]
+
+// RuleStep2: Initiator sends second msg (duplicate)
+rule RuleStep2:
+  [
+    !StI(~sec, ~pub, ~k)
+  ]
+  --[ Test2(), Out(senc(<~sec, ~pub>, ~k)) ]->
+  [
+    !StI(~sec, ~pub, ~k)
+  ]
+
+// RuleStep3: Responder receives msg and terminates
+rule RuleStep3:
+  [
+    In(senc(<sec, pub>, k))
+  ]
+  --[ Test3(), Secret(sec) ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

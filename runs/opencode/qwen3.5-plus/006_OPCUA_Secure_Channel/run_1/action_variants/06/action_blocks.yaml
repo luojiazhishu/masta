@@ -1,0 +1,45 @@
+- role: Client_GetEndpoints
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pks
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannel
+  operations:
+  - generate_nonces:
+    - ~nc
+  - send:
+    - pkc
+    - ~nc
+    - sign(h(<'OSCReq', pkc, ~nc>), skc)
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - pkc
+    - nc
+    - clientsig
+  - generate_nonces:
+    - ~ns
+  - send:
+    - pks
+    - ~ns
+    - '''ST'''
+    - '''TTL'''
+    - sign(h(<'OSCRes', ~ns, 'ST', 'TTL'>), sks)
+- role: Client_Complete
+  operations:
+  - receive:
+    - pks
+    - ns
+    - '''ST'''
+    - '''TTL'''
+    - serversig
+  - send: <END>

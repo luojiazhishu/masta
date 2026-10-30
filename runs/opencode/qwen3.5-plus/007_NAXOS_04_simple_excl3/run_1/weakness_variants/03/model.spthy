@@ -1,0 +1,98 @@
+theory NAXOS_Simple_Excl3
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/1, h2/1
+
+rule Register_LTK_I:
+  [ Fr(~ltkI) ]
+  --[ Create('I', ~ltkI) ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', 'g'^~ltkI) ]
+
+rule Register_LTK_R:
+  [ Fr(~ltkR) ]
+  --[ Create('R', ~ltkR) ]->
+  [ !Ltk('R', ~ltkR), !Pk('R', 'g'^~ltkR) ]
+
+rule Initiator_Start:
+  let exI = h1(<~eskI, ~ltkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk('I', ~ltkI) ]
+  --[ Test1(), Running('I', 'R', 'initiator') ]->
+  [ St_I_1('I', 'R', ~eskI, ~ltkI, hkI), Out(hkI) ]
+
+rule Responder_Receive:
+  let exR = h1(<~eskR, ~ltkR>)
+      hkR = 'g'^exR
+  in
+  [ Fr(~eskR), !Ltk('R', ~ltkR), !Pk('I', pkI), In(X) ]
+  --[ Test2(), Running('R', 'I', 'responder') ]->
+  [ St_R_1('R', 'I', ~eskR, ~ltkR, X), Out(hkR) ]
+
+rule Initiator_Finish:
+  let exI = h1(<~eskI, ~ltkI>)
+      kI = h2(<hkR^~ltkI, pkR^exI, 'I', 'R'>)
+  in
+  [ St_I_1('I', 'R', ~eskI, ~ltkI, hkI), !Pk('R', pkR), In(hkR) ]
+  --[ Test3(), Commit('I', 'R', 'initiator'), Secret('I', 'R', kI) ]->
+  [ ]
+
+rule Responder_Finish:
+  let exR = h1(<~eskR, ~ltkR>)
+      kR = h2(<pkI^exR, X^~ltkR, 'I', 'R'>)
+  in
+  [ St_R_1('R', 'I', ~eskR, ~ltkR, X), !Pk('I', pkI) ]
+  --[ Test4(), Commit('R', 'I', 'responder'), Secret('R', 'I', kR) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk('I', ~ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', ~ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(~ltkR) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_initiator:
+  "All a b k #i.
+     Secret(a, b, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: secrecy
+lemma secrecy_responder:
+  "All a b k #i.
+     Secret(a, b, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+end

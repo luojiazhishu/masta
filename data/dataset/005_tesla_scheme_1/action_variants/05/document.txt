@@ -1,0 +1,202 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-05
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of
+   streamed data sent from a single source to many receivers using
+   only symmetric Message Authentication Codes (MACs) on the
+   broadcast path.  Source authenticity is anchored in a single
+   asymmetric signature exchanged once during a connection set-up
+   phase.  The set-up request additionally carries the constant
+   message-type tag "init_request", which is bound under the
+   sender's signature to provide unambiguous domain separation
+   from any other receiver-initiated request.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................2
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies Scheme 1.
+
+   The set-up request carries an explicit constant message-type
+   identifier with the value "init_request".  The sender includes
+   the same constant inside the signed material of its set-up
+   response.  Pinning the constant in this way provides domain
+   separation between the set-up signature and signatures that the
+   sender's long-term key may produce in other contexts.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R           Sender and receiver respectively.
+      SK(S), PK(S)   Long-term signing/verification keys of S.
+      sign{X}K       A digital signature on X computed with key K.
+      MAC(K, X)      A MAC on X computed under key K.
+      f(k)           The commitment to MAC key k.
+      n_R            A receiver-chosen set-up nonce.
+      "init_request" The constant ASCII tag bound to a SetupRequest.
+                     It is conveyed verbatim and is not subject to
+                     length negotiation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R, "init_request"
+                                        ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R,
+                                          "init_request"}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+4. Message Format
+
+4.1. Connection Set-Up Messages
+
+   Msg 0a (R -> S):
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+          opaque   message_type;     /* equals "init_request" */
+      } SetupRequest;
+
+   The field message_type MUST be the seven-octet ASCII string
+   "init_request".
+
+   Msg 0b (S -> R):
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R,
+                                        "init_request"}_SK(S) */
+      } SetupResponse;
+
+   The signature MUST be computed over the concatenation, in
+   order, of commitment, nonce_R, and the constant
+   "init_request", using SK(S).
+
+4.2. Authenticated Stream Messages
+
+   Stream messages are unchanged from standard TESLA Scheme 1.
+
+5. Processing Rules
+
+   The sender, upon receiving a SetupRequest from R:
+
+   1.  Verifies that message_type is exactly "init_request".  A
+       request with any other value MUST be discarded.
+
+   2.  Forms the SetupResponse with the commitment f(k_1).
+
+   3.  Computes signature = sign{f(k_1), nonce_R,
+       "init_request"}_SK(S).
+
+   4.  Transmits Msg 0b on the network destined to R.
+
+   The receiver, upon receiving a SetupResponse:
+
+   1.  Verifies signature using PK(S) over (commitment, nonce_R,
+       "init_request").
+
+   2.  If verification fails, the response MUST be discarded.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is the
+   following: if a receiver R, through the verification procedure
+   of Section 5, accepts a payload m as having been sent by S, then
+   either S did broadcast m as part of the same stream or the
+   long-term signing key SK(S) was disclosed to the adversary prior
+   to the completion of R's connection set-up.
+
+   Including the message_type constant in the signed material
+   provides domain separation between SetupResponse signatures and
+   any other signature that S may legitimately produce.  An
+   adversary that obtains a signature in another context cannot
+   replay it as a valid SetupResponse, because the value
+   "init_request" is fixed and cannot collide with the prefix of
+   another protocol message.  Implementations MUST NOT use the
+   constant string "init_request" elsewhere in any message that
+   the same long-term key may sign.
+
+   The remaining security considerations of TESLA Scheme 1 apply
+   without modification.  In particular, implementations MUST refuse
+   to accept any broadcast message for which the corresponding key
+   could already have been disclosed at the time of receipt.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

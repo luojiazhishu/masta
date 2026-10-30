@@ -1,0 +1,54 @@
+theory TeslaScheme1Unverified
+begin
+
+builtins: hashing, signing
+
+functions: f/1, MAC/2
+
+rule Setup:
+  [ Fr(~n_R), Fr(~k_1), Fr(~r), Fr(~s) ]
+  --[ Test1(), Test2(), Running(~r, ~s, <'receiver', ~r, ~s, ~n_R, f(~k_1)>),
+      Running(~s, ~r, <'sender', ~s, ~r, ~n_R, f(~k_1)>) ]->
+  [ Out(<~r, ~s, ~n_R>), Out(<~s, ~r, f(~k_1), sign(<f(~k_1), ~n_R>, ~s)>),
+    St_Session(~r, ~s, ~n_R, f(~k_1), ~k_1), !Id(~r), !Id(~s), !Ltk(~s) ]
+
+rule Stream1:
+  [ St_Session(R, S, n_R, commitment, k_1), !Id(R), Fr(~m_1), Fr(~k_2) ]
+  --[ Test3(), Test4(), Test5(), Secret(S, R, k_1),
+      Commit(R, S, <'receiver', R, S, n_R, commitment, <~m_1, f(~k_2)>, MAC(k_1, <~m_1, f(~k_2)>)>),
+      Honest(R) ]->
+  [ Out(<<~m_1, f(~k_2)>, MAC(k_1, <~m_1, f(~k_2)>)>), St_Session(R, S, n_R, commitment, k_1) ]
+
+rule LtkReveal:
+  [ !Ltk(X), !Id(X) ]
+  --[ LtkReveal(X) ]->
+  [ Out(X) ]
+
+rule Honest:
+  [ !Id(X) ]
+  --[ Honest(X) ]->
+  [ !Id(X) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_k1:
+  "All S R k #i.
+       Secret(S, R, k) @ i
+     & not (Ex #r. LtkReveal(S) @ r)
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// category: noninjective_agreement
+lemma agreement_setup:
+  "All R S n_R commitment m_1 k_2 mac_1 #i.
+       Commit(R, S, <'receiver', R, S, n_R, commitment, <m_1, f(k_2)>, mac_1>) @ i
+     & not (Ex #r. LtkReveal(S) @ r)
+   ==>
+       (Ex #j. Running(S, R, <'sender', S, R, n_R, commitment>) @ j)"
+
+end

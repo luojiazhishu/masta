@@ -1,0 +1,62 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - R
+    - S
+    - nR
+  - generate_nonces:
+    - ~k1
+  - send:
+    - S
+    - R
+    - f(~k1)
+    - sign(<f(~k1), nR>, sk)
+- role: Receiver_Stores_Setup
+  operations:
+  - receive:
+    - S
+    - R
+    - fk1
+    - sig
+  - assert:
+    - verify(sig, <fk1, nR>, pkS) = true
+  - send: []
+- role: Sender_First_Broadcast_And_Audit
+  operations:
+  - generate_nonces:
+    - ~k2
+    - ~m1
+  - send:
+    - <~m1, f(~k2)>
+    - mac(k1, <~m1, f(~k2)>)
+- role: Receiver_Buffers_First_Message
+  operations:
+  - receive:
+    - <m1, fk2>
+    - tag
+  - send: []
+- role: Sender_Subsequent_Broadcast_Discloses_K1
+  operations:
+  - generate_nonces:
+    - ~k3
+    - ~m2
+  - send:
+    - <~m2, f(~k3), k1>
+    - mac(k2, <~m2, f(~k3), k1>)
+- role: Receiver_Accepts_First_Payload
+  operations:
+  - receive:
+    - <m2, fk3, k1>
+    - tag2
+  - assert:
+    - f(k1) = fk1
+    - tag = mac(k1, <m1, fk2>)
+  - send: <END>

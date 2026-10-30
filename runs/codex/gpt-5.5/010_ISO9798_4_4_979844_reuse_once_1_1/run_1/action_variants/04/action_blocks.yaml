@@ -1,0 +1,52 @@
+- role: Responder_Send_Challenge
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+  - send:
+    - ~RB
+    - ~Text1
+    - '''init_b'''
+- role: Initiator_Send_Token
+  operations:
+  - receive:
+    - RB
+    - Text1
+    - '''init_b'''
+  - generate_nonces:
+    - ~Text2
+    - ~Text3
+  - compute:
+    - RA = 'duplicate_ra'
+    - tagged1 = <'sid1_mut_cr', 'duplicate_ra', RB, 'B', ~Text2>
+    - mac1 = h(<'sid1_mut_cr', 'duplicate_ra', RB, 'B', kAB>)
+  - send:
+    - RA
+    - ~Text3
+    - tagged1
+    - mac1
+- role: Responder_Send_Response
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - tagged1
+    - mac1
+  - generate_nonces:
+    - ~Text4
+    - ~Text5
+  - compute:
+    - tagged1 = <'sid1_mut_cr', RA, RB, 'B', Text2>
+    - mac1 = h(<'sid1_mut_cr', RA, RB, 'B', kAB>)
+    - mac2 = h(<'sid2_mut_cr', RB, RA, kAB>)
+  - send:
+    - ~Text5
+    - mac2
+- role: Initiator_Accept
+  operations:
+  - receive:
+    - Text5
+    - mac2
+  - compute:
+    - mac2 = h(<'sid2_mut_cr', RB, RA, kAB>)
+  - send: <END>

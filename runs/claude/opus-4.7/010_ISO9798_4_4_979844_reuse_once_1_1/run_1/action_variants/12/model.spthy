@@ -1,0 +1,124 @@
+theory ISO9798_4_Mechanism4_MutualCR
+begin
+
+functions: mac/2
+
+/* Long-term symmetric key provisioning */
+rule Setup:
+  [ Fr(~kAB) ]
+  --[]->
+  [ !SharedKey($A, $B, ~kAB) ]
+
+/* Key compromise */
+rule Reveal_LTK:
+  [ !SharedKey($A, $B, ~kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(~kAB) ]
+
+/*
+ * RA pool is persistent so the same ~RA can be consumed across sessions,
+ * modelling the "at most one duplicate challenge" profile from the spec.
+ */
+rule Gen_RA:
+  [ Fr(~RA) ]
+  --[]->
+  [ !RA_Val(~RA) ]
+
+/* Block 1: Responder B generates RB, emits Challenge1 */
+rule B_Start:
+  [ Fr(~RB), Fr(~Text1), !SharedKey($A, $B, ~kAB) ]
+  --[ Test1(), Create($B, ~RB) ]->
+  [ Out(<~RB, ~Text1>),
+    St_B_1($A, $B, ~kAB, ~RB) ]
+
+/* Block 2: Initiator A receives Challenge1, emits TokenAB (first copy) */
+rule A_Recv_Challenge_Send1:
+  let mac1 = mac(<'sid1_mut_cr', ~RA, RB, $B>, ~kAB)
+  in
+  [ In(<RB, Text1>),
+    !RA_Val(~RA),
+    Fr(~Text2), Fr(~Text3),
+    !SharedKey($A, $B, ~kAB) ]
+  --[ Test2(),
+      Create($A, ~RA),
+      Running($A, $B, <'I', ~RA, RB>) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, $B, ~Text2>, mac1>),
+    St_A_1($A, $B, ~kAB, ~RA, RB, ~Text3, ~Text2) ]
+
+/* Block 3: Initiator A emits TokenAB a second time (identical payload) */
+rule A_Send2:
+  let mac1 = mac(<'sid1_mut_cr', ~RA, RB, $B>, ~kAB)
+  in
+  [ St_A_1($A, $B, ~kAB, ~RA, RB, ~Text3, ~Text2) ]
+  --[ Test3() ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, $B, ~Text2>, mac1>),
+    St_A_2($A, $B, ~kAB, ~RA, RB) ]
+
+/* Block 4: Responder B receives TokenAB, verifies mac1, emits TokenBA */
+rule B_Recv_TokenAB_Send_TokenBA:
+  let mac1 = mac(<'sid1_mut_cr', RA, ~RB, $B>, ~kAB)
+      mac2 = mac(<'sid2_mut_cr', ~RB, RA>, ~kAB)
+  in
+  [ St_B_1($A, $B, ~kAB, ~RB),
+    In(<RA, Text3, <'sid1_mut_cr', RA, ~RB, $B, Text2>, mac1>),
+    Fr(~Text4), Fr(~Text5) ]
+  --[ Test4(),
+      Commit($B, $A, <'I', RA, ~RB>),
+      Running($B, $A, <'R', RA, ~RB>),
+      Honest($A), Honest($B) ]->
+  [ Out(<~Text5, mac2>),
+    St_B_2($A, $B, ~kAB, ~RB, RA) ]
+
+/* Block 5: Initiator A receives TokenBA, verifies mac2, commits */
+rule A_Recv_TokenBA:
+  let mac2 = mac(<'sid2_mut_cr', RB, ~RA>, ~kAB)
+  in
+  [ St_A_2($A, $B, ~kAB, ~RA, RB),
+    In(<Text5, mac2>) ]
+  --[ Test5(),
+      Commit($A, $B, <'R', ~RA, RB>),
+      Honest($A), Honest($B) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_B:
+  "All b a ra rb #i.
+     Commit(b, a, <'I', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(a, b, <'I', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'R', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'R', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_B:
+  "All b a ra rb #i.
+     Commit(b, a, <'I', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(a, b, <'I', ra, rb>) @ j & j < i
+         & not (Ex b2 a2 #i2. Commit(b2, a2, <'I', ra, rb>) @ i2 & not (#i2 = #i)))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'R', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'R', ra, rb>) @ j & j < i
+         & not (Ex a2 b2 #i2. Commit(a2, b2, <'R', ra, rb>) @ i2 & not (#i2 = #i)))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

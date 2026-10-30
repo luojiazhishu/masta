@@ -1,0 +1,20 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+    - bar($I)
+- role: RuleStep2
+  operations:
+  - receive:
+    - mI
+  - generate_nonces:
+    - ~tidR
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: RuleStep3
+  operations:
+  - receive:
+    - mR
+  - send: <END>

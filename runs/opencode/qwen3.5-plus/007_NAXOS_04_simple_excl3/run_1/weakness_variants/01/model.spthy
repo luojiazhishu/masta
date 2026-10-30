@@ -1,0 +1,55 @@
+theory NaxosSimpleExcl3
+begin
+
+builtins: hashing
+
+functions: h1/2, h2/1, pk/1, gexp/2
+
+rule Initiator_Start:
+  [ Fr(~eskI), Fr(~skI), Fr(~tidI) ]
+  --[ Test1(), Create('I', ~tidI) ]->
+  [ Out(gexp('g', h1(~eskI, ~skI))), St_I(~tidI, h1(~eskI, ~skI), gexp('g', h1(~eskI, ~skI)), ~skI), !Pk('I', pk(~skI)) ]
+
+rule Responder_Receive:
+  [ In(hkI), Fr(~eskR), Fr(~skR), Fr(~tidR), !Pk('I', pkI) ]
+  --[ Test2(), Create('R', ~tidR), Running('R', 'I', <'responder', hkI, gexp('g', h1(~eskR, ~skR))>) ]->
+  [ Out(gexp('g', h1(~eskR, ~skR))), St_R(~tidR, h1(~eskR, ~skR), hkI, pkI, ~skR), !Pk('R', pk(~skR)) ]
+
+rule Initiator_Finish:
+  [ St_I(~tidI, expI, hkI, ~skI), In(hkR), !Pk('R', pkR) ]
+  --[ Test3(), Commit('I', 'R', <'initiator', hkI, hkR>), Honest('I'), Secret('I', 'R', h2(<gexp(pkR, expI), gexp(hkR, ~skI), 'I', 'R'>)) ]->
+  [ Out(h2(<gexp(pkR, expI), gexp(hkR, ~skI), 'I', 'R'>)) ]
+
+rule Ltk_Reveal_I:
+  [ !Pk('I', pkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(pkI) ]
+
+rule Ltk_Reveal_R:
+  [ !Pk('R', pkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(pkR) ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

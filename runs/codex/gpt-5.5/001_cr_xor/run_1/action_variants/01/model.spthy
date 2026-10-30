@@ -1,0 +1,60 @@
+theory CR_XOR_Echo begin
+
+builtins: hashing, xor
+
+rule Register_Pair:
+  [ Fr(~k) ]
+--[ Secret($A, $B, ~k), Honest($A), Honest($B) ]->
+  [ !Ltk($A, $B, ~k) ]
+
+rule Reveal_Key:
+  [ !Ltk(A, B, k) ]
+--[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Initiator_Send:
+  [ Fr(~na), Fr(~echo), Fr(~tid), !Ltk($A, $B, k) ]
+--[ Test1(), Create($A, ~tid) ]->
+  [ Out(<~na, ~echo>), St_I_1($A, $B, ~tid, ~na, ~echo, k) ]
+
+rule Responder_Reply:
+  [ Fr(~nb), Fr(~tid), !Ltk(A, B, k), In(<na, echo>) ]
+--[ Test2(), Create(B, ~tid), Running(B, A, <'responder', na, echo, ~nb>) ]->
+  [ Out(<h(na XOR k XOR ~nb), ~nb, echo>) ]
+
+rule Initiator_Accept:
+  [ St_I_1(A, B, tid, na, echo, k), In(<h(na XOR k XOR nb), nb, echo>) ]
+--[ Test3(), Commit(A, B, <'responder', na, echo, nb>), Honest(A), Honest(B) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex id #j. Create(b, id) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma responder_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+end

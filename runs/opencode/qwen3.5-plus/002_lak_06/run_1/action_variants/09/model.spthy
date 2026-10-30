@@ -1,0 +1,75 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+functions: xor_op/2
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk(k), Fr(~R) ]
+  --[ Test1(), Create(~R, ~r0) ]->
+  [ Out(~r0), St_R_1(~R, k, ~r0) ]
+
+rule Tag_Respond:
+  [ In(r0), !Ltk(k), Fr(~r1), Fr(~T), Fr(~R) ]
+  --[ Test2(), Create(~T, <r0, ~r1>), Running(~T, ~R, <'tag', r0, ~r1, k>) ]->
+  [ Out(<r0, h(xor_op(xor_op(xor_op(r0, ~r1), k), 'TAG_TAG'))>), St_T_1(~T, k, r0, ~r1) ]
+
+rule Reader_VerifyTag:
+  [ St_R_1(R, k, r0), In(<r0, tag_mac>) ]
+  --[ Test3() ]->
+  [ St_R_2(R, k, r0, tag_mac) ]
+
+rule Reader_SendConfirm:
+  let reader_mac = h(xor_op(xor_op(tag_mac, k), r0)) in
+  [ St_R_2(R, k, r0, tag_mac), !Ltk(k), Fr(~T) ]
+  --[ Test4(), Running(R, ~T, <'reader', r0, tag_mac, k>), Commit(R, ~T, <'reader', r0, tag_mac, k>), Honest(R) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_VerifyReader:
+  let tag_mac = h(xor_op(xor_op(xor_op(r0, r1), k), 'TAG_TAG'))
+      expected = h(xor_op(xor_op(tag_mac, k), r0)) in
+  [ St_T_1(T, k, r0, r1), In(expected), !Ltk(k), Fr(~R) ]
+  --[ Test5(), Commit(T, ~R, <'tag', r0, r1, k>), Honest(T) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// category: secrecy
+lemma secrecy_key:
+  "All k #i #j.
+     LtkReveal(k) @ i & K(k) @ j
+   ==>
+       Ex #r. LtkReveal(k) @ r & #r < #j"
+
+// category: aliveness
+lemma aliveness_tag:
+  "All t r params #i.
+     Commit(t, r, params) @ i
+   ==>
+       (Ex #j tid. Create(r, tid) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_reader:
+  "All r t params #i.
+     Commit(r, t, params) @ i
+   ==>
+       (Ex #j tid. Create(t, tid) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

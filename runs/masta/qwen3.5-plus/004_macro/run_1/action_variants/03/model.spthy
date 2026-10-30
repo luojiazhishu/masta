@@ -1,0 +1,90 @@
+theory BSKTI begin
+
+builtins: asymmetric-encryption, hashing
+
+// Key generation for server
+rule Generate_key_pair:
+  [ Fr(~sk) ]
+  --[ Honest($S) ]->
+  [ !Pk($S, pk(~sk))
+  , !Ltk($S, ~sk)
+  , Out(pk(~sk))
+  ]
+
+// RuleStep1: Client generates session key and sends m1
+rule RuleStep1:
+  [ Fr(~k)
+  , Fr(~tid)
+  , !Pk($S, pkS)
+  ]
+  --[ Test1()
+    , Secret($C, $S, ~k)
+  ]->
+  [ Out(<aenc(~k, pkS), 'init'>)
+  , !ClientState1(~tid, $S, ~k, pkS)
+  ]
+
+// RuleStep2: Server receives m1, decrypts, sends m2
+rule RuleStep2:
+  let k = adec(fst(m1), ~sk)
+      m2 = h(k)
+  in
+  [ In(m1)
+  , !Ltk($S, ~sk)
+  ]
+  --[ Test2()
+    , Running($S, $C, k)
+  ]->
+  [ Out(m2)
+  , !ServerState($S, k)
+  ]
+
+// RuleStep3: Client receives m2, verifies, completes
+rule RuleStep3:
+  [ In(m2)
+  , !ClientState1(~tid, $S, ~k, pkS)
+  ]
+  --[ Test3()
+    , Commit($C, $S, ~k)
+  ]->
+  [ Out('<END>')
+  ]
+
+// Long-term key reveal rule for server
+rule LtkReveal_S:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

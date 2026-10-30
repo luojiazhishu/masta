@@ -1,0 +1,64 @@
+theory TeslaBroadcastAuth
+begin
+
+builtins: signing, hashing
+
+rule Setup:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk('S', ~sk), !Pk('S', pk(~sk)), Out('S') ]
+
+rule Receiver_Init:
+  [ Fr(~n_R), Fr(~tag_R) ]
+  --[ Test1() ]->
+  [ Out(<'R', 'S', ~n_R, ~tag_R>), St_R_Init('R', 'S', ~n_R, ~tag_R) ]
+
+rule Sender_Respond:
+  [ In(<'R', 'S', n_R, tag_R>), !Ltk('S', sk), !Pk('S', pk), Fr(~k_1) ]
+  --[ Test2() ]->
+  [ Out(<'S', 'R', h(~k_1), sign(<h(~k_1), n_R, tag_R>, sk)>), St_S_1('S', 'R', ~k_1, h(~k_1)) ]
+
+rule Receiver_Verify:
+  [ St_R_Init('R', 'S', n_R, tag_R), In(<'S', 'R', f_k1, sig>), !Pk('S', pk) ]
+  --[ Test3(), Commit('R', 'S', <n_R, tag_R, f_k1>), Honest('R') ]->
+  [ St_R_Commit('R', 'S', f_k1, n_R, tag_R) ]
+
+rule Sender_Stream_1:
+  [ St_S_1('S', 'R', ~k_1, f_k1), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4() ]->
+  [ Out(<~m_1, h(~k_2), h(<~k_1, ~m_1, h(~k_2)>)>), St_S_2('S', 'R', ~k_2, h(~k_2), ~k_1) ]
+
+rule Receiver_Cache_1:
+  [ St_R_Commit('R', 'S', f_k1, n_R, tag_R), In(<m_1, f_k2, mac_1>) ]
+  --[ Test5() ]->
+  [ St_R_Cache1('R', 'S', f_k1, m_1, f_k2, mac_1) ]
+
+rule Sender_Stream_2:
+  [ St_S_2('S', 'R', ~k_2, f_k2, ~k_1), Fr(~m_2), Fr(~k_3) ]
+  --[ Test6() ]->
+  [ Out(<~m_2, h(~k_3), ~k_1, h(<~k_2, ~m_2, h(~k_3), ~k_1>)>), St_S_2('S', 'R', ~k_3, h(~k_3), ~k_2) ]
+
+rule Receiver_Verify_Stream:
+  [ St_R_Cache1('R', 'S', f_k1, m_1, f_k2, mac_1), In(<m_2, f_k3, k_1_disclose, mac_2>) ]
+  --[ Test7(), Commit('R', 'S', <m_1, m_2, k_1_disclose>), Honest('R') ]->
+  [ St_R_Verified('R', 'S', m_1, m_2) ]
+
+rule LtkReveal:
+  [ !Ltk('S', sk) ]
+  --[ LtkReveal('S') ]->
+  [ Out(sk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: aliveness
+lemma aliveness:
+  "All t #i.
+     Commit('R', 'S', t) @ i
+   ==>
+       (Ex #j. K('S') @ j)"
+
+end

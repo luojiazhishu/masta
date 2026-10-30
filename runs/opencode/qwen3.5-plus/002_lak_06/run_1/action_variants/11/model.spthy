@@ -1,0 +1,62 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+// Action Block 1: Reader generates r0 and sends R0
+rule Reader_Send_R0:
+  [ Fr(~r0), Fr(~k) ]
+  --[ Test1(), Create(~k) ]->
+  [ Out(<~r0, ~r0>), !Ltk(~k), St_R(~k, ~r0) ]
+
+// Action Block 2: Tag receives R0, sends T1
+rule Tag_Receive_R0_Send_T1:
+  [ In(<r0, r0>), Fr(~r1), !Ltk(k) ]
+  --[ Test2() ]->
+  [ Out(<~r1, h(<k,r0,~r1>)>), St_T(k, r0, ~r1) ]
+
+// Action Block 3: Reader receives T1, sends R1  
+rule Reader_Receive_T1_Send_R1:
+  [ St_R(k, r0), !Ltk(k), In(<r1, h(<k,r0,r1>)>) ]
+  --[ Test3(), Commit(k, 'reader', r0, r1) ]->
+  [ Out(h(<h(<k,r0,r1>),k,r0>)) ]
+
+// Action Block 4: Tag receives R1
+rule Tag_Receive_R1:
+  [ St_T(k, r0, r1), !Ltk(k), In(h(<h(<k,r0,r1>),k,r0>)) ]
+  --[ Test4(), Commit(k, 'tag', r0, r1) ]->
+  [ ]
+
+// 8.1 Secrecy of the Long-Term Tag Identifier (key k)
+// category: secrecy
+lemma secrecy_k:
+  "All k #i.
+     Create(k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// 8.2 Non-injective Agreement at the Tag
+// category: noninjective_agreement
+lemma noninjective_tag:
+  "All k r0 r1 #i.
+     Commit(k, 'tag', r0, r1) @ i
+   ==>
+       (Ex #j. Commit(k, 'reader', r0, r1) @ j)"
+
+// 8.3 Non-injective Agreement at the Reader
+// Note: This protocol does not guarantee injective binding at the Reader
+// (see Section 6 of the protocol specification)
+// category: noninjective_agreement
+lemma noninjective_reader:
+  "All k r0 r1 #i.
+     Commit(k, 'reader', r0, r1) @ i
+   ==>
+       (Ex #j. Commit(k, 'tag', r0, r1) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,29 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~ltkI
+    - ~sid
+    - ~ltkR
+  - send:
+    - sign(<'I', 'R'>, ~ltkI)
+    - pk(~ltkI)
+- role: Initiator_Resend
+  operations:
+  - send:
+    - sign(<'I', 'R'>, ltkI)
+    - pk(ltkI)
+- role: Responder_Receive
+  operations:
+  - receive:
+    - mI
+    - pkI
+  - generate_nonces:
+    - ~sidR
+    - ~ltkR2
+  - send:
+    - sign(<'I', 'R'>, ~ltkR2)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - sign(<'I', 'R'>, ltkR)
+  - send: <END>

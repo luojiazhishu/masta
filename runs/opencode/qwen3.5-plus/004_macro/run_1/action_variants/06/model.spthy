@@ -1,0 +1,53 @@
+theory SessionKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Setup_Ltk:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Client_Send:
+  [ Fr(~k), !Pk($S, pk(~skS)) ]
+  --[ Test1(), Create($S, ~k), Running($S, $S, <'client', ~k>), Secret($S, $S, ~k) ]->
+  [ Out(aenc(~k, pk(~skS))), St_C($S, ~k) ]
+
+rule Server_Respond:
+  [ In(M1), !Ltk($S, ~skS) ]
+  --[ Test2(), Running($S, $S, <'server', adec(M1, ~skS)>) ]->
+  [ Out(h(<adec(M1, ~skS), 'session'>)) ]
+
+rule Client_Verify:
+  [ St_C($S, k), In(h(<k, 'session'>)) ]
+  --[ Test3(), Commit($S, $S, <'client', k>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk($S, ~skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~skS) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All S k #i.
+     Secret(S, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All S k #i.
+     Commit(S, S, <'client', k>) @ i
+   ==>
+       (Ex #j. Running(S, S, <'server', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

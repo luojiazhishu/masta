@@ -1,0 +1,81 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: f/1, mac/2
+
+rule Ltk_Registration:
+  [ Fr(~sk) ]
+  --[ Create($S, ~sk) ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)) ]
+
+rule Ltk_Reveal:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+rule Receiver_Start:
+  [ Fr(~n_R), !Pk(S, pkS) ]
+  --[ Test1() ]->
+  [ Out(<$R, S, ~n_R>), St_R_1($R, S, ~n_R, pkS) ]
+
+rule Sender_Respond:
+  [ In(<$R, S, n_R>), !Ltk(S, skS), !Pk(S, pkS), Fr(~k_1), Fr(~stag_S) ]
+  --[ Test2(), Running(S, $R, <'setup', f(~k_1), n_R>) ]->
+  [ Out(<S, $R, f(~k_1), sign(<f(~k_1), n_R>, skS), ~stag_S>), St_S_1(S, $R, ~k_1) ]
+
+rule Receiver_Verify:
+  [ St_R_1($R, S, n_R, pkS), In(<S, $R, commitment, sign(<commitment, n_R>, skS), stag_S>), !Ltk(S, skS) ]
+  --[ Test3(), Commit($R, S, <'setup', commitment, n_R>) ]->
+  [ St_R_2($R, S, commitment) ]
+
+rule Sender_Broadcast_1:
+  [ St_S_1(S, $R, k_1), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4(), Running(S, $R, <'broadcast1', <~m_1, f(~k_2)>>) ]->
+  [ Out(<<~m_1, f(~k_2)>, mac(<<~m_1, f(~k_2)>>, k_1)>), St_S_2(S, $R, k_1, ~k_2) ]
+
+rule Receiver_Verify_Broadcast_1:
+  [ St_R_2($R, S, commitment), In(<D_1, mac_1>) ]
+  --[ Test5(), Commit($R, S, <'broadcast1', D_1>) ]->
+  [ St_R_3($R, S, D_1) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: aliveness
+lemma aliveness_setup:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement_setup:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma aliveness_broadcast:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement_broadcast:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+end

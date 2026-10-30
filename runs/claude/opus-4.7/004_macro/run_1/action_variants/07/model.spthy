@@ -1,0 +1,72 @@
+theory PKSessionKeyTransportServerBound
+begin
+
+builtins: asymmetric-encryption, hashing
+
+/* Long-term key registration */
+rule Register_Key:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)) ]
+
+/* Adversary may reveal any server's long-term private key */
+rule Reveal_Ltk:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+/* Action Block 1: Client generates fresh session key and sends encrypted key transport */
+rule Client_Init:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ Out(aenc(~k, pkS)), St_C_1($C, $S, ~k) ]
+
+/* Action Block 2: Server decrypts ciphertext and returns server-bound confirmation hash */
+rule Server_Respond:
+  [ !Ltk($S, ~sk), In(ct) ]
+  --[ Test2(), Running($S, 'anon', <$S, adec(ct, ~sk)>) ]->
+  [ Out(h(<adec(ct, ~sk), $S>)) ]
+
+/* Action Block 3: Client verifies confirmation hash and accepts session key */
+rule Client_Accept:
+  [ St_C_1($C, $S, ~k), In(h(<~k, $S>)) ]
+  --[ Test3(), Commit($C, $S, <$S, ~k>), Honest($C), Honest($S) ]->
+  [ ]
+
+/* 8.1 Secrecy of the transported session key */
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* 8.2 Non-injective agreement on the transported key */
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b k #i.
+     Commit(a, b, <b, k>) @ i
+   ==>
+       (Ex #j. Running(b, 'anon', <b, k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* 8.3 Injective agreement on the transported key */
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b k #i.
+     Commit(a, b, <b, k>) @ i
+   ==>
+       ( (Ex #j. Running(b, 'anon', <b, k>) @ j
+             & j < i
+             & not (Ex a2 #i2. Commit(a2, b, <b, k>) @ i2
+                             & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

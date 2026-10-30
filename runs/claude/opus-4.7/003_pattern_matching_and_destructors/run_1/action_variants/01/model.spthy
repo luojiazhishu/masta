@@ -1,0 +1,58 @@
+theory PmdSymmetricEncapsulation
+begin
+
+builtins: symmetric-encryption
+
+rule Setup_SharedKey:
+    [ Fr(~k) ]
+  --[ KeyGen($I, $R, ~k) ]->
+    [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_SharedKey:
+    [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+    [ Out(k) ]
+
+rule Initiator_Send:
+  let msg = senc(<~sec, ~pub>, k)
+  in
+    [ !SharedKey($I, $R, k), Fr(~sec), Fr(~pub) ]
+  --[ Test1()
+    , Honest($I)
+    , Honest($R)
+    , Secret($I, $R, ~sec)
+    , InitOut(msg)
+    ]->
+    [ Out(<msg, 'pmd'>) ]
+
+rule Responder_Receive:
+  let msg = senc(<sec, pub>, k)
+  in
+    [ !SharedKey($I, $R, k), In(<msg, label>) ]
+  --[ Test2()
+    , RespIn(msg, pub)
+    ]->
+    [ Out(pub) ]
+
+lemma typing [sources]:
+  "All m x #i.
+     RespIn(m, x) @ #i
+   ==>
+       (Ex #j. KU(x) @ #j & #j < #i)
+     | (Ex #j. InitOut(m) @ #j & #j < #i)"
+
+// category: secrecy
+lemma secrecy_of_sec:
+  "All I R x #i.
+     Secret(I, R, x) @ i
+   ==>
+       (not (Ex #j. K(x) @ j))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

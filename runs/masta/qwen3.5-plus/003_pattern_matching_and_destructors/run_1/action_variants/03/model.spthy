@@ -1,0 +1,39 @@
+theory FAMED_SK_PMD begin
+
+builtins: symmetric-encryption
+
+functions: aux/1
+
+rule SetupKeys:
+  [ Fr(~k) ]
+  -->
+  [ !PreSharedKey(~k) ]
+
+rule RuleStep1:
+  [ Fr(~sec), Fr(~pub), !PreSharedKey(~k) ]
+  --[ Test1(), Secret('I', 'R', ~sec), Honest('I') ]->
+  [ Out(senc(<~sec, ~pub>, ~k)) ]
+
+rule RuleStep2:
+  [ In(msg) ]
+  --[ Test2() ]->
+  [ ]
+
+rule PreSharedKeyReveal:
+  [ !PreSharedKey(~k) ]
+  --[ LtkReveal('I') ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

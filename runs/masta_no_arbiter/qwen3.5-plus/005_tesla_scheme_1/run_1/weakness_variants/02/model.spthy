@@ -1,0 +1,72 @@
+theory TESLA_Scheme1_Profile begin
+
+builtins: hashing, signing
+
+functions: f/1, mac/2
+
+// Setup Phase: Receiver sends nonce
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+// Setup Phase: Sender responds with commitment and signature
+rule RuleStep2:
+  [ In(<$R, $S, n_R>), Fr(~k_1) ]
+  let f_k1 = f(~k_1)
+      sig_1 = sign(<f_k1, n_R>, 'SK_S')
+  in
+  --[ Test2() ]->
+  [ Out(<$S, $R, f_k1, sig_1>) ]
+
+// Setup Phase: Receiver verifies signature
+rule RuleStep3:
+  [ In(<$S, $R, f_k1, sig_1>) ]
+  --[ Test3() ]->
+  [ !CachedCommitment(f_k1) ]
+
+// Stream Phase: Sender sends first message (no disclosed key)
+rule RuleStep4:
+  [ !CachedCommitment(f_k1), Fr(~k_2) ]
+  let m_1 = 'm_1'
+      f_k2 = f(~k_2)
+      D_1 = <m_1, f_k2>
+      mac_1 = mac(~k_1, D_1)
+  in
+  --[ Test4() ]->
+  [ Out(<D_1, mac_1>), !CachedCommitment(f_k2), !CachedPayload(D_1, mac_1) ]
+
+// Stream Phase: Receiver caches first message
+rule RuleStep5:
+  [ In(<D_1, mac_1>) ]
+  --[ Test5() ]->
+  [ ]
+
+// Stream Phase: Sender sends nth message (discloses k_{n-1})
+rule RuleStep6:
+  [ !CachedCommitment(f_kn), Fr(~k_next), Fr(~k_n), Fr(~k_prev) ]
+  let m_n = 'm_n'
+      f_k_next = f(~k_next)
+      D_n = <m_n, f_k_next, ~k_prev>
+      mac_n = mac(~k_n, D_n)
+  in
+  --[ Test6() ]->
+  [ Out(<D_n, mac_n>), !CachedCommitment(f_k_next) ]
+
+// Stream Phase: Receiver verifies commitment and accepts payload
+rule RuleStep7:
+  [ In(<D_n, mac_n>), !CachedPayload(D_prev, mac_prev) ]
+  let k_disclosed = snd(snd(D_n))
+      f_disclosed = f(k_disclosed)
+  in
+  --[ Test7() ]->
+  [ Accept(D_prev) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 &
+       Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

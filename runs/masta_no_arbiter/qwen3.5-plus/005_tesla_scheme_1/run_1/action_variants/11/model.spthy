@@ -1,0 +1,49 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender
+rule Generate_Keys:
+  [ Fr(~sk_S) ]
+  --[ Init() ]->
+  [ !Ltk($S, ~sk_S), !Pk($S, pk(~sk_S)), Out(pk(~sk_S)) ]
+
+// Step 1: Receiver sends SetupRequest
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>), !StateR(~tid_R, $R, $S, ~n_R) ]
+
+// Step 2: Sender receives request, generates k_1, sends SetupResponse
+rule RuleStep2:
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1),
+    !Ltk($S, ~sk_S)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R, 'init'>, ~sk_S)>),
+    !StateS($S, $R, ~k_1)
+  ]
+
+// Step 3: Receiver verifies signature
+rule RuleStep3:
+  [
+    In(<$S, $R, commitment, signature>),
+    !StateR(~tid_R, $R, $S, ~n_R),
+    !Pk($S, pk_S)
+  ]
+  --[ Test3() ]->
+  [
+    !Verified($R, commitment)
+  ]
+  where verify(signature, <commitment, ~n_R, 'init'>, pk_S) = true
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

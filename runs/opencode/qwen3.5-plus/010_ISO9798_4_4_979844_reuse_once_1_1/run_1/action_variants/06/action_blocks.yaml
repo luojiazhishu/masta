@@ -1,0 +1,32 @@
+- role: Setup
+  operations:
+  - generate_nonces:
+    - ~kAB
+    - ~IdA
+    - ~IdB
+  - send: []
+- role: B_Start
+  operations:
+  - generate_nonces:
+    - ~tidB
+    - ~RB
+  - send:
+    - ~tidB
+    - ~RB
+- role: A_Respond
+  operations:
+  - receive:
+    - tidB
+    - RB
+  - generate_nonces:
+    - ~tidA
+    - ~RA
+  - send:
+    - ~RA
+    - h(<'sid1_mut_cr', ~RA, RB, IdB, kAB>)
+- role: B_Verify_Respond
+  operations:
+  - receive:
+    - RA
+    - h(<'sid1_mut_cr', RA, RB, IdB, kAB>)
+  - send: <END>

@@ -1,0 +1,51 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption
+
+functions: tag_aux/2
+
+// RuleStep1: Initiator generates fresh sec and k, sends encrypted message
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~k)
+  ]
+  --[ Test1(), Secret(~sec) ]->
+  [
+    Out(senc(<~sec, 'pub'>, ~k))
+  ]
+
+// RuleStep2: Responder receives ciphertext, decrypts, computes auxr, releases pub
+rule RuleStep2:
+  let
+    decrypted = sdec(ciphertext, k)
+    sec = fst(decrypted)
+    pub = snd(decrypted)
+  in
+  [
+    In(ciphertext),
+    Fr(~tid),
+    Fr(k)
+  ]
+  --[ Test2(), AuxComputed(tag_aux(sec, pub)) ]->
+  [
+    Out(pub)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// Property 1: secrecy_of_encapsulated_secret
+// category: secrecy
+// scope: sec
+// description: The encapsulated secret `sec` must remain unknown to the adversary even if `pub` is released to the network.
+lemma secrecy_sec:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+     not (Ex #j. K(x) @ j)"
+
+end

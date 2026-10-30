@@ -1,0 +1,46 @@
+- role: Responder_Challenge
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - send:
+    - ~rb
+    - ~text1
+- role: Initiator_TokenAB
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - send:
+    - '''token_ab'''
+    - ra
+    - ~text3
+    - <'sid1_mut_cr', ra, rb, B, ~text2>
+    - h(<'sid1_mut_cr', ra, rb, B, k>)
+- role: Responder_TokenBA
+  operations:
+  - receive:
+    - '''token_ab'''
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, rb, B, text2>
+    - request_mac
+  - generate_nonces:
+    - ~text4
+    - ~text5
+  - assert:
+    - request_mac = h(<'sid1_mut_cr', ra, rb, B, k>)
+  - send:
+    - ~text5
+    - h(<'sid2_mut_cr', rb, ra, k>)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - text5
+    - response_mac
+  - assert:
+    - response_mac = h(<'sid2_mut_cr', rb, ra, k>)
+  - send: <END>

@@ -1,0 +1,15 @@
+- role: Initiator_Encapsulate
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - auxv = aux(~sec)
+    - msg = senc(<~sec, ~pub>, shk($I, $R))
+  - send:
+    - msg
+- role: Responder_Decapsulate
+  operations:
+  - receive:
+    - msg
+  - send: <END>

@@ -1,0 +1,78 @@
+theory TeslaScheme1Weak
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+/* Long-term key setup */
+rule Register_Key:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+restriction Eq:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* Block 1: Receiver generates nonce and sends SetupRequest (Msg 0a) */
+rule R_SetupRequest:
+  [ Fr(~n_R), !Pk($S, pkS) ]
+  --[ Test1(), Create($R, ~n_R) ]->
+  [ St_R_1($R, $S, ~n_R, pkS), Out(<$R, $S, ~n_R>) ]
+
+/* Block 2: Sender processes SetupRequest, sends SetupResponse (Msg 0b).
+   Weakness: signature covers n_R only; f(k_1) is unsigned and unbound. */
+rule S_SetupResponse:
+  [ In(<$R, $S, n_R>), !Ltk($S, ~sk), Fr(~k_1) ]
+  --[ Test2() ]->
+  [ St_S_1($S, $R, n_R, ~k_1),
+    Out(<$S, $R, h(~k_1), sign(n_R, ~sk)>) ]
+
+/* Block 3: Receiver verifies signature on n_R, stores commitment as-is.
+   The stored fk1 may have been substituted by an adversary. */
+rule R_ReceiveSetupResponse:
+  [ St_R_1($R, $S, ~n_R, pkS), In(<$S, $R, fk1, sig>) ]
+  --[ Test3(), Eq(verify(sig, ~n_R, pkS), true) ]->
+  [ St_R_2($R, $S, ~n_R, fk1) ]
+
+/* Block 4: Sender sends stream message with MAC under k_1 and discloses k_1 */
+rule S_StreamMessage:
+  [ St_S_1($S, $R, n_R, ~k_1), Fr(~m_1) ]
+  --[ Test4(), Running($S, $R, <'sender_stream', $S, $R, ~m_1>) ]->
+  [ Out(<~m_1, mac(~k_1, ~m_1), ~k_1>) ]
+
+/* Block 5: Receiver checks h(k_disc) matches stored commitment and verifies MAC */
+rule R_VerifyStreamMessage:
+  [ St_R_2($R, $S, ~n_R, fk1), In(<m, mac_v, k_disc>) ]
+  --[ Test5(),
+      Eq(h(k_disc), fk1),
+      Eq(mac(k_disc, m), mac_v),
+      Commit($R, $S, <'sender_stream', $S, $R, m>),
+      Honest($S), Honest($R) ]->
+  [ ]
+
+/* Authenticity of broadcast messages.
+   Expected verdict: falsified — adversary substitutes h(k_adv) for h(k_1)
+   in the SetupResponse; the signature still verifies; receiver commits to
+   adversary-authenticated data that the sender never produced. */
+// category: noninjective_agreement
+lemma noninjective_agreement_broadcast:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

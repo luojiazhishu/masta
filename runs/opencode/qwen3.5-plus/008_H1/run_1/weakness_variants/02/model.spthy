@@ -1,0 +1,82 @@
+theory MutualIdentitySignatureAuth
+begin
+
+builtins: signing
+
+// HONEST agents with fixed keys
+rule Setup:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ Create('I', ~ltkI), Create('R', ~ltkR) ]->
+  [ !Ltk('I', ~ltkI), !Ltk('R', ~ltkR), !Pk('I', pk(~ltkI)), !Pk('R', pk(~ltkR)) ]
+
+// Action block 1: Initiator 'I' starts session ~s, sends sign(<I,R>, ltkI)
+rule Initiator_Start:
+  [ !Ltk('I', ~ltkI), !Pk('R', pkR), Fr(~s) ]
+  --[ Test1(), Running('I', 'R', <'I', 'R', ~s>) ]->
+  [ Out(sign(<'I', 'R'>, ~ltkI)), St_I_Wait(~s) ]
+
+// Action block 2: Responder 'R' receives in its own session ~sR, sends sign('R', ltk_R)
+// Note: ~sR is FRESH, independent of ~s - this models that R doesn't know I's session
+rule Responder_Reply:
+  [ !Ltk('R', ~ltkR), !Pk('I', pkI), In(mI), Fr(~sR) ]
+  --[ Test2(), Running('R', 'I', <'I', 'R', ~sR>), Eq(verify(mI, <'I', 'R'>, pkI), true) ]->
+  [ Out(sign('R', ~ltkR)), Resp_Completed(~sR) ]
+
+// Action block 3: Initiator receives reply in session ~s, accepts ANY valid sign('R', ltk_R)
+rule Initiator_Accept:
+  [ St_I_Wait(~s), !Pk('R', pkR), In(mR), Resp_Completed(~sR) ]
+  --[ Test3(), Commit('I', 'R', <'I', 'R', ~s>), Eq(verify(mR, 'R', pkR), true) ]->
+  [ ]
+
+// Adversary can reveal long-term keys
+rule Ltk_Reveal_I:
+  [ !Ltk('I', ~ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(~ltkI) ]
+
+rule Ltk_Reveal_R:
+  [ !Ltk('R', ~ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(~ltkR) ]
+
+// Safety property lemmas
+
+// category: weak_agreement
+// If I commits in session s, then R ran in SOME session (should hold)
+lemma weak_agreement:
+  "All s #i.
+     Commit('I', 'R', <'I', 'R', s>) @ i
+   ==>
+       (Ex s2 #j. Running('R', 'I', <'I', 'R', s2>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement  
+// Non-injective agreement FAILS - R may have run in DIFFERENT session s2 != s
+// Replay attack: R runs in session s1, adversary replays to I in session s2
+lemma noninjective_agreement:
+  "All s #i.
+     Commit('I', 'R', <'I', 'R', s>) @ i
+   ==>
+       (Ex #j. Running('R', 'I', <'I', 'R', s>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: injective_agreement
+// Injective agreement FAILS due to replay
+lemma injective_agreement:
+  "All s #i.
+     Commit('I', 'R', <'I', 'R', s>) @ i
+   ==>
+       ( (Ex #j. Running('R', 'I', <'I', 'R', s>) @ j
+             & j < i
+             & not (Ex i2 r2 s2 #i2. Commit(i2, r2, <i2, r2, s2>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Executable witness lemma
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

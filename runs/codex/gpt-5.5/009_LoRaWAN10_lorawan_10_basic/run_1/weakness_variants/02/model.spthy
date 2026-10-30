@@ -1,0 +1,71 @@
+theory LoRaWAN10Join
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule Provision_Device:
+  [ Fr(~appkey) ]
+  --[ Test1(), Create($Device, ~appkey), Honest($Device), Honest($Server) ]->
+  [ !Provisioned($Device, $Server, 'DevEUI', 'JoinEUI', 'DevAddr', ~appkey),
+    Out(<'Registration', 'DevEUI', 'JoinEUI', 'DevAddr', ~appkey>) ]
+
+rule Device_Send_JoinRequest:
+  let request_mac = mac(~appkey, <'JoinRequest', deveui, joineui, ~devnonce>)
+      join_request = <'JoinRequest', deveui, joineui, ~devnonce, request_mac>
+  in
+  [ !Provisioned(device, server, deveui, joineui, devaddr, ~appkey),
+    Fr(~devnonce) ]
+  --[ Test2(), Running(device, server, <'request', deveui, joineui, ~devnonce>) ]->
+  [ Out(join_request),
+    DeviceWaiting(device, server, deveui, joineui, devaddr, ~appkey, ~devnonce) ]
+
+rule Server_Process_JoinRequest:
+  let expected_mac = mac(~appkey, <'JoinRequest', deveui, joineui, devnonce>)
+      request = <'JoinRequest', deveui, joineui, devnonce, expected_mac>
+      app_s_key = senc(<'cst1', devnonce, ~joinnonce>, ~appkey)
+      nwk_s_key = senc(<'cst2', devnonce, ~joinnonce>, ~appkey)
+      response_mac = mac(~appkey, <'JoinAccept', ~joinnonce, devaddr>)
+      accept_body = <'JoinAccept', ~joinnonce, devaddr, response_mac>
+  in
+  [ !Provisioned(device, server, deveui, joineui, devaddr, ~appkey),
+    In(request),
+    Fr(~joinnonce) ]
+  --[ Test3(), Running(server, device, <'accept', devnonce, ~joinnonce, devaddr, app_s_key, nwk_s_key>) ]->
+  [ Out(senc(accept_body, ~appkey)),
+    ServerSession(device, server, deveui, joineui, devaddr, devnonce, ~joinnonce, app_s_key, nwk_s_key) ]
+
+rule Device_Receive_JoinAccept:
+  let response_mac = mac(~appkey, <'JoinAccept', joinnonce, devaddr>)
+      accept_body = <'JoinAccept', joinnonce, devaddr, response_mac>
+      app_s_key = senc(<'cst1', devnonce, joinnonce>, ~appkey)
+      nwk_s_key = senc(<'cst2', devnonce, joinnonce>, ~appkey)
+  in
+  [ DeviceWaiting(device, server, deveui, joineui, devaddr, ~appkey, devnonce),
+    In(senc(accept_body, ~appkey)) ]
+  --[ Test4(),
+      Commit(device, server, <'accept', devnonce, joinnonce, devaddr, app_s_key, nwk_s_key>),
+      Secret(device, server, app_s_key),
+      Secret(device, server, nwk_s_key) ]->
+  [ DeviceSession(device, server, deveui, joineui, devaddr, devnonce, joinnonce, app_s_key, nwk_s_key) ]
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All a b k #i.
+     Secret(a, b, k) @ #i
+   ==> not (Ex #j. K(k) @ #j)"
+
+// category: noninjective_agreement
+lemma device_server_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==> Ex #j. Running(b, a, t) @ #j"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

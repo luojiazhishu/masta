@@ -1,0 +1,19 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [ Fr(~r0) ]
+  --[ Test1( ) ]->
+  [ Out(~r0) ]
+
+rule RuleStep2:
+  [ In(~r0), Fr(~r1), !K(k) ]
+  --[ Test2( ) ]->
+  [ Out(<~r1, h(~r0 XOR ~r1 XOR k)>) ]
+
+lemma executable:
+  exists-trace
+  "∃ #t1 #t2. Test1( ) @ #t1 & Test2( ) @ #t2 & #t1 < #t2"
+
+end

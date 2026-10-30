@@ -1,0 +1,43 @@
+theory SK_PMD_W02 begin
+
+builtins: symmetric-encryption
+
+functions: k/0
+
+equations: sdec(senc(m, k), k) = m
+
+rule RuleStep1:
+  let
+    msg = senc(<~sec, ~pub>, k)
+  in
+  [
+    Fr(~sec),
+    Fr(~pub)
+  ]
+  --[ Test1(), Secret(~sec) ]->
+  [
+    Out(msg)
+  ]
+
+rule RuleStep2:
+  [
+    In(msg)
+  ]
+  --[ Test2(), Commit($Initiator, $Responder, msg) ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_secrecy_of_sec:
+  "All x #i.
+     Secret(x) @ i
+   ==> 
+       not (Ex #j. K(x) @ j)"
+
+end

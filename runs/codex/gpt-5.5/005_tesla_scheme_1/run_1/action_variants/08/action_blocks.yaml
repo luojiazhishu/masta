@@ -1,0 +1,86 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - $R
+    - $S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+    - ~m1
+  - compute:
+    - c1 = h(~k1)
+    - sig = sign(<h(~k1), nR>, ltkS)
+  - send:
+    - $S
+    - $R
+    - c1
+    - sig
+- role: Receiver_Setup_Verify
+  operations:
+  - assert:
+    - verify(sig, <c1, nR>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_First
+  operations:
+  - generate_nonces:
+    - ~k3
+    - ~m2
+  - compute:
+    - c2 = h(k2)
+    - d1 = <m1, h(k2)>
+  - send:
+    - d1
+    - mac(k1, d1)
+- role: Receiver_Cache_First
+  operations:
+  - compute:
+    - d1 = <m1, c2>
+  - send: []
+- role: Sender_Broadcast_Second_Tagged
+  operations:
+  - generate_nonces:
+    - ~k4
+    - ~m3
+  - compute:
+    - c3 = h(k3)
+    - d2 = <m2, h(k3), k1>
+  - send:
+    - d2
+    - mac(k2, d2)
+    - channel_tag
+    - k1
+- role: Receiver_Receive_Second_Accept_First
+  operations:
+  - compute:
+    - d2 = <m2, c3, k1>
+  - assert:
+    - c1 = h(k1)
+    - mac1 = mac(k1, <m1, c2>)
+  - send: []
+- role: Sender_Broadcast_Third_Tagged
+  operations:
+  - compute:
+    - c4 = h(k4)
+    - d3 = <m3, h(k4), k2>
+  - send:
+    - d3
+    - mac(k3, d3)
+    - channel_tag
+    - k2
+- role: Receiver_Receive_Third_Accept_Second
+  operations:
+  - compute:
+    - d3 = <m3, c4, k2>
+  - assert:
+    - c2 = h(k2)
+    - mac2 = mac(k2, <m2, c3, k1>)
+  - send: <END>

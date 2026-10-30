@@ -1,0 +1,95 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Server_Setup:
+  [ Fr(~skS) ]
+  --[ Test1(), Create(Server, ~skS) ]->
+  [ !Ltk(Server, ~skS), !Pk(Server, pk(~skS)), !ServerCert(Server, pk(~skS)) ]
+
+rule Client_Setup:
+  [ Fr(~skC) ]
+  --[ Test2(), Create(Client, ~skC) ]->
+  [ !Ltk(Client, ~skC), !Pk(Client, pk(~skC)), !ClientCert(Client, pk(~skC)) ]
+
+rule Client_GetEndpoints:
+  [ ]
+  --[ Test3(), Running(Client, Server, <'GetEndpoints'>) ]->
+  [ Out('GEReq'), St_C_GetEndpoints(Client, Server) ]
+
+rule Server_GetEndpoints:
+  [ In('GEReq'), !ServerCert(Server, pkS), !Pk(Server, pkS) ]
+  --[ Test4(), Running(Server, Client, <'GetEndpoints'>) ]->
+  [ Out(< 'GERes', pkS, 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >), St_S_GetEndpoints(Server, Client, pkS) ]
+
+rule Client_OpenSecureChannel:
+  [ St_C_GetEndpoints(Client, Server), !Ltk(Client, ~skC), !Pk(Client, pkC), !ServerCert(Server, pkS), Fr(~Nc) ]
+  --[ Test5(), Running(Client, Server, <'OpenSecureChannel', pkC, ~Nc>), Secret(Client, Server, ~Nc) ]->
+  [ Out(< pkC, < 'OSCReq', pkC, ~Nc >, sign(h(< 'OSCReq', pkC, ~Nc >), ~skC), h(< 'OSCReq', pkC, ~Nc >) >),
+    St_C_OSC(Client, Server, pkS, ~Nc) ]
+
+rule Server_OpenSecureChannel:
+  [ St_S_GetEndpoints(Server, Client, pkS), !Ltk(Server, ~skS),
+    In(< pkC, < 'OSCReq', pkC, Nc >, sig, digest >), Fr(~Ns) ]
+  --[ Test6(), Running(Server, Client, <'OpenSecureChannel', pkS, ~Ns, 'SecurityToken', 'TokenLifetime'>),
+      Secret(Server, Client, ~Ns), Commit(Server, Client, <'OpenSecureChannel', pkC, Nc>) ]->
+  [ Out(< pkS, < 'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime' >, sign(h(< 'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime' >), ~skS), h(< 'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime' >) >),
+    St_S_Complete(Server, Client, pkC, Nc, ~Ns, 'SecurityToken', 'TokenLifetime') ]
+
+rule Client_VerifyResponse:
+  [ St_C_OSC(Client, Server, pkS, Nc),
+    In(< pkS, < 'OSCRes', Ns, ST, TTL >, sig, digest >) ]
+  --[ Test7(), Commit(Client, Server, <'OpenSecureChannel', pkS, Ns, ST, TTL>),
+      Honest(Client), Honest(Server) ]->
+  [ St_C_Complete(Client, Server, pkS, Nc, Ns, ST, TTL) ]
+
+rule LtkReveal_Client:
+  [ !Ltk(Client, ~skC) ]
+  --[ LtkReveal(Client) ]->
+  [ Out(~skC) ]
+
+rule LtkReveal_Server:
+  [ !Ltk(Server, ~skS) ]
+  --[ LtkReveal(Server) ]->
+  [ Out(~skS) ]
+
+// category: secrecy
+lemma secrecy_client_nonce:
+  "All C S Nc #i.
+     Secret(C, S, Nc) @ i
+   ==>
+       not (Ex #j. K(Nc) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_server_nonce:
+  "All C S Ns #i.
+     Secret(C, S, Ns) @ i
+   ==>
+       not (Ex #j. K(Ns) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_client_nonce:
+  "All C S t #i.
+     Commit(C, S, t) @ i
+   ==>
+       (Ex #j. Running(S, C, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_server_nonce:
+  "All C S t #i.
+     Commit(S, C, t) @ i
+   ==>
+       (Ex #j. Running(C, S, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

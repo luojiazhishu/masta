@@ -1,0 +1,105 @@
+theory Mutual_Identity_Signature_SBR begin
+
+builtins: signing
+
+rule Register:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_send:
+  let
+    mI = sign(<$I, $R>, ltkI)
+  in
+  [ Fr(~tid)
+  , !Ltk($I, ltkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Create($I, ~tid)
+    , Test1()
+    ]->
+  [ Out(mI)
+  , St_I_1(~tid, $I, $R, pkR)
+  ]
+
+rule Responder_reply:
+  let
+    mR = sign($R, ltkR)
+  in
+  [ Fr(~tid)
+  , In(mI)
+  , !Ltk($R, ltkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Eq(verify(mI, <$I, $R>, pkI), true)
+    , Create($R, ~tid)
+    , Running($R, $I, <'initiator-responder', $I, $R>)
+    , Test2()
+    ]->
+  [ Out(mR) ]
+
+rule Initiator_accept:
+  [ In(mR)
+  , St_I_1(tid, I, R, pkR)
+  ]
+  --[ Eq(verify(mR, R, pkR), true)
+    , Commit(I, R, <'initiator-responder', I, R>)
+    , Honest(I)
+    , Honest(R)
+    , Test3()
+    ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

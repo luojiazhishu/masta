@@ -1,0 +1,133 @@
+theory ISO9798_4_MutualCR
+begin
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* Action block 1: Provisioning — kAB published in cleartext on public channel */
+rule Provisioning:
+  [ Fr(~kAB) ]
+  --[ Test1() ]->
+  [ !LtkAB($IdA, $IdB, ~kAB)
+  , Out(<$IdA, $IdB, ~kAB>) ]
+
+rule LtkReveal:
+  [ !LtkAB($IdA, $IdB, ~kAB) ]
+  --[ LtkReveal($IdA), LtkReveal($IdB) ]->
+  [ Out(~kAB) ]
+
+/* Action block 2: Responder draws RB and emits Challenge1 */
+rule B_Challenge:
+  [ !LtkAB($IdA, $IdB, ~kAB)
+  , Fr(~RB)
+  , Fr(~Text1) ]
+  --[ Test2()
+    , Create($IdB, ~RB) ]->
+  [ St_B_1($IdA, $IdB, ~kAB, ~RB)
+  , Out(<~RB, ~Text1>) ]
+
+/* Action block 3: Initiator draws fresh RA, computes mac1, emits TokenAB */
+rule A_Request:
+  [ !LtkAB($IdA, $IdB, ~kAB)
+  , Fr(~RA)
+  , Fr(~Text2)
+  , Fr(~Text3)
+  , In(<RB, Text1>) ]
+  --[ Test3()
+    , Create($IdA, ~RA)
+    , Running($IdA, $IdB, <'resp', ~RA, RB>) ]->
+  [ St_A_1($IdA, $IdB, ~kAB, ~RA, RB)
+  , ReuseRA($IdA, $IdB, ~RA, ~kAB)
+  , Out(<~RA, ~Text3,
+        <'sid1_mut_cr', ~RA, RB, $IdB, ~Text2>,
+        mac(<'sid1_mut_cr', ~RA, RB, $IdB>, ~kAB)>) ]
+
+/* Reuse-once: Initiator reuses a previously generated RA (at most once) */
+rule A_Reuse:
+  [ ReuseRA($IdA, $IdB, RA, kAB)
+  , Fr(~Text2r)
+  , Fr(~Text3r)
+  , In(<RB2, Text1r>) ]
+  --[ Running($IdA, $IdB, <'resp', RA, RB2>) ]->
+  [ St_A_1($IdA, $IdB, kAB, RA, RB2)
+  , Out(<RA, ~Text3r,
+        <'sid1_mut_cr', RA, RB2, $IdB, ~Text2r>,
+        mac(<'sid1_mut_cr', RA, RB2, $IdB>, kAB)>) ]
+
+/* Action block 4: Responder verifies mac1, computes mac2, emits TokenBA */
+rule B_Verify:
+  [ St_B_1($IdA, $IdB, ~kAB, ~RB)
+  , Fr(~Text5)
+  , In(<RA, Text3,
+       <'sid1_mut_cr', RA, ~RB, $IdB, Text2>,
+       mac_val>) ]
+  --[ Test4()
+    , Eq(mac_val, mac(<'sid1_mut_cr', RA, ~RB, $IdB>, ~kAB))
+    , Commit($IdB, $IdA, <'resp', RA, ~RB>)
+    , Running($IdB, $IdA, <'init', RA, ~RB>)
+    , Honest($IdA)
+    , Honest($IdB) ]->
+  [ St_B_2($IdA, $IdB, ~kAB, ~RB, RA)
+  , Out(<~Text5, mac(<'sid2_mut_cr', ~RB, RA>, ~kAB)>) ]
+
+/* Action block 5: Initiator verifies mac2 and commits */
+rule A_Finish:
+  [ St_A_1($IdA, $IdB, ~kAB, ~RA, RB)
+  , In(<Text5, mac_val2>) ]
+  --[ Test5()
+    , Eq(mac_val2, mac(<'sid2_mut_cr', RB, ~RA>, ~kAB))
+    , Commit($IdA, $IdB, <'init', ~RA, RB>)
+    , Honest($IdA)
+    , Honest($IdB) ]->
+  [ ]
+
+/* --- Safety properties --- */
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'resp', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'resp', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'init', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'init', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'resp', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'resp', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'resp', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'init', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'init', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'init', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

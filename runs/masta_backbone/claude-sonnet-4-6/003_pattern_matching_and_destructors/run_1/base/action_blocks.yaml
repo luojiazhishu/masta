@@ -1,0 +1,20 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~k
+  - compute:
+    - plaintext = <~sec, ~pub>
+    - msg = senc(<~sec, ~pub>, ~k)
+  - send:
+    - msg
+- role: RuleStep2
+  operations:
+  - receive:
+    - msg
+  - compute:
+    - body = sdec(msg, ~k)
+    - sec = fst(sdec(msg, ~k))
+    - pub = snd(sdec(msg, ~k))
+  - send: <END>

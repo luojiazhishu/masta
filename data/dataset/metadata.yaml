@@ -1,0 +1,592 @@
+dataset:
+  name: formal-agent-dataset
+  version: 0.2.0
+  description: 'Tamarin-protocol dataset for benchmarking natural-language to formal-model
+    extraction agents.  Each entry carries an RFC-style specification, a reference
+    Tamarin model, an action-block encoding, indexed lemma definitions with expected
+    verification outcomes, and renaming / weakness variants.
+
+    '
+  entry_layout: "<NNN_slug>/\n  document.txt\n  model.spthy\n  action_blocks.yaml\n\
+    \  lemmas/<NN>_<TYPE>_<LEMMANAME>/\n    definition.txt\n    outcome.txt\n  action_variants/<NN>/\n\
+    \    document.txt\n    action_blocks.yaml\n  weakness_variants/<NN>/\n    document.txt\n\
+    \    <LEMMANAME>/outcome.txt\n    \n"
+entries:
+- id: 001_cr_xor
+  title: A Challenge-Response Authentication Protocol Using XOR-Combined Hash Verification
+  source: mock
+  builtins:
+  - xor
+  - hashing
+  roles:
+  - Initiator
+  - Responder
+  lemmas:
+  - name: aliveness
+    type: aliveness
+    outcome: verified
+  - name: noninjective_agreement
+    type: noninjective_agreement
+    outcome: falsified
+  action_variants:
+  - id: '01'
+    description: A Challenge-Response Authentication Protocol with an Echoed Client
+      Nonce
+  - id: '02'
+    description: A Challenge-Response Authentication Protocol with an Initiator Marker
+  - id: '03'
+    description: A Challenge-Response Authentication Protocol with a Responder Marker
+  - id: '04'
+    description: A Challenge-Response Authentication Protocol with an Initiator Audit
+      Tag
+  - id: '05'
+    description: A Challenge-Response Authentication Protocol with a Responder Audit
+      Tag
+  - id: '06'
+    description: A Challenge-Response Authentication Protocol with a Domain Separator
+  - id: '07'
+    description: A Challenge-Response Authentication Protocol with Responder Reply
+      Retransmission
+  - id: 08
+    description: A Challenge-Response Authentication Protocol with Initiator Challenge
+      Retransmission
+  weakness_variants:
+  - id: '01'
+    description: A Challenge-Response Authentication Protocol Without Tag Verification
+    falsified_lemmas:
+    - aliveness
+  - id: '02'
+    description: A Challenge-Response Authentication Protocol With Keyless Initiator-Side
+      Verification
+    falsified_lemmas:
+    - aliveness
+  - id: '03'
+    description: A Challenge-Response Authentication Protocol With Bootstrap-Time
+      Key Disclosure
+    falsified_lemmas:
+    - aliveness
+- id: 002_lak_06
+  title: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  source: mock
+  builtins:
+  - xor
+  - hashing
+  roles:
+  - Reader
+  - Tag
+  lemmas:
+  - name: helpingSecrecy
+    type: secrecy
+    outcome: verified
+  - name: noninjectiveagreementTAG
+    type: noninjective_agreement
+    outcome: verified
+  - name: noninjectiveagreementREADER
+    type: noninjective_agreement
+    outcome: falsified
+  action_variants:
+  - id: '01'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '02'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '03'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '04'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '05'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '06'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '07'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: 08
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: 09
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '10'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '11'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '12'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  - id: '13'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+  weakness_variants:
+  - id: '01'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - noninjectiveagreementTAG
+  - id: '02'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - noninjectiveagreementTAG
+  - id: '03'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - noninjectiveagreementTAG
+  - id: '04'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - noninjectiveagreementTAG
+  - id: '05'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - helpingSecrecy
+  - id: '06'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - helpingSecrecy
+  - id: '07'
+    description: Lightweight Authentication Protocol for Low-Cost RFID Systems
+    falsified_lemmas:
+    - helpingSecrecy
+- id: 003_pattern_matching_and_destructors
+  title: A Symmetric-Key Encapsulation Profile with Explicit Destructor Checks (SK-PMD)
+  source: mock
+  builtins:
+  - symmetric-encryption
+  - hashing
+  roles:
+  - Initiator
+  - Responder
+  lemmas:
+  - name: secrecy
+    type: secrecy
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: A Symmetric-Key Encapsulation Profile with Profile Tag
+  - id: '02'
+    description: A Symmetric-Key Encapsulation Profile with Public Tag
+  - id: '03'
+    description: A Symmetric-Key Encapsulation Profile with Initiator Auxiliary
+  - id: '04'
+    description: A Symmetric-Key Encapsulation Profile with Responder Auxiliary
+  - id: '05'
+    description: A Symmetric-Key Encapsulation Profile with Public Hash Witness
+  - id: '06'
+    description: A Symmetric-Key Encapsulation Profile with Repeated Initiator Output
+  weakness_variants:
+  - id: '01'
+    description: A Symmetric-Key Encapsulation Profile with Plaintext Secret Disclosure
+      (SK-PMD-W01)
+    falsified_lemmas:
+    - secrecy
+  - id: '02'
+    description: A Symmetric-Key Encapsulation Profile with Plaintext Body Disclosure
+      (SK-PMD-W02)
+    falsified_lemmas:
+    - secrecy
+- id: 004_macro
+  title: A Basic Public-Key Session Key Transport Protocol (BSKT)
+  source: mock
+  builtins:
+  - hashing
+  - asymmetric-encryption
+  roles:
+  - Client
+  - Server
+  lemmas:
+  - name: Client_session_key_secrecy
+    type: secrecy
+    outcome: verified
+  - name: Client_auth
+    type: noninjective_agreement
+    outcome: verified
+  - name: Client_auth_injective
+    type: injective_agreement
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: Public-Key Session Key Transport with Client Correlation Nonce
+  - id: '02'
+    description: Public-Key Session Key Transport with Server Response Nonce
+  - id: '03'
+    description: Public-Key Session Key Transport with Init Tag (BSKT-I)
+  - id: '04'
+    description: Public-Key Session Key Transport with Acknowledgement Tag
+  - id: '05'
+    description: Public-Key Session Key Transport with Completion Tag (BSKT-D)
+  - id: '06'
+    description: Public-Key Session Key Transport with Domain-Separated Hash
+  - id: '07'
+    description: Public-Key Session Key Transport with Server-Bound Confirm Hash
+  weakness_variants:
+  - id: '01'
+    description: Public-Key Session Key Transport with Static Shared Secret
+    falsified_lemmas:
+    - Client_session_key_secrecy
+    - Client_auth
+    - Client_auth_injective
+  - id: '02'
+    description: Public-Key Session Key Transport without Confirmation Check
+    falsified_lemmas:
+    - Client_session_key_secrecy
+    - Client_auth
+    - Client_auth_injective
+  - id: '03'
+    description: Public-Key Session Key Transport with Unbound Confirm Check
+    falsified_lemmas:
+    - Client_session_key_secrecy
+    - Client_auth
+    - Client_auth_injective
+- id: 005_tesla_scheme_1
+  title: The TESLA Broadcast Authentication Protocol Scheme 1
+  source: mock
+  builtins:
+  - signing
+  roles:
+  - Sender
+  - Receiver
+  lemmas:
+  - name: authentic
+    type: noninjective_agreement
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '02'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '03'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '04'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '05'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '06'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '07'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: 08
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: 09
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '10'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '11'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '12'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '13'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  - id: '14'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+  weakness_variants:
+  - id: '01'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+    falsified_lemmas:
+    - authentic
+  - id: '02'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+    falsified_lemmas:
+    - authentic
+  - id: '03'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+    falsified_lemmas:
+    - authentic
+  - id: '04'
+    description: The TESLA Broadcast Authentication Protocol Scheme 1
+    falsified_lemmas:
+    - authentic
+- id: 006_OPCUA_Secure_Channel
+  title: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  source: mock
+  builtins:
+  - signing
+  - asymmetric-encryption
+  - hashing
+  roles:
+  - Client
+  - Server
+  lemmas:
+  - name: key_secrecy
+    type: secrecy
+    outcome: falsified
+  - name: nc_auth
+    type: noninjective_agreement
+    outcome: falsified
+  - name: ns_auth
+    type: noninjective_agreement
+    outcome: falsified
+  action_variants:
+  - id: '01'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '02'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '03'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '04'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '05'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '06'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '07'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: 08
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: 09
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '10'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '11'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '12'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+  - id: '13'
+    description: OPC UA Secure Channel Establishment with Sign-Sign Mode
+- id: 007_NAXOS_04_simple_excl3
+  title: A Simplified NAXOS Authenticated Key Exchange Protocol
+  source: mock
+  builtins:
+  - diffie-hellman
+  roles:
+  - Initiator
+  - Responder
+  lemmas:
+  - name: key_secrecy
+    type: secrecy
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '02'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '03'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '04'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '05'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '06'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: '07'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  - id: 08
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+  weakness_variants:
+  - id: '01'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+    falsified_lemmas:
+    - key_secrecy
+  - id: '02'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+    falsified_lemmas:
+    - key_secrecy
+  - id: '03'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+    falsified_lemmas:
+    - key_secrecy
+  - id: '04'
+    description: A Simplified NAXOS Authenticated Key Exchange Protocol
+    falsified_lemmas:
+    - key_secrecy
+- id: 008_H1
+  title: A Two-Message Mutual Identity-Signature Authentication
+  source: mock
+  builtins:
+  - signing
+  roles:
+  - Initiator
+  - Responder
+  lemmas:
+  - name: weakagree
+    type: weak_agreement
+    outcome: verified
+  - name: noninjective_agree
+    type: noninjective_agreement
+    outcome: falsified
+  - name: injective_agree
+    type: injective_agreement
+    outcome: falsified
+  action_variants:
+  - id: '01'
+    description: Mutual Identity-Signature Authentication, Initiator Nonce
+  - id: '02'
+    description: Mutual Identity-Signature Authentication, Responder Nonce
+  - id: '03'
+    description: Mutual Identity-Signature Authentication with Initiator Tag
+  - id: '04'
+    description: Mutual Identity-Signature Authentication with Responder Tag
+  - id: '05'
+    description: Mutual Identity-Signature Authentication with Initiator Audit Marker
+  - id: '06'
+    description: Mutual Identity-Signature Authentication with Responder Audit Marker
+  - id: '07'
+    description: Mutual Identity-Signature Authentication, Initiator Resend
+  - id: 08
+    description: Mutual Identity-Signature Authentication, Responder Resend
+  weakness_variants:
+  - id: '01'
+    description: Mutual Identity-Signature Authentication, Unverified Reply
+    falsified_lemmas:
+    - injective_agree
+    - noninjective_agree
+    - weakagree
+  - id: '02'
+    description: Mutual Identity-Signature Authentication, Self-Bound Reply
+    falsified_lemmas:
+    - injective_agree
+    - noninjective_agree
+    - weakagree
+  - id: '03'
+    description: Mutual Identity-Signature Authentication, Constant Reply
+    falsified_lemmas:
+    - injective_agree
+    - noninjective_agree
+    - weakagree
+- id: 009_LoRaWAN10_lorawan_10_basic
+  title: LoRaWAN 1.0 Join Procedure
+  source: mock
+  builtins:
+  - symmetric-encryption
+  roles:
+  - Device
+  - Server
+  lemmas:
+  - name: agree_device_inj
+    type: injective_agreement
+    outcome: falsified
+  - name: agree_device_noninj
+    type: noninjective_agreement
+    outcome: falsified
+  - name: agree_network_inj
+    type: injective_agreement
+    outcome: falsified
+  - name: agree_network_noninj
+    type: noninjective_agreement
+    outcome: verified
+  - name: agree_keys_inj
+    type: injective_agreement
+    outcome: falsified
+  - name: agree_keys_noninj
+    type: noninjective_agreement
+    outcome: falsified
+  - name: secrecy
+    type: secrecy
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '02'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '03'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '04'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '05'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '06'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '07'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: 08
+    description: LoRaWAN 1.0 Join Procedure
+  - id: 09
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '10'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '11'
+    description: LoRaWAN 1.0 Join Procedure
+  - id: '12'
+    description: LoRaWAN 1.0 Join Procedure
+  weakness_variants:
+  - id: '01'
+    description: LoRaWAN 1.0 Join Procedure
+    falsified_lemmas:
+    - agree_network_noninj
+  - id: '02'
+    description: LoRaWAN 1.0 Join Procedure
+    falsified_lemmas:
+    - secrecy
+  - id: '03'
+    description: LoRaWAN 1.0 Join Procedure
+    falsified_lemmas:
+    - agree_network_noninj
+  - id: '04'
+    description: LoRaWAN 1.0 Join Procedure
+    falsified_lemmas:
+    - secrecy
+  - id: '05'
+    description: LoRaWAN 1.0 Join Procedure
+    falsified_lemmas:
+    - secrecy
+- id: 010_ISO9798_4_4_979844_reuse_once_1_1
+  title: Mutual Challenge-Response Entity Authentication
+  source: mock
+  builtins: []
+  roles:
+  - Initiator
+  - Responder
+  lemmas:
+  - name: agree_a
+    type: injective_agreement
+    outcome: falsified
+  - name: agree_b
+    type: injective_agreement
+    outcome: verified
+  - name: noninj_agree_a
+    type: noninjective_agreement
+    outcome: verified
+  - name: noninj_agree_b
+    type: noninjective_agreement
+    outcome: verified
+  action_variants:
+  - id: '01'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '02'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '03'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '04'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '05'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '06'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '07'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: 08
+    description: Mutual Challenge-Response Entity Authentication
+  - id: 09
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '10'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '11'
+    description: Mutual Challenge-Response Entity Authentication
+  - id: '12'
+    description: Mutual Challenge-Response Entity Authentication
+  weakness_variants:
+  - id: '01'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_a
+  - id: '02'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_b
+  - id: '03'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_b
+    - noninj_agree_b
+  - id: '04'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - noninj_agree_a
+  - id: '05'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_b
+    - noninj_agree_b
+  - id: '06'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_b
+    - noninj_agree_b
+  - id: '07'
+    description: Mutual Challenge-Response Entity Authentication
+    falsified_lemmas:
+    - agree_b
+    - noninj_agree_a
+    - noninj_agree_b

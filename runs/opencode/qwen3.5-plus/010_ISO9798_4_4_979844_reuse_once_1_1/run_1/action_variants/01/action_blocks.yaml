@@ -1,0 +1,45 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+    - ~nonceB1
+    - ~bid
+  - send:
+    - ~rb
+    - ~text1
+    - ~nonceB1
+- role: Initiator_Start
+  operations:
+  - receive:
+    - rb
+    - text1
+    - nonceB1
+  - generate_nonces:
+    - ~ra
+    - ~text3
+    - ~text2
+    - ~aid
+  - send:
+    - ~ra
+    - ~text3
+    - <'sid1_mut_cr', ~ra, rb, 'B', ~text2>
+    - mac(<'sid1_mut_cr', ~ra, rb, 'B'>, kab)
+- role: Responder_Verify
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, rb, 'B', text2>
+    - requestMAC
+  - generate_nonces:
+    - ~text5
+  - send:
+    - ~text5
+    - mac(<'sid2_mut_cr', rb, ra>, kab)
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - text5
+    - responseMAC
+  - send: <END>

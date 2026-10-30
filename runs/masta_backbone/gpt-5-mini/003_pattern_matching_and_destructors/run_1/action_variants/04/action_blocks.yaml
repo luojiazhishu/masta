@@ -1,0 +1,7 @@
+- role: RuleStep1
+  operations:
+  - receive:
+    - senc(<sec, pub>, k)
+  - compute:
+    - auxr = tag_aux(sec, pub)
+  - send: <END>

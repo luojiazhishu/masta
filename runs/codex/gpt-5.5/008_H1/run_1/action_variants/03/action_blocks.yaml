@@ -1,0 +1,25 @@
+- role: Initiator_SendAuth
+  operations:
+  - generate_nonces:
+    - ~sidI
+  - send:
+    - sign(<'I', 'R'>, ltkI)
+    - '''init'''
+- role: Responder_VerifyAndSendAuth
+  operations:
+  - receive:
+    - sI
+    - '''init'''
+  - generate_nonces:
+    - ~sidR
+  - assert:
+    - verify(sI, <'I', 'R'>, pkI) = true
+  - send:
+    - sign(<'I', 'R'>, ltkR)
+- role: Initiator_VerifyAndAccept
+  operations:
+  - receive:
+    - sR
+  - assert:
+    - verify(sR, <'I', 'R'>, pkR) = true
+  - send: <END>

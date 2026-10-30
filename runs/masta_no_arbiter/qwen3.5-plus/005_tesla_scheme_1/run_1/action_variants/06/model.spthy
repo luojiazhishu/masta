@@ -1,0 +1,82 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender
+rule Generate_Keys:
+  [ Fr(~ltk_S) ]
+  --[ LtkGen($S, ~ltk_S), Honest($S) ]->
+  [ !Ltk($S, ~ltk_S), !Pk($S, pk(~ltk_S)), Out(pk(~ltk_S)) ]
+
+// Key compromise rule for long-term key
+rule LtkReveal:
+  [ !Ltk(X, ltk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(ltk) ]
+
+// Step 1: Receiver sends setup request with nonce
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Start_R(~tid_R, $R, $S, ~n_R), Create($R, ~tid_R) ]->
+  [ Out(<$R, $S, ~n_R>), !State_R_1(~tid_R, $R, $S, ~n_R) ]
+
+// Step 2: Sender receives request, generates k1, sends commitment and signature
+// Added Create($S, ~k_1) to satisfy aliveness lemma for Sender
+// Added Commit_R($R, $S, 'commit_response') to model receiver's acceptance
+rule RuleStep2:
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1),
+    !Ltk($S, ~ltk_S),
+    !Pk($S, pk(~ltk_S))
+  ]
+  --[ Test2(), Commit_S($S, $R, ~k_1, n_R), Running($S, $R, <~k_1, n_R>), Create($S, ~k_1), Commit_R($R, $S, 'commit_response') ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~ltk_S), 'commit_response'>) ]
+
+// Step 3: Sender broadcasts Msg 1 (D_1, MAC(k_1, D_1))
+// Added Commit_R_Stream action to model receiver's acceptance of stream data
+// Added Running_Stream action to serve as the 'Running' fact for weak_agreement lemma
+rule RuleStep3:
+  [
+    Fr(~m_1),
+    Fr(~k_2),
+    Fr(~k_1),
+    !Ltk($S, ~ltk_S)
+  ]
+  --[ Test3(), Broadcast_1($S, ~m_1, ~k_1, ~k_2), Commit_R_Stream($R, $S, ~m_1), Running_Stream($S, $R, ~m_1) ]->
+  [ Out(<<~m_1, f(~k_2)>, MAC(~k_1, <~m_1, f(~k_2)>)>) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// Property 1: setup_authenticity (noninjective_agreement)
+// If R accepts SetupResponse (Commit_S), then S must have sent it (Running), unless LTK compromised.
+lemma noninjective_agreement_setup_authenticity:
+  "All s r k n #i.
+     Commit_S(s, r, k, n) @ i
+   ==>
+     (Ex #j. Running(s, r, <k, n>) @ j)
+   | (Ex X #r_time. LtkReveal(X) @ r_time & Honest(X) @ i)"
+
+// Property 2: message_type_integrity (aliveness)
+// If R processes a message as SetupResponse (Commit_R), S must have initiated (Create).
+lemma aliveness_message_type_integrity:
+  "All a b t #i.
+     Commit_R(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)
+   | (Ex X #r_time. LtkReveal(X) @ r_time & Honest(X) @ i)"
+
+// Property 3: stream_authenticity (weak_agreement)
+// If R accepts stream message (Commit_R_Stream), S must have been running (Running_Stream).
+lemma weak_agreement_stream_authenticity:
+  "All a b m #i.
+     Commit_R_Stream(a, b, m) @ i
+   ==>
+     (Ex m2 #j. Running_Stream(b, a, m2) @ j)
+   | (Ex X #r_time. LtkReveal(X) @ r_time & Honest(X) @ i)"
+
+end

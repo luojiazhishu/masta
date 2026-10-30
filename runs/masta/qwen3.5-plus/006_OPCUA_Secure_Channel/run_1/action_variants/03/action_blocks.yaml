@@ -1,0 +1,54 @@
+- role: RuleStep1
+  operations:
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(~skS)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+  - generate_nonces:
+    - ~Nc
+    - ~ClientRequestId
+  - send:
+    - pk(~skC)
+    - <'OSCReq', pk(~skC), ~Nc>
+    - sign(h(<'OSCReq', pk(~skC), ~Nc>), ~skC)
+    - h(<'OSCReq', pk(~skC), ~Nc>)
+    - ~ClientRequestId
+- role: RuleStep4
+  operations:
+  - receive:
+    - ClientCert
+    - <'OSCReq', ClientPubKey, ClientNonce>
+    - RequestSignature
+    - RequestBodyDigest
+    - ClientRequestId
+  - generate_nonces:
+    - ~Ns
+  - send:
+    - pk(~skS)
+    - <'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>
+    - sign(h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>), ~skS)
+    - h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>)
+- role: RuleStep5
+  operations:
+  - receive:
+    - ServerCert
+    - <'OSCRes', ServerNonce, SecurityToken, TokenLifetime>
+    - ResponseSignature
+    - ResponseBodyDigest
+  - send: <END>

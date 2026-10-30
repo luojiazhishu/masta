@@ -1,0 +1,37 @@
+- role: Provision
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~tid
+  - send: []
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - tagmac(r0, ~r1, k)
+- role: Reader_Verify_Send_R1
+  operations:
+  - receive:
+    - r1
+    - tagmac(~r0, r1, k)
+  - generate_nonces:
+    - ~conf_aux
+  - send:
+    - readermac(tagmac(~r0, r1, k), k, ~r0)
+    - ~conf_aux
+- role: Tag_Verify_R1
+  operations:
+  - receive:
+    - readermac(tag_mac, k, r0)
+    - conf_aux
+  - send: <END>

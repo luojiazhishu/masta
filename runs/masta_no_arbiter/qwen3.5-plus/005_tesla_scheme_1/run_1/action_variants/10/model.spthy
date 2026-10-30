@@ -1,0 +1,56 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, bar/1
+
+// RuleStep1: Receiver R sends SetupRequest with nonce n_R
+rule RuleStep1:
+  [
+    Fr(~n_R)
+  ]
+  --[ Test1() ]->
+  [
+    Out(< 'R', 'S', ~n_R >)
+  ]
+
+// Setup: Sender S generates long-term key
+rule Setup_Sender:
+  [
+    Fr(~sk_S)
+  ]
+  --[ ]->
+  [
+    !Ltk('S', ~sk_S),
+    Out(pk(~sk_S))
+  ]
+
+// RuleStep2: Sender S receives request, logs bar(n_R), sends SetupResponse
+rule RuleStep2:
+  [
+    In(< 'R', 'S', n_R >),
+    Fr(~k_1),
+    !Ltk('S', ~sk_S)
+  ]
+  --[ Test2() ]->
+  [
+    Out(< 'S', 'R', f(~k_1), sign(< f(~k_1), n_R >, ~sk_S) >)
+  ]
+
+// RuleStep3: Sender S broadcasts Msg 1 (D_1, MAC)
+rule RuleStep3:
+  [
+    Fr(~m_1),
+    Fr(~k_2),
+    !Ltk('S', ~sk_S) // Context holder, though not used in this step's crypto
+  ]
+  --[ Test3() ]->
+  [
+    Out(< < ~m_1, f(~k_2) >, h(< ~k_1, < ~m_1, f(~k_2) > >) >)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

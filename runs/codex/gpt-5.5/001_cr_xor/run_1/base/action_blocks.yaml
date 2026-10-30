@@ -1,0 +1,30 @@
+- role: Key_Setup
+  operations:
+  - generate_nonces:
+    - ~k
+  - send: []
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~sid
+  - send:
+    - ~na
+- role: Responder_Reply
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+    - ~sid
+  - send:
+    - h(na XOR k XOR ~nb)
+    - ~nb
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+  - assert:
+    - tag = h(na XOR k XOR nb)
+  - send: <END>

@@ -1,0 +1,64 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~sid
+  - send:
+    - <'GERes', ServerCertificate, 'Sign', SecurityPolicy, UserTokenPolicy>
+    - '''OPCUA-1.04'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - <'GERes', $ServerCert, 'Sign', $SecPol, $UserTokPol>
+    - '''OPCUA-1.04'''
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - RequestBody = <'OSCReq', ClientPublicKey, ~Nc>
+    - RequestBodyDigest = h(<'OSCReq', ClientPublicKey, ~Nc>)
+    - RequestSignature = sign(h(<'OSCReq', ClientPublicKey, ~Nc>), ClientPrivateKey)
+  - send:
+    - ClientCertificate
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - ClientCertificate
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+  - generate_nonces:
+    - ~Ns
+  - compute:
+    - ClientPublicKey = pk(ClientCertificate)
+    - RequestBody = <'OSCReq', pk(ClientCertificate), ~Nc_from_msg>
+    - RequestBodyDigest = h(<'OSCReq', pk(ClientCertificate), ~Nc_from_msg>)
+    - ResponseBody = <'OSCRes', ~Ns, ST, TTL>
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, ST, TTL>)
+    - ResponseSignature = sign(h(<'OSCRes', ~Ns, ST, TTL>), ServerPrivateKey)
+  - send:
+    - ServerCertificate
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - $ServerCert
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+  - compute:
+    - ResponseBody = <'OSCRes', ~Ns_from_msg, SecurityToken, TokenLifetime>
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns_from_msg, SecurityToken, TokenLifetime>)
+    - ChannelBinding = h(<~Nc, ~Ns_from_msg>)
+  - send: <END>

@@ -1,0 +1,69 @@
+theory TeslaScheme1
+begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+rule Setup_PK:
+  [ Fr(~sk_S) ]
+  --[ ]->
+  [ !Ltk('S', ~sk_S), !Pk('S', pk(~sk_S)), Out(pk(~sk_S)), !Honest('S') ]
+
+rule LtkReveal:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Receiver_SetupRequest:
+  [ Fr(~n_R), Fr(~tid_R), !Honest('S') ]
+  --[ Test1(), Create('R', ~n_R) ]->
+  [ Out(<'R', 'S', ~n_R, 'init_request'>), St_R_1(~tid_R, 'S', ~n_R) ]
+
+rule Sender_SetupResponse:
+  [ Fr(~k_1), Fr(~tid_S), In(<'R', 'S', n_R, 'init_request'>), !Ltk('S', ~sk_S), !Honest('S') ]
+  --[ Test2(), Running('S', 'R', <'sender', 'S', 'R', n_R>) ]->
+  [ Out(<'S', 'R', f(~k_1), sign(<f(~k_1), n_R, 'init_request'>, ~sk_S)>),
+    St_S_1(~tid_S, 'R', ~k_1, n_R) ]
+
+rule Receiver_VerifySetup:
+  [ St_R_1(tid, 'S', n_R), 
+    In(<'S', 'R', commitment, sign(<commitment, n_R, 'init_request'>, ~sk_S)>), 
+    !Ltk('S', ~sk_S) ]
+  --[ Test3(), Commit('R', 'S', <'receiver', 'R', 'S', n_R, commitment>) ]->
+  [ St_R_2(tid, 'S', commitment) ]
+
+rule Sender_Stream1:
+  [ Fr(~m_1), Fr(~k_2), St_S_1(tid, 'R', k_1, n_R), !Honest('S') ]
+  --[ Test4() ]->
+  [ Out(<<~m_1, f(~k_2)>, MAC(k_1, <~m_1, f(~k_2)>)>),
+    St_S_2(tid, 'R', k_1, ~k_2) ]
+
+rule Receiver_VerifyStream1:
+  [ St_R_2(tid, 'S', commitment), In(<D_1, mac_1>), !Honest('S') ]
+  --[ Test5(), Commit('R', 'S', <'stream', 'R', 'S', D_1, mac_1>) ]->
+  [ St_R_3(tid, 'S', D_1) ]
+
+// category: aliveness
+lemma aliveness:
+  "All R S n_R #i commitment.
+     Commit(R, S, <'receiver', R, S, n_R, commitment>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'sender', S, R, n_R>) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All R S n_R commitment #i.
+     Commit(R, S, <'receiver', R, S, n_R, commitment>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'sender', S, R, n_R>) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

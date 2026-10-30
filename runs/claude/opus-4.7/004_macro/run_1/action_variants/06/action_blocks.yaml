@@ -1,0 +1,19 @@
+- role: Client_Send
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: Server_Process
+  operations:
+  - receive:
+    - m1
+  - compute:
+    - k = adec(m1, ltkS)
+  - send:
+    - h(<k, 'session'>)
+- role: Client_Verify
+  operations:
+  - receive:
+    - h(<~k, 'session'>)
+  - send: <END>

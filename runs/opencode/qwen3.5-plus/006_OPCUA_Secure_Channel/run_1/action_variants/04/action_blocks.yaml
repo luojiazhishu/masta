@@ -1,0 +1,51 @@
+- role: Server_GetEndpoints
+  operations:
+  - send:
+    - '''GERes'''
+    - pkS
+    - '''Sign'''
+    - '''policy'''
+    - '''userPolicy'''
+    - '''OPCUA-1.04'''
+- role: Client_OpenChannel
+  operations:
+  - receive:
+    - '''GERes'''
+    - pkS
+    - '''Sign'''
+    - '''policy'''
+    - '''userPolicy'''
+    - '''OPCUA-1.04'''
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - pkC
+    - <'OSCReq', pkC, ~Nc>
+    - sign(h(<'OSCReq', pkC, ~Nc>), ~skC)
+    - h(<'OSCReq', pkC, ~Nc>)
+- role: Server_OpenChannel_Resp
+  operations:
+  - receive:
+    - pkC
+    - <'OSCReq', pkC, nC>
+    - sigC
+    - h(<'OSCReq', pkC, nC>)
+  - generate_nonces:
+    - ~Ns
+  - assert:
+    - verify(sigC, h(<'OSCReq', pkC, nC>), pkC) = true
+  - send:
+    - pkS
+    - <'OSCRes', ~Ns, 'token', 'lifetime'>
+    - sign(h(<'OSCRes', ~Ns, 'token', 'lifetime'>), ~skS)
+    - h(<'OSCRes', ~Ns, 'token', 'lifetime'>)
+- role: Client_Verify
+  operations:
+  - receive:
+    - pkS
+    - <'OSCRes', nS, token, lifetime>
+    - sigS
+    - h(<'OSCRes', nS, token, lifetime>)
+  - assert:
+    - verify(sigS, h(<'OSCRes', nS, token, lifetime>), pkS) = true
+  - send: <END>

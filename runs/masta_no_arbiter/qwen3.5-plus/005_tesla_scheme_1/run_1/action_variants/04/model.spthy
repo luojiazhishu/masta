@@ -1,0 +1,39 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+// RuleStep1: Receiver R generates nonce n_R and sends setup request
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ Out(< 'R', 'S', ~n_R >) ]
+
+// RuleStep2: Sender S receives request, generates key k_1, computes commitment and signature, sends response
+rule RuleStep2:
+  [ In(< 'R', 'S', n_R >), Fr(~k_1), Fr(~sk_S) ]
+  --[ Test2() ]->
+  [ Out(< 'S', 'R', f(~k_1), sign(< f(~k_1), n_R >, ~sk_S) >) ]
+
+// RuleStep3: Receiver R receives response and verifies signature
+rule RuleStep3:
+  [ In(< 'S', 'R', f_k1, sig >), Fr(~tid_R), Fr(~sk_S), Fr(~n_R) ]
+  --[ Test3() ]->
+  [ !Verified(~tid_R, f_k1, ~n_R) ]
+
+// RuleStep4: Sender S sends first stream message (Msg 1)
+rule RuleStep4:
+  [ !Verified(~tid_R, f_k1, ~n_R), Fr(~k_2), Fr(~m_1) ]
+  let D_1 = < ~m_1, f(~k_2) >
+      mac_1 = mac(~k_1, D_1)
+  in
+  [ Out(< D_1, mac_1 >) ]
+  --[ Test4() ]->
+  [ !StateS(~k_1, ~k_2) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

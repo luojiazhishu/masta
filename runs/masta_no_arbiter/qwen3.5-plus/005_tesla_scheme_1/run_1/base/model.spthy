@@ -1,0 +1,96 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: MAC/2, f/1
+
+// RuleStep1: Receiver R initiates connection set-up
+rule RuleStep1:
+  [
+    Fr(~n_R)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<$R, $S, ~n_R>)
+  ]
+
+// RuleStep2: Sender S receives request, generates k_1, sends signed commitment
+rule RuleStep2:
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, $SK_S)>),
+    StKey(~k_1)
+  ]
+
+// RuleStep3: Receiver R verifies signature and commits
+rule RuleStep3:
+  [
+    In(<$S, $R, commitment, sig>),
+    Fr(~n_R)
+  ]
+  --[ Test3() ]->
+  [
+    Verify(sig, <commitment, ~n_R>, $PK_S)
+  ]
+
+// RuleStep4: Sender S broadcasts Msg 1 (D_1, MAC(k_1, D_1))
+rule RuleStep4:
+  [
+    StKey(~k_1),
+    Fr(~k_2),
+    Fr(~m_1)
+  ]
+  --[ Test4() ]->
+  [
+    Out(< <~m_1, f(~k_2)>, MAC(~k_1, <~m_1, f(~k_2)>) >),
+    StKey(~k_2),
+    Disclosed(~k_1)
+  ]
+
+// RuleStep5: Receiver R receives Msg 1 and caches it (no verification yet)
+rule RuleStep5:
+  [
+    In(<D_1, mac_1>),
+    Fr(~n_R)
+  ]
+  --[ Test5() ]->
+  [
+    Cache(<D_1, mac_1, ~n_R>)
+  ]
+
+// RuleStep6: Sender S broadcasts Msg 2 (D_2, MAC(k_2, D_2)), disclosing k_1
+rule RuleStep6:
+  [
+    StKey(~k_2),
+    Fr(~k_3),
+    Fr(~m_2)
+  ]
+  --[ Test6() ]->
+  [
+    Out(< <~m_2, f(~k_3), ~k_1>, MAC(~k_2, <~m_2, f(~k_3), ~k_1>) >),
+    StKey(~k_3),
+    Disclosed(~k_2)
+  ]
+
+// RuleStep7: Receiver R receives Msg 2, verifies k_1 commitment, and checks MAC on cached Msg 1
+rule RuleStep7:
+  [
+    In(<D_2, mac_2>),
+    Cache(<D_1, mac_1, n_R>),
+    Disclosed(~k_1)
+  ]
+  --[ Test7() ]->
+  [
+    VerifyMAC(mac_1, D_1, ~k_1),
+    VerifyMAC(mac_2, D_2, ~k_2)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

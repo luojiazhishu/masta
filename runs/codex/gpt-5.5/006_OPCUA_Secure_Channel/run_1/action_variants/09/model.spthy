@@ -1,0 +1,104 @@
+theory OpcUaSecureChannel
+begin
+
+builtins: hashing, signing
+
+functions: brand/1
+
+rule Register:
+  [ Fr(~sk) ]
+  --[ Create($A, ~sk) ]->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Client_GetEndpointsRequest:
+  [ ]
+  --[ Test1() ]->
+  [ Out(<'GEReq'>), St_C_Discovery($C, $S) ]
+
+rule Server_GetEndpointsResponse:
+  [ In(<'GEReq'>), !Ltk($S, skS) ]
+  --[ Test2(), Audit($S, brand(pk(skS))) ]->
+  [ Out(<'GERes', pk(skS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>) ]
+
+rule Client_OpenSecureChannelRequest:
+  [ St_C_Discovery($C, $S),
+    In(<'GERes', serverCert, 'Sign', policy, userPolicy>),
+    !Ltk($C, skC),
+    Fr(~Nc)
+  ]
+  --[ Test3(), Running(pk(skC), $S, <'client_nonce', ~Nc>), Honest($C) ]->
+  [ Out(< pk(skC),
+          <'OSCReq', pk(skC), ~Nc>,
+          sign(h(<'OSCReq', pk(skC), ~Nc>), skC),
+          h(<'OSCReq', pk(skC), ~Nc>) >),
+    St_C_WaitResponse($C, $S, serverCert, ~Nc)
+  ]
+
+rule Server_OpenSecureChannelResponse:
+  [ In(< clientCert,
+          <'OSCReq', clientCert, clientNonce>,
+          sign(h(<'OSCReq', clientCert, clientNonce>), skC),
+          h(<'OSCReq', clientCert, clientNonce>) >),
+    !Ltk($S, skS),
+    !Ltk($C, skC),
+    Fr(~Ns),
+    Fr(~ST),
+    Fr(~TTL)
+  ]
+  --[ Test4(), Running($S, $C, <'server_nonce', ~Ns>),
+      Commit($S, clientCert, <'client_nonce', clientNonce>),
+      Secret($S, $C, h(<clientNonce, ~Ns>)), Honest($S) ]->
+  [ Out(< pk(skS),
+          <'OSCRes', ~Ns, ~ST, ~TTL>,
+          sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), skS),
+          h(<'OSCRes', ~Ns, ~ST, ~TTL>) >) ]
+
+rule Client_ValidateResponse:
+  [ St_C_WaitResponse($C, $S, serverCert, nc),
+    In(< serverCert,
+          <'OSCRes', serverNonce, securityToken, tokenLifetime>,
+          sign(h(<'OSCRes', serverNonce, securityToken, tokenLifetime>), skS),
+          h(<'OSCRes', serverNonce, securityToken, tokenLifetime>) >)
+    , !Ltk($S, skS)
+  ]
+  --[ Test5(),
+      Commit($C, $S, <'server_nonce', serverNonce>),
+      Secret($C, $S, h(<nc, serverNonce>)), Honest($C) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_channel_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b n #i.
+     Commit(a, b, <'client_nonce', n>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'client_nonce', n>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b n #i.
+     Commit(a, b, <'server_nonce', n>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_nonce', n>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

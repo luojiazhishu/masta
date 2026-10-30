@@ -1,0 +1,59 @@
+theory NaxosSimple
+begin
+
+builtins: hashing
+
+functions: dh/2, g/0
+
+// category: secrecy
+lemma SecretKey_secrecy:
+  "All I R k #i.
+     Secret(I, R, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+rule Setup:
+  [ Fr(~I), Fr(~R), Fr(~ltkI), Fr(~ltkR), Fr(~tidI), Fr(~tidR) ]
+  --[ Create(~I, ~tidI), Create(~R, ~tidR) ]->
+  [ !Ltk(~I, ~ltkI), !Ltk(~R, ~ltkR), !Pk(~I, dh(g(), ~ltkI)), !Pk(~R, dh(g(), ~ltkR)) ]
+
+rule Initiator_Start:
+  let exI = h(~eskI, ~ltkI)
+  in
+  [ !Ltk(I, ~ltkI), !Pk(R, pkR), Fr(~eskI) ]
+  --[ Test1() ]->
+  [ St_I_wait(I, R, ~ltkI, exI, pkR), Out(dh(g(), exI)) ]
+
+rule Responder_Recv:
+  let exR = h(~eskR, ~ltkR)
+      kR = h(<dh(pkI, exR), dh(X, ~ltkR), I, R>)
+  in
+  [ !Ltk(R, ~ltkR), !Pk(I, pkI), In(X), Fr(~eskR) ]
+  --[ Test2(), Secret(I, R, kR), Honest(R) ]->
+  [ Out(dh(g(), exR)) ]
+
+rule Initiator_Finish:
+  let kI = h(<dh(Y, ~ltkI), dh(pkR, exI), I, R>)
+  in
+  [ St_I_wait(I, R, ~ltkI, exI, pkR), In(Y) ]
+  --[ Test3(), Commit(I, R, <'initiator', I, R, kI>), Secret(I, R, kI), Honest(I) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk(I, ~ltkI) ]
+  --[ LtkReveal(I) ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk(R, ~ltkR) ]
+  --[ LtkReveal(R) ]->
+  [ Out(~ltkR) ]
+
+end

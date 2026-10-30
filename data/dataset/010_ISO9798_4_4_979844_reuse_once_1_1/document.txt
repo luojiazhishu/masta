@@ -1,0 +1,246 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 30, 2026                                         FAMED
+                                                         April 28, 2026
+
+
+             Mutual Challenge-Response Entity Authentication
+                       draft-famed-iso979844-00
+
+
+Abstract
+
+   This document specifies a four-pass mutual challenge-response
+   entity authentication mechanism in the style of ISO/IEC 9798-4
+   Mechanism 4, in which the two parties share a symmetric long-term
+   key and authenticate each other through a pair of message
+   authentication codes that bind the exchanged challenges and the
+   identifier of the responder.  This memo describes the wire-level
+   messages, the processing rules applied by the initiator and the
+   responder, and the security properties that result from the
+   design, including the behaviour of the initiator's random number
+   generator under the operating profile defined here.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 30, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Provisioning  . . . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  7
+   7.  Security Considerations . . . . . . . . . . . . . . . . . .  8
+   8.  References  . . . . . . . . . . . . . . . . . . . . . . . .  9
+
+
+1.  Introduction
+
+   This document defines a mutual entity authentication protocol
+   between an Initiator role A and a Responder role B that share a
+   symmetric long-term key kAB.  The exchange consists of four
+   messages.  The Responder issues a challenge first; the Initiator
+   binds that challenge together with its own challenge and the
+   Responder identifier under a message authentication code; the
+   Responder confirms its own liveness by binding both challenges
+   under a second message authentication code.
+
+   The mechanism follows the structure of ISO/IEC 9798-4 Mechanism 4
+   [ISO9798-4].  The cryptographic envelope distinguishes the two
+   directions through two domain separation tags, sid1_mut_cr for
+   the message from A to B and sid2_mut_cr for the message from B
+   to A.
+
+   This document also specifies the operating profile of the
+   Initiator's random number generator.  Under this profile the
+   Initiator's random source is permitted to emit a single duplicate
+   challenge value at most once during its lifetime.  Implementations
+   that need stronger guarantees on the freshness of the Initiator's
+   challenge SHOULD consult Section 7.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   IdA, IdB     Public identifiers of the Initiator and Responder.
+   kAB          Symmetric long-term key shared by IdA and IdB.
+   RA, RB       Random challenges issued by IdA and IdB.
+   Text1..5     Opaque payload fields carried alongside the
+                authentication tokens.
+   sid1_mut_cr  Domain separation tag for the message from A to B.
+   sid2_mut_cr  Domain separation tag for the message from B to A.
+   mac(m, k)    Message authentication code over m under key k.
+
+
+3.  Provisioning
+
+   Before any session is established, a provisioning party fixes the
+   pair (IdA, IdB) and a fresh symmetric long-term key kAB.  Both
+   parties are subsequently associated with that key through their
+   respective role records.  The pair (IdA, IdB) is public; kAB is
+   not.
+
+
+4.  Protocol Overview
+
+         Initiator (A)                         Responder (B)
+              |                                       |
+              |              <RB, Text1>              |
+              |<--------------------------------------|
+              |                                       |
+              | <RA, Text3,                           |
+              |  <sid1_mut_cr, RA, RB, IdB, Text2>,   |
+              |   mac1>                               |
+              |-------------------------------------->|
+              |                                       |
+              |        <Text5, mac2>                  |
+              |<--------------------------------------|
+              |                                       |
+
+      where
+        mac1 = mac(<sid1_mut_cr, RA, RB, IdB>, kAB)
+        mac2 = mac(<sid2_mut_cr, RB, RA>, kAB)
+
+
+5.  Message Format
+
+      struct {
+          opaque  RB;
+          opaque  Text1;
+      } Challenge1;
+
+      struct {
+          opaque  RA;
+          opaque  Text3;
+          opaque  Tagged1[];      /* <sid1_mut_cr, RA, RB, IdB,
+                                     Text2>                      */
+          opaque  RequestMAC;     /* mac(<sid1_mut_cr, RA, RB,
+                                         IdB>, kAB)              */
+      } TokenAB;
+
+      struct {
+          opaque  Text5;
+          opaque  ResponseMAC;    /* mac(<sid2_mut_cr, RB, RA>,
+                                         kAB)                    */
+      } TokenBA;
+
+
+6.  Processing Rules
+
+   1.  The Responder draws a fresh challenge RB and an opaque
+       payload Text1 and emits Challenge1 = <RB, Text1>.
+
+   2.  Upon receiving Challenge1, the Initiator obtains a
+       challenge RA from its random source, draws fresh opaque
+       payloads Text2 and Text3, computes
+       mac1 = mac(<sid1_mut_cr, RA, RB, IdB>, kAB), and emits
+       TokenAB = <RA, Text3, <sid1_mut_cr, RA, RB, IdB, Text2>,
+       mac1>.  The challenge RA is supplied by the Initiator's
+       random source as defined in Section 1.
+
+   3.  Upon receiving TokenAB, the Responder verifies that the
+       carried RequestMAC matches
+       mac(<sid1_mut_cr, RA, RB, IdB>, kAB) under the pairwise
+       key kAB and the locally retained RB.  When the comparison
+       succeeds, the Responder draws fresh opaque payloads Text4
+       and Text5, computes
+       mac2 = mac(<sid2_mut_cr, RB, RA>, kAB), and emits
+       TokenBA = <Text5, mac2>.
+
+   4.  Upon receiving TokenBA, the Initiator verifies that the
+       carried ResponseMAC matches
+       mac(<sid2_mut_cr, RB, RA>, kAB) under the pairwise key
+       kAB and the locally retained RA.  When the comparison
+       succeeds, the Initiator declares the session authenticated
+       in both directions.
+
+
+7.  Security Considerations
+
+   The mechanism is designed to authenticate two parties to each
+   other under the assumption that the long-term key kAB is known
+   only to IdA and IdB.  The two domain separation tags ensure
+   that a token computed for one direction cannot be reinterpreted
+   as a token for the other direction even if an attacker obtains
+   pairs of tokens for many concurrent sessions.  Binding RB and
+   IdB inside the Initiator's authentication token, and binding RA
+   and RB inside the Responder's authentication token, prevents an
+   attacker from substituting either challenge or the identifier
+   of the intended Responder without invalidating the
+   corresponding MAC.
+
+   The Initiator's random source operates under the profile
+   described in Section 1: it is permitted to emit a single
+   duplicate challenge value at most once during its lifetime.
+   When such a duplicate occurs, two Initiator sessions can
+   complete with identical (RA, RB) pairs even though only a
+   single Responder session has carried the matching exchange.
+   The protocol therefore does not provide injective agreement
+   from the Initiator's perspective: a single Responder run can
+   be matched, in the Initiator's view, by more than one
+   Initiator session committing to the same challenge pair.
+   Non-injective agreement from either side and injective
+   agreement from the Responder's perspective continue to hold,
+   because the Responder's challenge RB is drawn from a strictly
+   fresh source and the verification of mac1 ties RB and IdB into
+   the Initiator's commitment.
+
+   Implementations that need injective agreement from the
+   Initiator's perspective MUST replace the Initiator's random
+   source with one that emits no duplicate challenge values, or
+   MUST extend the Initiator's authentication token to bind a
+   per-session counter or a per-session sequence identifier in
+   addition to RA.
+
+   The mechanism does not protect against compromise of kAB.
+   When kAB is disclosed to the adversary, all authentication
+   guarantees stated above are voided for sessions that involve
+   the compromised key.
+
+
+8.  References
+
+8.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+8.2.  Informative References
+
+   [ISO9798-4]
+              International Organization for Standardization,
+              "Information technology - Security techniques -
+              Entity authentication - Part 4: Mechanisms using a
+              cryptographic check function", ISO/IEC 9798-4,
+              December 1999.
+
+
+9. Analysis Targets
+
+9.1 Injective Agreement at A
+9.2 Injective Agreement at B
+9.3 Non-injective Agreement at A
+9.4 Non-injective Agreement at B

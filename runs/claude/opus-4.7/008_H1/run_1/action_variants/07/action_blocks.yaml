@@ -1,0 +1,27 @@
+- role: Initiator_Send1
+  operations:
+  - compute:
+    - mI = sign(<$I, $R>, ~ltkI)
+  - send:
+    - mI
+- role: Initiator_Resend
+  operations:
+  - send:
+    - mI
+- role: Responder_Send
+  operations:
+  - receive:
+    - mI
+  - compute:
+    - mR = sign(<$I, $R>, ~ltkR)
+  - assert:
+    - verify(mI, <$I, $R>, pkI) = true
+  - send:
+    - mR
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - mR
+  - assert:
+    - verify(mR, <$I, $R>, pkR) = true
+  - send: <END>

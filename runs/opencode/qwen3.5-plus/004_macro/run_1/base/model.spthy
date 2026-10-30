@@ -1,0 +1,72 @@
+theory BSKT
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Setup:
+  [ Fr(~skS) ]
+  -->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Client_Init:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, 'client_tid') ]->
+  [ Out(aenc(~k, pkS)), St_C_1($C, $S, ~k) ]
+
+rule Server_Respond:
+  let
+    k = adec(ct, skS)
+  in
+  [ In(ct), !Ltk($S, skS) ]
+  --[ Test2(), Running($S, k), Create($S, 'server_tid') ]->
+  [ Out(h(k)), St_S_2($S, k) ]
+
+rule Client_Verify:
+  [ St_C_1($C, $S, ~k), In(hk) ]
+  --[ Test3(), Eq(hk, h(~k)), Commit($C, $S, ~k), Secret($C, $S, ~k) ]->
+  [ ]
+
+rule Server_Commit:
+  [ St_S_2($S, k) ]
+  --[ Test4(), Commit($S, $C, k) ]->
+  [ ]
+
+rule Ltk_Reveal:
+  [ !Ltk(X, skX) ]
+  --[ LtkReveal(X) ]->
+  [ Out(skX) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       (Ex #j. Running(S, k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       ( (Ex #j. Running(S, k) @ j
+             & j < i
+             & not (Ex C2 S2 #i2. Commit(C2, S2, k) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal(S) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

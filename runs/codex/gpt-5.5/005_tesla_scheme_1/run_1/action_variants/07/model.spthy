@@ -1,0 +1,84 @@
+theory TeslaScheme1 begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~skS) ]
+  --[ Create($S, pk(~skS)) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(skS) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~nR>), Receiver_Wait_Setup($R, $S, ~nR, pkS) ]
+
+rule Sender_Setup_Response:
+  let c1 = h(~k1)
+      sig = sign(<c1, nR>, skS)
+  in
+  [ Fr(~k1), !Ltk($S, skS), In(<R, $S, nR>) ]
+  --[ Test2(), Running($S, R, <'setup', c1, nR>) ]->
+  [ Out(<$S, R, c1, sig>), Sender_Stream_State($S, R, ~k1, c1, nR) ]
+
+rule Receiver_Verify_Setup:
+  [ Receiver_Wait_Setup($R, $S, nR, pkS), In(<$S, $R, c1, sig>) ]
+  --[ Test3(), SetupComplete($R, $S, c1, nR), Eq(verify(sig, <c1, nR>, pkS), true) ]->
+  [ Receiver_Wait_First($R, $S, c1) ]
+
+rule Sender_First_Stream:
+  let c2 = h(~k2)
+      d1 = <~m1, c2>
+  in
+  [ Fr(~k2), Fr(~m1), Sender_Stream_State($S, R, k1, c1, nR) ]
+  --[ Test4(), Running($S, R, <'stream1', ~m1, c2>) ]->
+  [ Out(<d1, mac(k1, d1), 'data1_marker'>), Sender_Disclose_First($S, R, k1, ~k2, ~m1, c2) ]
+
+rule Receiver_Cache_First_Stream:
+  [ Receiver_Wait_First($R, $S, c1), In(<<m1, c2>, mac1, 'data1_marker'>) ]
+  --[ Test5(), CachedFirst($R, $S, c1, m1, c2) ]->
+  [ Receiver_Wait_Key1($R, $S, c1, m1, c2, mac1) ]
+
+rule Sender_Subsequent_Stream_Disclose:
+  let c3 = h(~k3)
+      d2 = <~m2, c3, k1>
+  in
+  [ Fr(~k3), Fr(~m2), Sender_Disclose_First($S, R, k1, k2, m1, c2) ]
+  --[ Test6(), FirstKeyDisclosed($S, h(k1)), Running($S, R, <'stream2', ~m2, c3, k1>) ]->
+  [ Out(<d2, mac(k2, d2)>), Sender_Done($S, R, k2, ~k3, ~m2, c3) ]
+
+rule Receiver_Verify_First_Stream:
+  [ Receiver_Wait_Key1($R, $S, c1, m1, c2, mac(k1, <m1, c2>)), In(<<m2, c3, k1>, mac2>) ]
+  --[ Test7(), Commit($R, $S, <'stream1', m1, c2>), Eq(h(k1), c1) ]->
+  [ Receiver_Accepted_First($R, $S, m1, c2) ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction First_Message_Before_Key_Disclosure:
+  "All r s c1 m c2 #i #j.
+     CachedFirst(r, s, c1, m, c2) @ #i & FirstKeyDisclosed(s, c1) @ #j
+   ==> #i < #j"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All r s m c2 #i.
+     Commit(r, s, <'stream1', m, c2>) @ #i
+   ==>
+     (Ex r2 #j. Running(s, r2, <'stream1', m, c2>) @ #j & #j < #i)
+   | (Ex #r. LtkReveal(s) @ #r)"
+
+end

@@ -1,0 +1,81 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1
+
+// PKI: long-term signing key for sender S
+rule Setup_PKI:
+  [ Fr(~sk_S) ]
+  --[ Honest($S) ]->
+  [ !Ltk($S, ~sk_S)
+  , !Pk($S, pk(~sk_S))
+  , Out(pk(~sk_S))
+  ]
+
+// RuleStep1: R sends setup request with fresh nonce
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+// RuleStep2: S receives setup request, generates key commitment, signs, sends duplicated response
+rule RuleStep2:
+  [ In(<$R, $S, n_R>)
+  , Fr(~k_1)
+  , !Ltk($S, ~sk_S)
+  ]
+  --[ Test2() ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~sk_S), $S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~sk_S)>)
+  , !Key($S, ~k_1)
+  ]
+
+// RuleStep3: R receives duplicated response, validates field equality via pattern matching
+rule RuleStep3:
+  [ In(<S_id, R_id, commitment, signature, S_id, R_id, commitment, signature>)
+  , Fr(~tid_R)
+  ]
+  --[ Test3() ]->
+  [ !ValidatedSetup(~tid_R, S_id, R_id, commitment, signature) ]
+
+// RuleStep4: S generates next key, computes D_1 and MAC, sends first stream message
+rule RuleStep4:
+  let
+      D_1 = <'m_1', f(~k_2)>
+      mac_1 = h(<~k_1, D_1>)
+  in
+  [ Fr(~k_2)
+  , !Key($S, ~k_1)
+  ]
+  --[ Test4(), Running($S, $R, D_1) ]->
+  [ Out(<D_1, mac_1>)
+  , !Key($S, ~k_2)
+  ]
+
+// RuleStep5: R receives first stream message
+rule RuleStep5:
+  [ In(<D_1, mac_1>)
+  , !ValidatedSetup(~tid_R, $S, $R, commitment, signature)
+  ]
+  --[ Test5(), Commit($R, $S, D_1) ]->
+  [ ]
+
+// LtkReveal rule for long-term signing key compromise
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_authenticity_of_broadcast_messages:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

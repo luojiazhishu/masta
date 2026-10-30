@@ -1,0 +1,99 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: signing, hashing
+
+// Action Block 1: Client sends GetEndpointsRequest
+rule Client_GetEndpoints:
+  [ Fr(~clientSk), Fr(~tid_c) ]
+  --[ Test1(), Running_C_Init(~tid_c), Create('client', ~clientSk) ]->
+  [ St_C1(~tid_c, ~clientSk), Out(< 'GEReq' >), !Ltk('client', ~clientSk), !Pk('client', pk(~clientSk)) ]
+
+// Action Block 2: Server responds with GetEndpointsResponse
+rule Server_GetEndpoints_Response:
+  [ In(< 'GEReq' >), Fr(~serverSk), Fr(~tid_s) ]
+  --[ Test2(), Running_S_Init(~tid_s), Create('server', ~serverSk) ]->
+  [ St_S1(~tid_s, ~serverSk), Out(< 'GERes', pk(~serverSk), 'Sign', 'policy' >), !Ltk('server', ~serverSk), !Pk('server', pk(~serverSk)) ]
+
+// Action Block 3: Client sends OpenSecureChannelRequest
+rule Client_OpenSecureChannel:
+  [ St_C1(~tid_c, clientSk), In(< 'GERes', serverPk, 'Sign', 'policy' >), Fr(~clientNonce) ]
+  --[ Test3(), Running_C_Osc(~tid_c, pk(clientSk), ~clientNonce) ]->
+  [ St_C2(~tid_c, serverPk, clientSk, ~clientNonce), 
+    Out(< pk(clientSk), < 'OSCReq', pk(clientSk), ~clientNonce >, sign(< 'OSCReq', pk(clientSk), ~clientNonce >, clientSk) >) ]
+
+// Action Block 4: Server validates and responds with OpenSecureChannelResponse
+rule Server_OpenSecureChannel_Response:
+  [ St_S1(~tid_s, serverSk), 
+    In(<< clientPk, < 'OSCReq', clientPk, clientNonce >, sig >>),
+    Fr(~serverNonce), Fr(~securityToken), Fr(~ttl) ]
+  --[ Test4(), 
+      Running_S_Osc(~tid_s, clientPk, ~serverNonce, ~securityToken, ~ttl),
+      Commit_S_C(clientPk, ~serverNonce, ~securityToken, ~ttl) ]->
+  [ St_S2(~tid_s, clientPk, ~serverNonce, ~securityToken),
+    Out(< pk(serverSk), < 'OSCRes', ~serverNonce, ~securityToken, ~ttl, 'channelV1' >, sign(< 'OSCRes', ~serverNonce, ~securityToken, ~ttl, 'channelV1' >, serverSk) >) ]
+
+// Action Block 5: Client validates response
+rule Client_OpenSecureChannel_Verify:
+  [ St_C2(~tid_c, serverPk, clientSk, clientNonce),
+    In(< serverPk, < 'OSCRes', serverNonce, securityToken, ttl, 'channelV1' >, sig >) ]
+  --[ Test5(),
+      Commit_C_S(serverPk, serverNonce, securityToken, ttl) ]->
+  [ St_C3(~tid_c, serverPk, clientNonce, < 'OSCRes', serverNonce, securityToken, ttl, 'channelV1' >) ]
+
+// Long-term key reveal rule for adversary
+rule LtkReveal:
+  [ !Ltk(agent, sk) ]
+  --[ LtkReveal(agent) ]->
+  [ Out(sk) ]
+
+// Secrecy of Server Nonce (channel binding component)
+// Note: Protocol uses Sign-Sign mode, so nonces are sent in clear
+// This lemma will be falsified as expected per protocol design
+// category: secrecy
+lemma secrecy_server_nonce:
+  "All tid clientPk s_nonce st ttl #i.
+     Running_S_Osc(tid, clientPk, s_nonce, st, ttl) @ i
+   ==>
+       not (Ex #j. K(s_nonce) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & X = 'server')"
+
+// Secrecy of Client Nonce (channel binding component)
+// Note: Protocol uses Sign-Sign mode, so nonces are sent in clear
+// This lemma will be falsified as expected per protocol design
+// category: secrecy
+lemma secrecy_client_nonce:
+  "All tid clientPk c #i.
+     Running_C_Osc(tid, clientPk, c) @ i
+   ==>
+       not (Ex #j. K(c) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & X = 'client')"
+
+// Non-injective agreement on Client Nonce
+// Server commits to client nonce only if Client actually sent it
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All clientPk c st ttl #i.
+     Commit_S_C(clientPk, c, st, ttl) @ i
+   ==>
+       (Ex tid #j. Running_C_Osc(tid, clientPk, c) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & X = 'client')"
+
+// Non-injective agreement on Server Nonce  
+// Client commits to server nonce only if Server actually sent it
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All clientPk s st ttl #i.
+     Commit_C_S(clientPk, s, st, ttl) @ i
+   ==>
+       (Ex tid #j. Running_S_Osc(tid, clientPk, s, st, ttl) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & X = 'server')"
+
+// Executable lemma - witnesses complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+     Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+   & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

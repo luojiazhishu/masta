@@ -1,0 +1,17 @@
+- role: Initiator_Send
+  operations:
+  - send:
+    - sign(<'I', 'R'>, ltkI)
+- role: Responder_Receive_Send
+  operations:
+  - receive:
+    - sign(<'I', 'R'>, ltkI)
+  - send:
+    - sign(<'I', 'R'>, ltkR)
+    - resp
+- role: Initiator_Receive_Accept
+  operations:
+  - receive:
+    - sign(<'I', 'R'>, ltkR)
+    - resp
+  - send: <END>

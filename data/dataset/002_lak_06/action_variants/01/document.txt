@@ -1,0 +1,350 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+      Lightweight Authentication Protocol for Low-Cost RFID Systems
+                          draft-famed-lak06-00
+
+
+Abstract
+
+   This document specifies a lightweight challenge-response
+   authentication protocol intended for Radio Frequency
+   Identification (RFID) deployments in which a Reader and a Tag
+   share a long-term symmetric key prior to deployment.  The
+   protocol exchanges three messages over the air interface and
+   relies exclusively on a one-way hash function and the bitwise
+   exclusive-OR operator, so that the Tag side can be implemented
+   within the gate budget of a passive low-cost device.  The
+   first message also carries a Reader-supplied auxiliary nonce
+   that is propagated to the Tag and retained in its session
+   state for diagnostic and tracking purposes.  This memo
+   describes the message format, the processing rules, and the
+   security properties of the resulting exchange.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology and Notation . . . . . . . . . . . . . . . . .  3
+     2.1.  Requirements Language  . . . . . . . . . . . . . . . .  3
+     2.2.  Symbols  . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . .  4
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . .  5
+     4.1.  Reader Challenge (R0)  . . . . . . . . . . . . . . . .  5
+     4.2.  Tag Response (T1)  . . . . . . . . . . . . . . . . . .  5
+     4.3.  Reader Confirmation (R1) . . . . . . . . . . . . . . .  6
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . .  6
+     5.1.  Provisioning . . . . . . . . . . . . . . . . . . . . .  6
+     5.2.  Reader Procedure . . . . . . . . . . . . . . . . . . .  7
+     5.3.  Tag Procedure  . . . . . . . . . . . . . . . . . . . .  7
+   6.  Security Considerations  . . . . . . . . . . . . . . . . .  8
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . .  9
+
+
+1.  Introduction
+
+   Radio Frequency Identification (RFID) systems are widely
+   deployed in inventory management, access control, and
+   anti-counterfeiting applications.  In these settings a small,
+   often passive, transponder is interrogated over a short-range
+   air interface by a more capable Reader.  Because passive Tags
+   draw their operating energy from the interrogating field, the
+   gate count and the energy budget available to the Tag side
+   are severely constrained, which rules out public-key
+   primitives and even most block-cipher constructions.
+
+   This document specifies a three-message authentication
+   protocol that establishes a mutually authenticated session
+   between a Reader and a Tag, on the basis of a long-term
+   symmetric key shared between the two parties.  The
+   construction uses only a one-way hash function and the
+   bitwise exclusive-OR operator.  The opening Reader-to-Tag
+   message also carries a fresh auxiliary nonce that the Reader
+   adds for session-level housekeeping (for example, to
+   correlate logs at upper layers); the Tag retains this value
+   alongside its session state but does not feed it into either
+   MAC computation.
+
+   The protocol does not transport application payload; it
+   produces a single bit of authentication output on each side,
+   indicating whether the peer has demonstrated knowledge of the
+   shared key during the present session.  Confidentiality of
+   payload data, key chaining for forward security, and Tag
+   untraceability across sessions are out of scope and are left
+   to companion specifications.
+
+
+2.  Terminology and Notation
+
+2.1.  Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT
+   RECOMMENDED", "MAY", and "OPTIONAL" in this document are to
+   be interpreted as described in BCP 14 [RFC2119] [RFC8174]
+   when, and only when, they appear in all capitals, as shown
+   here.
+
+2.2.  Symbols
+
+   The following symbols are used throughout the document.
+
+      Reader   The interrogator, having ample computational and
+               energy resources.
+
+      Tag      The transponder, typically a passive low-cost
+               device sharing a long-term symmetric key with a
+               Reader.
+
+      k        A long-term symmetric key, shared between a
+               specific Reader and a specific Tag.
+
+      r0       A nonce drawn by the Reader for the current
+               session.
+
+      r0_aux   An auxiliary nonce drawn by the Reader and
+               carried alongside r0; reserved for upper-layer
+               session correlation.
+
+      r1       A nonce drawn by the Tag for the current
+               session.
+
+      h(x)     A one-way hash function applied to the bit
+               string x.  h MUST be preimage- and
+               second-preimage-resistant.
+
+      a XOR b  Bitwise exclusive-OR of equal-length bit
+               strings a and b.
+
+      a, b     Concatenation of the bit strings a and b on the
+               wire.
+
+
+3.  Protocol Overview
+
+   A single run of the protocol involves three messages
+   exchanged between one Reader and one Tag, in the order R0,
+   T1, R1.  The Reader initiates the run; the Tag responds; the
+   Reader concludes by acknowledging the Tag's response.
+
+      Reader                                            Tag
+        |                                                |
+        |  R0:  r0, r0_aux                               |
+        |----------------------------------------------->|
+        |                                                |
+        |  T1:  r1, h(r0 XOR r1 XOR k)                   |
+        |<-----------------------------------------------|
+        |                                                |
+        |  R1:  h(h(r0 XOR r1 XOR k) XOR k XOR r0)       |
+        |----------------------------------------------->|
+        |                                                |
+
+   Each session is associated with a fresh pair (r0, r1) and a
+   fresh r0_aux.  The shared key k MUST persist across
+   sessions; r0, r1, and r0_aux MUST NOT be reused.
+
+
+4.  Message Format
+
+   The on-the-wire layout of each message is described using a
+   structure-style notation.  Field widths are
+   implementation-defined and MUST be agreed upon during
+   provisioning.
+
+4.1.  Reader Challenge (R0)
+
+      struct {
+          opaque r0[NonceLen];
+          opaque r0_aux[NonceLen];
+      } ReaderChallenge;
+
+   r0 is a fresh nonce drawn by the Reader and used to bind
+   the session.  r0_aux is a separate fresh nonce drawn by the
+   Reader; it is opaque to the Tag's MAC computation and serves
+   only as a session-correlation handle for upper layers.
+
+4.2.  Tag Response (T1)
+
+      struct {
+          opaque r1[NonceLen];
+          opaque tag_mac[HashLen];
+      } TagResponse;
+
+   r1 is a fresh nonce drawn by the Tag.  tag_mac is computed
+   as
+
+      tag_mac = h(r0 XOR r1 XOR k)
+
+   where r0 is the value received in the preceding R0 message.
+
+4.3.  Reader Confirmation (R1)
+
+      struct {
+          opaque reader_mac[HashLen];
+      } ReaderConfirmation;
+
+   reader_mac is computed as
+
+      reader_mac = h(tag_mac XOR k XOR r0)
+
+   where tag_mac is the value carried in the preceding T1
+   message and r0 is the Reader's own challenge.
+
+
+5.  Processing Rules
+
+5.1.  Provisioning
+
+   Each Reader-Tag pair MUST be configured with a shared
+   long-term key k before its first interrogation.  The
+   provisioning channel is out of scope; it is expected to be
+   secure with respect to confidentiality and integrity at the
+   time of enrollment.  Implementations MUST ensure that k is
+   stored on both sides in a manner that resists casual
+   read-out.
+
+5.2.  Reader Procedure
+
+   For every interrogation, the Reader executes the following
+   steps in order:
+
+      1.  Draw a fresh r0 of NonceLen bits from a
+          cryptographically strong random source [RFC4086].
+
+      2.  Draw a fresh r0_aux of NonceLen bits from the same
+          random source.
+
+      3.  Transmit message R0 carrying (r0, r0_aux).
+
+      4.  Wait for message T1 from the Tag, carrying
+          (r1, tag_mac).
+
+      5.  Compute the expected MAC
+
+             expected = h(r0 XOR r1 XOR k)
+
+          and compare expected with tag_mac.  If the comparison
+          fails, the Reader MUST abort the session and MUST NOT
+          emit message R1.
+
+      6.  Compute reader_mac = h(tag_mac XOR k XOR r0) and
+          transmit message R1 carrying reader_mac.
+
+5.3.  Tag Procedure
+
+   On reception of a message R0 from any Reader, the Tag
+   executes the following steps:
+
+      1.  Read r0 and r0_aux from the incoming R0 message and
+          retain r0_aux in the per-session state.  r0_aux MUST
+          NOT be folded into the subsequent MAC computation.
+
+      2.  Draw a fresh r1 of NonceLen bits from its on-chip
+          random source.
+
+      3.  Compute tag_mac = h(r0 XOR r1 XOR k) and transmit
+          message T1 carrying (r1, tag_mac).
+
+      4.  Wait for message R1 from the Reader, carrying
+          reader_mac.
+
+      5.  Compute expected = h(tag_mac XOR k XOR r0) and
+          compare expected with reader_mac.  If the
+          comparison fails, the Tag MUST silently discard the
+          R1 message and MUST NOT signal success to the
+          application.
+
+
+6.  Security Considerations
+
+   The protocol described in this memo is designed to provide
+   mutual authentication between a Reader and a Tag that share
+   a long-term symmetric key k.  Its security rests on the
+   confidentiality of k and on the one-way and
+   second-preimage-resistance properties of h.
+
+   Confidentiality of k.  An attacker who learns k can
+   impersonate either party at will.  Implementations MUST
+   protect k both at rest and during provisioning, and SHOULD
+   adopt physical-tamper countermeasures appropriate to the
+   deployed threat model.
+
+   Authentication of the Reader by the Tag.  When the Tag
+   accepts message R1, the value reader_mac binds the same
+   triple (r0, r1, k) that the Tag itself contributed to.
+   Because r1 is contributed freshly by the Tag and is mixed
+   into reader_mac through tag_mac, R1 cannot have been
+   precomputed in advance of the Tag's challenge.
+
+   Limitation on the Reader's view of the Tag.  This protocol
+   does not guarantee that, when the Reader accepts T1, the
+   pair (r0, r1) recorded by the Reader is the same pair that
+   the responding holder of k actually computed against.  An
+   attacker on the air interface MAY exploit the linearity of
+   the exclusive-OR construction to inject an offset Delta in
+   the outbound r0 and to remove the same offset from the
+   Tag's r1 on the way back, in such a manner that the
+   Reader's check of tag_mac still succeeds but the recorded
+   views differ.  Implementations that require an injective
+   binding SHOULD layer an additional confirmation on top of
+   this protocol.
+
+   Status of r0_aux.  r0_aux is not part of any cryptographic
+   verification.  An attacker MAY rewrite r0_aux without
+   affecting the authentication outcome.  Implementations
+   MUST NOT use r0_aux as a security input; it is a
+   correlation handle only.
+
+   Replay across sessions.  An attacker observing one or more
+   completed sessions MUST NOT be able to make either party
+   accept a transcript of a previous session as a fresh run,
+   because the per-session nonces (r0, r1) are bound into both
+   tag_mac and reader_mac.  Implementations MUST therefore
+   draw r0, r0_aux, and r1 from a source whose collision
+   probability over the lifetime of k is negligible [RFC4086].
+
+   Long-term key compromise.  Forward security with respect to
+   long-term key compromise is not provided.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to
+              Indicate Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase
+              in RFC 2119 Key Words", BCP 14, RFC 8174, May
+              2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, June 2005.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Long-Term Tag Identifier
+8.2 Non-injective Agreement at the Tag
+8.3 Non-injective Agreement at the Reader

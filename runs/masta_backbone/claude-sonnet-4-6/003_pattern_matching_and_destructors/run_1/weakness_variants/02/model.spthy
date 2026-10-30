@@ -1,0 +1,32 @@
+theory SK_PMD_W02
+begin
+
+builtins: symmetric-encryption
+
+rule Generate_shared_key:
+  [ Fr(~k) ]
+  -->
+  [ !Shk($I, $R, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~sec), Fr(~pub), !Shk($I, $R, k) ]
+  --[ Test1(), Secret(~sec), Honest($I), Honest($R) ]->  [ Out(senc(<~sec, ~pub>, k)), Out(<~sec, ~pub>) ]
+
+rule RuleStep2:
+  [ In(senc(<sec, pub>, k)), !Shk($I, $R, k), In(<sec, pub>) ]
+  --[ Test2() ]->  [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_payload:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

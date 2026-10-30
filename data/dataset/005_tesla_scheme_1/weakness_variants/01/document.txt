@@ -1,0 +1,207 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-w01
+
+Abstract
+
+   This document specifies a profile of Scheme 1 of the TESLA
+   broadcast authentication protocol.  In this profile the receiver
+   accepts the SetupResponse without checking the result of the
+   set-up signature verification.  The signature is parsed but
+   neither validated nor required to validate before the receiver
+   commits to the first key commitment and proceeds with the
+   broadcast phase.  This profile is intended for environments in
+   which a downstream component performs equivalent verification
+   out of band; receivers MUST NOT use it on their own.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies a profile of Scheme 1 in
+   which the receiver does not require the SetupResponse signature
+   to verify against PK(S) before transitioning to the broadcast
+   phase.
+
+   The profile is targeted at deployments in which receivers act
+   only as ingestion proxies for a downstream consumer that
+   performs an independent set-up verification.  An ingestion
+   receiver in such a deployment cannot afford the asymmetric
+   verification cost on every set-up exchange and instead
+   off-loads it.  Compliance with this document REQUIRES the
+   downstream consumer to be present and to perform that check;
+   the protocol described here is unsafe in isolation.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      SK(S), PK(S)      Long-term signing/verification keys of S.
+      sign{X}K          A digital signature on X with key K.
+      MAC(K, X)         A MAC on X under key K.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+      (R parses the signature but does not require it to verify)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+4. Message Format
+
+   Set-up and stream messages have the same structure as standard
+   TESLA Scheme 1.
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R}_SK(S) */
+      } SetupResponse;
+
+      struct {
+          opaque   payload;          /* m_i */
+          opaque   next_commitment;
+          opaque   disclosed_key;    /* absent for i = 1 */
+          opaque   mac;
+      } StreamMessage;
+
+5. Processing Rules
+
+   The sender follows the standard TESLA Scheme 1 procedure to
+   produce a SetupResponse, including computation of the
+   signature.
+
+   Upon receiving a SetupResponse the receiver:
+
+   1.  Reads commitment and signature from the response.
+
+   2.  Stores commitment as the expected commitment for k_1.
+
+   3.  Forwards the unverified signature to a downstream consumer
+       for independent verification.
+
+   4.  Transitions to the broadcast phase regardless of the
+       outcome of the downstream verification.
+
+   The receiver MUST NOT block the transition on the result of the
+   signature verification.  This is the defining processing rule
+   of the present profile.
+
+   The handling of the broadcast phase, including caching of
+   stream messages and delayed verification of cached MACs upon
+   key disclosure, follows standard TESLA Scheme 1.
+
+6. Security Considerations
+
+   This profile does not provide source authentication of the
+   broadcast stream on its own.  Receivers operating under this
+   profile commit to whatever commitment the SetupResponse carries
+   and accept any subsequent broadcast that is consistent with
+   that commitment.  An adversary that is on the network path
+   between the genuine sender and the receiver MAY synthesise a
+   complete forged SetupResponse, choose its own MAC key chain,
+   and broadcast arbitrary content that the receiver will commit
+   to as if it had originated at S.
+
+   The protocol described in this document does not protect
+   against impersonation of the sender by an active adversary.
+   Operators who deploy this profile MUST place a downstream
+   verifier with access to PK(S) on the receiver's processing
+   path; the downstream verifier MUST reject any traffic that the
+   ingestion receiver has accepted on the basis of an invalid
+   SetupResponse.  Without such a verifier no integrity guarantee
+   remains.
+
+   The remaining considerations of TESLA Scheme 1 still apply.
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed
+   at the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack, a one-way function f with adequate preimage resistance,
+   and a MAC algorithm that resists forgery without knowledge of
+   the key, even though the receiver itself does not perform the
+   signature verification described by this document.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

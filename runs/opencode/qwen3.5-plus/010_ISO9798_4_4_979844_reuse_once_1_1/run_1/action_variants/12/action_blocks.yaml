@@ -1,0 +1,48 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+  - send:
+    - ~RB
+    - ~Text1
+- role: Initiator_Respond
+  operations:
+  - receive:
+    - RB
+    - Text1
+  - generate_nonces:
+    - ~RA
+    - ~Text2
+    - ~Text3
+  - send:
+    - ~RA
+    - ~Text3
+    - <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>
+    - mac(<'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, kAB)
+    - ~RA
+    - ~Text3
+    - <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>
+    - mac(<'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, kAB)
+- role: Responder_Verify
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - <'sid1_mut_cr', RA, RB, 'IdB', Text2>
+    - mac1
+  - generate_nonces:
+    - ~Text5
+  - assert:
+    - mac1 = mac(<'sid1_mut_cr', RA, RB, 'IdB', Text2>, kAB)
+  - send:
+    - ~Text5
+    - mac(<'sid2_mut_cr', RB, RA>, kAB)
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - Text5
+    - mac2
+  - assert:
+    - mac2 = mac(<'sid2_mut_cr', RB, RA>, kAB)
+  - send: <END>

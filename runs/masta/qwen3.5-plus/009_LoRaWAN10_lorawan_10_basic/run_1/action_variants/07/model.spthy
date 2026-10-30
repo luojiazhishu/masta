@@ -1,0 +1,151 @@
+theory LoRaWAN10Join begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, brand/1
+
+rule Rule_Provisioning:
+  [
+    Fr(~AppKey)
+  ]
+  -->
+  [
+    !Ltk($D, ~AppKey),
+    !Identity($D, $DevEUI),
+    !Identity($S, $JoinEUI),
+    Out($DevEUI),
+    Out($JoinEUI)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~DevNonce),
+    !Ltk($D, AppKey),
+    !Identity($D, DevEUI),
+    !Identity($S, JoinEUI)
+  ]
+  --[ Test1(), Honest($D) ]->
+  [
+    Out(< 'JoinRequest', DevEUI, JoinEUI, ~DevNonce, mac(AppKey, <'JoinRequest', DevEUI, JoinEUI, ~DevNonce>) >),
+    !State_Device1($D, ~DevNonce, DevEUI, JoinEUI, AppKey)
+  ]
+
+rule RuleStep2:
+  [
+    In(< 'JoinRequest', DevEUI, JoinEUI, DevNonce, RequestMAC >),
+    Fr(~JoinNonce),
+    Fr(~DevAddr),
+    !Ltk($S, AppKey),
+    !Identity($S, JoinEUI),
+    !Identity($D, DevEUI)
+  ]
+  --[ Test2(), Running($S, $D, <DevEUI, JoinEUI, DevNonce, ~JoinNonce, ~DevAddr>), Honest($S) ]->
+  [
+    Out(senc(< 'JoinAccept', ~JoinNonce, ~DevAddr >, AppKey)),
+    !State_Server1($S, DevNonce, ~JoinNonce, ~DevAddr, AppKey)
+  ]
+
+rule RuleStep3:
+  [
+    In(senc(< 'JoinAccept', JoinNonce, DevAddr >, AppKey)),
+    !State_Device1($D, DevNonce, DevEUI, JoinEUI, AppKey),
+    !Identity($D, DevEUI),
+    !Identity($S, JoinEUI)
+  ]
+  --[ Test3(), SessionKeys($D, DevNonce, JoinNonce, AppKey), Running($D, $S, <DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr>), Commit($D, $S, <DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr>), Honest($D), Secret($D, $S, <DevNonce, JoinNonce>) ]->
+  [
+    !State_Device2($D, DevNonce, JoinNonce, DevAddr, AppKey),
+    Out(brand(DevAddr))
+  ]
+
+rule RuleStep4:
+  [
+    In(brand(DevAddr)),
+    !State_Server1($S, DevNonce, JoinNonce, DevAddr, AppKey),
+    !Identity($S, JoinEUI),
+    !Identity($D, DevEUI)
+  ]
+  --[ Test4(), Commit($S, $D, <DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr>), Honest($S) ]->
+  [
+    !State_Server2($S, DevNonce, JoinNonce, DevAddr, AppKey)
+  ]
+
+rule AppKeyReveal:
+  [
+    !Ltk(A, ltk)
+  ]
+  --[ AppKeyReveal(A) ]->
+  [
+    Out(ltk)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All d s t #i.
+     Commit(d, s, t) @ i
+   ==>
+     ( (Ex #j. Running(s, d, t) @ j
+           & j < i
+           & not (Ex d2 s2 #i2. Commit(d2, s2, t) @ i2
+                              & not (#i2 = #i))) )
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All d s t #i.
+     Commit(d, s, t) @ i
+   ==>
+     (Ex #j. Running(s, d, t) @ j)
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All s d t #i.
+     Commit(s, d, t) @ i
+   ==>
+     ( (Ex #j. Running(d, s, t) @ j
+           & j < i
+           & not (Ex s2 d2 #i2. Commit(s2, d2, t) @ i2
+                              & not (#i2 = #i))) )
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All s d t #i.
+     Commit(s, d, t) @ i
+   ==>
+     (Ex #j. Running(d, s, t) @ j)
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_keys:
+  "All d s t #i.
+     Commit(d, s, t) @ i
+   ==>
+     ( (Ex #j. Running(s, d, t) @ j
+           & j < i
+           & not (Ex d2 s2 #i2. Commit(d2, s2, t) @ i2
+                              & not (#i2 = #i))) )
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_keys:
+  "All d s t #i.
+     Commit(d, s, t) @ i
+   ==>
+     (Ex #j. Running(s, d, t) @ j)
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All d s x #i.
+     Secret(d, s, x) @ i
+   ==>
+     not (Ex #j. K(x) @ j)
+     | (Ex X #r. AppKeyReveal(X) @ r & Honest(X) @ i)"
+
+end

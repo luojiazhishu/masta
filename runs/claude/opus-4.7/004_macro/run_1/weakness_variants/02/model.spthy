@@ -1,0 +1,70 @@
+theory BSKTOpen
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule RegisterLtk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)) ]
+
+rule RevealLtk:
+  [ !Ltk($X, ~ltk) ]
+  --[ LtkReveal($X) ]->
+  [ Out(~ltk) ]
+
+/* Block 1: Client generates fresh session key k and sends aenc(k, pk(S)) */
+rule Client_Init:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, ~k), Running($C, $S, <'client', ~k>) ]->
+  [ Out(aenc(~k, pkS)), St_C_1($C, $S, ~k) ]
+
+/* Block 2: Server decrypts ciphertext and replies with h(k) */
+rule Server_Respond:
+  let k = adec(m1, ~ltk)
+  in
+  [ In(m1), !Ltk($S, ~ltk) ]
+  --[ Test2(), Running($S, 'nobody', <'client', k>) ]->
+  [ Out(h(k)) ]
+
+/* Block 3: Client accepts any reply without cryptographic check (the weakness) */
+rule Client_Finish:
+  [ St_C_1($C, $S, ~k), In(m2) ]
+  --[ Test3(), Commit($C, $S, <'client', ~k>),
+      Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+       (Ex #j. Running(s, 'nobody', <'client', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+       ( (Ex #j. Running(s, 'nobody', <'client', k>) @ j
+              & j < i
+              & not (Ex c2 s2 #i2. Commit(c2, s2, <'client', k>) @ i2
+                                 & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

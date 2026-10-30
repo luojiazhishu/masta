@@ -1,0 +1,56 @@
+theory CR_XOR_Echo begin
+
+builtins: hashing, xor
+
+functions: k/0 [private]
+
+rule SetupKeys:
+  [ Fr(~tid) ]
+  --[ Setup() ]->
+  [ !Ltk('I', k), !Ltk('R', k) ]
+
+rule RuleStep1:
+  [ Fr(~na), Fr(~r), Fr(~tid) ]
+  --[ Create('I', ~tid), Honest('I'), Test1() ]->
+  [ Out(<~na, ~r>), !InitState(~tid, ~na, ~r) ]
+
+rule RuleStep2:
+  let t = h(~na XOR k XOR ~nb)
+  in
+  [ In(<~na, ~r>), Fr(~nb) ]
+  --[ Create('R', ~nb), Running('R', 'I', <~na, ~nb>), Honest('R'), Test2() ]->
+  [ Out(<t, ~nb, ~r>) ]
+
+rule RuleStep3:
+  let expected_tag = h(~na XOR k XOR ~nb)
+  in
+  [ In(<expected_tag, ~nb, ~r>), !InitState(~tid, ~na, ~r) ]
+  --[ Commit('I', 'R', <~na, ~nb>), Honest('I'), Honest('R'), Test3() ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement_on_verification_tag [use_induction]:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

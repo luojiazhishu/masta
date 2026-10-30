@@ -1,0 +1,75 @@
+theory CrXorRaudit
+begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x,y) @ #i ==> not (x = y)"
+
+rule Register_Shared_Key:
+  [ Fr(~k) ]
+  --[ Secret('I', 'R', ~k), Honest('I'), Honest('R') ]->
+  [ !SharedKey('I', 'R', ~k), !SharedKey('R', 'I', ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(A, B, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !SharedKey('I', 'R', k) ]
+  --[ Test1(), Create('I', ~na) ]->
+  [ Out(~na), St_I_1(k, ~na) ]
+
+rule Responder_Respond:
+  let tag = h(na XOR k XOR ~nb)
+      audit = bar(~nb)
+  in
+  [ In(na), Fr(~nb), !SharedKey('R', 'I', k) ]
+  --[ Test2(), Neq(na, zero), Create('R', ~nb), Running('R', 'I', <'responder', tag>) ]->
+  [ Out(<tag, ~nb>), AuditLog('R', audit) ]
+
+rule Initiator_Verify:
+  let expected = h(na XOR k XOR nb)
+  in
+  [ St_I_1(k, na), In(<tag, nb>) ]
+  --[ Test3(), Neq(nb, zero), Eq(tag, expected), Commit('I', 'R', <'responder', tag>), Honest('I'), Honest('R') ]->
+  [ ]
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma verification_tag_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3
+     & not (Ex X #r. LtkReveal(X) @ #r)"
+
+end

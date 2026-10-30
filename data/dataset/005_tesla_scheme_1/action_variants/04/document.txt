@@ -1,0 +1,220 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-04
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of
+   streamed data sent from a single source to many receivers using
+   only symmetric Message Authentication Codes (MACs) on the
+   broadcast path.  Source authenticity is anchored in a single
+   asymmetric signature exchanged once during a connection set-up
+   phase.  Each authenticated stream message after the first
+   carries an additional fresh random tag that is conveyed in the
+   clear, outside of the MAC, to give the network layer a
+   per-broadcast packet identifier.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................2
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................7
+   7. References ......................................................8
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies Scheme 1, the simplest
+   member of the family.
+
+   Each authenticated stream message after the inaugural broadcast
+   carries an additional random packet tag.  The tag is generated
+   per broadcast and is not protected by the MAC.  Its purpose is
+   to allow link-layer infrastructure (caches, deduplicators,
+   monitoring agents) to identify individual stream packets without
+   reaching into the authenticated payload.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S            The sender of an authenticated stream.
+      R            A receiver of an authenticated stream.
+      f(k)         The commitment to MAC key k.
+      n_R          A receiver-chosen set-up nonce.
+      k_i          The i-th MAC key in the sender's chain.
+      m_i          The i-th payload broadcast by the sender.
+      D_i          The i-th data block, defined in Section 4.2.
+      r_i          A fresh random packet tag attached to the i-th
+                   stream message for i >= 2; see Section 4.2.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n),
+                                                              r_n
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+   The first stream message follows the standard Scheme 1 layout.
+   For all subsequent stream messages a fresh r_n is appended.
+
+4. Message Format
+
+4.1. Connection Set-Up Messages
+
+   The set-up messages are unchanged from standard TESLA Scheme 1.
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;
+          opaque   signature;
+      } SetupResponse;
+
+4.2. Authenticated Stream Messages
+
+   The first stream message has the standard Scheme 1 structure.
+   Subsequent stream messages have the following structure:
+
+      struct {
+          opaque   payload;          /* m_i, i >= 2 */
+          opaque   next_commitment;  /* equals f(k_{i+1}) */
+          opaque   disclosed_key;    /* equals k_{i-1} */
+          opaque   mac;              /* equals
+                                        MAC(k_i, <payload,
+                                                  next_commitment,
+                                                  disclosed_key>) */
+          opaque   packet_tag;       /* equals r_i,
+                                        fresh per broadcast */
+      } TaggedStreamMessage;
+
+   The MAC covers payload, next_commitment, and disclosed_key only;
+   packet_tag is excluded.  packet_tag MUST be drawn uniformly at
+   random from a space of at least 2^96 possible values for every
+   broadcast and MUST NOT be reused across broadcasts within a
+   single stream.
+
+5. Processing Rules
+
+   The connection set-up phase and the inaugural broadcast follow
+   standard TESLA Scheme 1.
+
+   When sending the i-th stream message for i >= 2 the sender:
+
+   1.  Selects a fresh MAC key k_{i+1}.
+
+   2.  Selects a fresh payload m_i.
+
+   3.  Forms D_i = (m_i, f(k_{i+1}), k_{i-1}).
+
+   4.  Computes mac = MAC(k_i, D_i).
+
+   5.  Selects a fresh packet_tag.
+
+   6.  Broadcasts (D_i, mac, packet_tag).
+
+   When receiving a stream message for i >= 2 the receiver:
+
+   1.  Reads payload, next_commitment, disclosed_key, mac, and
+       packet_tag from the broadcast.
+
+   2.  Caches (payload, next_commitment, disclosed_key) together
+       with mac for delayed verification, exactly as in standard
+       Scheme 1.
+
+   3.  MAY use packet_tag for application-layer deduplication.  The
+       value carries no further meaning.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is the
+   following: if a receiver R, through the verification procedure
+   of Section 5, accepts a payload m as having been sent by S, then
+   either S did broadcast m as part of the same stream or the
+   long-term signing key SK(S) was disclosed to the adversary prior
+   to the completion of R's connection set-up.
+
+   The packet_tag field is not authenticated.  An adversary on the
+   network MAY freely modify, replay, or fabricate packet_tag
+   values; receivers MUST NOT base any security decision on the
+   value of packet_tag.
+
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed at
+   the time of receipt.  Confidentiality of the broadcast payload
+   is out of scope.  Implementations MUST use a signature scheme
+   with existential unforgeability under chosen message attack, a
+   one-way function f with adequate preimage resistance, and a MAC
+   algorithm that resists forgery without knowledge of the key.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

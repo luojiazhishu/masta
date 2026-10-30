@@ -1,0 +1,36 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Response
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = tagmac(r0, ~r1, k)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Confirm
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - compute:
+    - tag_mac = tagmac(~r0, r1, k)
+    - reader_mac = readermac(tagmac(~r0, r1, k), k, ~r0)
+  - send:
+    - '''CONF'''
+    - reader_mac
+- role: Tag_Accept
+  operations:
+  - receive:
+    - '''CONF'''
+    - reader_mac
+  - compute:
+    - reader_mac = readermac(tag_mac, k, r0)
+  - send: <END>

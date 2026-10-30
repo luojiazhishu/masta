@@ -1,0 +1,57 @@
+theory TESLA_Scheme1
+begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+rule InitLtk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk('sender', ~sk), Out(pk(~sk)) ]
+
+rule SetupRequest:
+  [ Fr(~n_R), Fr(~r), Fr(~s) ]
+  --[ Test1(), Create('receiver') ]->
+  [ Out(<~r, ~s, ~n_R>), St_R(~r, ~s, ~n_R) ]
+
+rule SetupResponse:
+  [ In(<rcvr, snd, n_R>), !Ltk(snd, sk), Fr(~k_1) ]
+  --[ Test2(), Running(snd, rcvr, 'sender', n_R), Commit(snd, rcvr, 'sender', <n_R, f(~k_1)>), Honest(snd) ]->
+  [ Out(<snd, rcvr, f(~k_1), sign(<f(~k_1), n_R, 'init'>, sk)>), St_S(snd, rcvr, ~k_1) ]
+
+rule VerifySetupResponse:
+  [ St_R(R, S, n_R), In(<S, R, commit, sig>) ]
+  --[ Test3(), Commit(R, S, 'receiver', <n_R, commit>), Honest(R) ]->
+  [ ]
+
+rule StreamMsg1:
+  [ St_S(S, R, k_1), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4() ]->
+  [ Out(<'m1', ~m_1, f(~k_2), mac(k_1, <'m1', ~m_1, f(~k_2)>)>) ]
+
+rule StreamMsgN:
+  [ Fr(~m_n), Fr(~k_next), Fr(~k_prev) ]
+  --[ Test5() ]->
+  [ Out(<'mn', ~m_n, f(~k_next), ~k_prev, mac(~k_prev, <'mn', ~m_n, f(~k_next), ~k_prev>)>) ]
+
+rule LtkReveal:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, 'receiver', t) @ i
+   ==>
+       (Ex id #j. Create(id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

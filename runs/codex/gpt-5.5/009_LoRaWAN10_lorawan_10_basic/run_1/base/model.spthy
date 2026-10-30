@@ -1,0 +1,124 @@
+theory LoRaWAN10Join begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule Provision_Device_Server:
+  [ Fr(~appkey) ]
+  --[ Create($D, ~appkey), Create($S, ~appkey) ]->
+  [ !Provision($D, $S, ~appkey, 'devaddr') ]
+
+rule Device_Send_JoinRequest:
+  let req_body = <'JoinRequest', $D, $S, ~devnonce>
+      req_mac = mac(~appkey, req_body)
+      req_msg = <'JoinRequest', $D, $S, ~devnonce, req_mac>
+  in
+  [ Fr(~devnonce), !Provision($D, $S, ~appkey, devaddr) ]
+  --[ Test1(), Running($D, $S, <'server_request', ~appkey, ~devnonce>) ]->
+  [ Out(req_msg), Device_Wait($D, $S, ~appkey, devaddr, ~devnonce) ]
+
+rule Server_Verify_JoinRequest:
+  let req_body = <'JoinRequest', D, S, devnonce>
+      req_mac = mac(appkey, req_body)
+      req_msg = <'JoinRequest', D, S, devnonce, req_mac>
+  in
+  [ In(req_msg), !Provision(D, S, appkey, devaddr) ]
+  --[ Test2(), Running(S, D, <'device_request', appkey, devnonce>), Commit(S, D, <'server_request', appkey, devnonce>) ]->
+  [ Server_Verified(D, S, appkey, devaddr, devnonce) ]
+
+rule Server_Send_JoinAccept:
+  let app_skey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwk_skey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+      resp_body = <'JoinAccept', ~joinnonce, devaddr>
+      resp_mac = mac(appkey, resp_body)
+      accept_body = <'JoinAccept', ~joinnonce, devaddr, resp_mac>
+      accept_msg = senc(accept_body, appkey)
+  in
+  [ Fr(~joinnonce), Server_Verified(D, S, appkey, devaddr, devnonce) ]
+  --[ Test3(), Running(S, D, <'session_keys', appkey, devnonce, ~joinnonce, app_skey, nwk_skey>), Secret(D, S, app_skey), Secret(D, S, nwk_skey), Honest(S) ]->
+  [ Out(accept_msg), Server_Joined(D, S, appkey, devaddr, devnonce, ~joinnonce, app_skey, nwk_skey) ]
+
+rule Device_Accept_JoinAccept:
+  let resp_body = <'JoinAccept', joinnonce, devaddr>
+      resp_mac = mac(appkey, resp_body)
+      accept_body = <'JoinAccept', joinnonce, devaddr, resp_mac>
+      accept_msg = senc(accept_body, appkey)
+  in
+  [ Device_Wait(D, S, appkey, devaddr, devnonce), In(accept_msg) ]
+  --[ Test4(), Commit(D, S, <'device_request', appkey, devnonce>), Commit(D, S, <'device_joinnonce', appkey, devnonce, joinnonce>), Honest(D) ]->
+  [ Device_Accepted(D, S, appkey, devaddr, devnonce, joinnonce) ]
+
+rule Device_Derive_SessionKeys:
+  let app_skey = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwk_skey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ Device_Accepted(D, S, appkey, devaddr, devnonce, joinnonce) ]
+  --[ Test5(), Commit(D, S, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>), Secret(D, S, app_skey), Secret(D, S, nwk_skey), Honest(D) ]->
+  [ Device_Joined(D, S, appkey, devaddr, devnonce, joinnonce, app_skey, nwk_skey) ]
+
+// category: noninjective_agreement
+lemma device_noninjective_agreement:
+  "All a b appkey devnonce #i.
+     Commit(a, b, <'device_request', appkey, devnonce>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'device_request', appkey, devnonce>) @ j)"
+
+// category: injective_agreement
+lemma device_injective_agreement:
+  "All a b appkey devnonce #i.
+     Commit(a, b, <'device_request', appkey, devnonce>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'device_request', appkey, devnonce>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'device_request', appkey, devnonce>) @ i2
+                                & not (#i2 = #i))) )"
+
+// category: noninjective_agreement
+lemma network_noninjective_agreement:
+  "All a b appkey devnonce #i.
+     Commit(a, b, <'server_request', appkey, devnonce>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_request', appkey, devnonce>) @ j)"
+
+// category: injective_agreement
+lemma network_injective_agreement:
+  "All a b appkey devnonce #i.
+     Commit(a, b, <'server_request', appkey, devnonce>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'server_request', appkey, devnonce>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'server_request', appkey, devnonce>) @ i2
+                                & not (#i2 = #i))) )"
+
+// category: noninjective_agreement
+lemma session_keys_noninjective_agreement:
+  "All a b appkey devnonce joinnonce app_skey nwk_skey #i.
+     Commit(a, b, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>) @ j)"
+
+// category: injective_agreement
+lemma session_keys_injective_agreement:
+  "All a b appkey devnonce joinnonce app_skey nwk_skey #i.
+     Commit(a, b, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'session_keys', appkey, devnonce, joinnonce, app_skey, nwk_skey>) @ i2
+                                & not (#i2 = #i))) )"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

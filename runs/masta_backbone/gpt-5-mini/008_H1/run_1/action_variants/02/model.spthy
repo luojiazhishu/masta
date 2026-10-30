@@ -1,0 +1,56 @@
+theory famed_auth begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~ltkI), Fr(~ltkR), Fr(~I), Fr(~R) ]
+  --[ Test1(), Honest(~I), Running(~I, ~R, <~I, ~R>) ]->
+  [ Out(sign(<~I, ~R>, ~ltkI)), State_I(~I, ~R, ~ltkI, ~ltkR) ]
+
+rule RuleStep2:
+  [ State_I(~I, ~R, ~ltkI, ~ltkR), In(sign(<~I, ~R>, ~ltkI)), Fr(~rn) ]
+  --[ Test2(), Commit(~I, ~R, <~I, ~R>), Honest(~R), Running(~R, ~I, <~I, ~R>) ]->
+  [ Out(<sign(<~I, ~R>, ~ltkR), ~rn>), State_R(~I, ~R, ~ltkR), State_I(~I, ~R, ~ltkI, ~ltkR) ]
+
+rule RuleStep3:
+  [ State_I(~I, ~R, ~ltkI, ~ltkR), In(<sign(<~I, ~R>, ~ltkR), ~rn>) ]
+  --[ Test3() ]->
+  [ Out('<END>') ]
+
+// Reveal rule for long-term signing keys (allowed narrow exception)
+rule LtkReveal:
+  [ Fr(~A), Fr(~ltk) ] --[ LtkReveal(~A) ]-> [ Out(~ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

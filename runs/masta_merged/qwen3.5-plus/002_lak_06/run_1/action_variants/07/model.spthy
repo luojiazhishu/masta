@@ -1,0 +1,123 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule GenerateKey:
+  [
+    Fr(~k)
+  ]
+  --[
+    KeyGen($R, $T, ~k),
+    Secret($R, $T, ~k),
+    Honest($R),
+    Honest($T)
+  ]->
+  [
+    !Ltk($R, $T, ~k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~tid),
+    Fr(~r0)
+  ]
+  --[
+    Test1(),
+    StartR($R, ~tid, ~r0)
+  ]->
+  [
+    Out(~r0),
+    !StR1($R, ~tid, ~r0)
+  ]
+
+rule RuleStep2:
+  [
+    Fr(~r1),
+    In(~r0),
+    !Ltk($R, $T, ~k)
+  ]
+  --[
+    Test2(),
+    StartT($T, ~r0, ~r1, ~k),
+    Running($T, $R, <~r0, ~r1>)
+  ]->
+  [
+    Out(<~r1, h(~r0 ⊕ ~r1 ⊕ ~k)>),
+    !StT2($T, ~r0, ~r1, ~k)
+  ]
+
+rule RuleStep3:
+  [
+    !Ltk($R, $T, ~k),
+    !StR1($R, tid, r0),
+    In(pair(r1, tag_mac))
+  ]
+  --[
+    Test3(),
+    CommitR($R, $T, r0, r1),
+    Running($R, $T, <r0, r1>)
+  ]->
+  [
+    Out(h(tag_mac ⊕ ~k ⊕ r0)),
+    !StR3($R, $T, r0, r1, ~k)
+  ]
+
+rule RuleStep4:
+  [
+    !Ltk($R, $T, ~k),
+    !StT2($T, r0, r1, ~k),
+    In(reader_mac)
+  ]
+  --[
+    Test4(),
+    CommitT($T, $R, r0, r1)
+  ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !Ltk($R, $T, ~k)
+  ]
+  --[
+    LtkReveal($R, $T)
+  ]->
+  [
+    Out(~k)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All R T k #i.
+     Secret(R, T, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// VERDICT: falsified - XOR linearity enables reflection attack
+// h(r0⊕r1⊕k) = h(r1⊕r0⊕k) allows attacker to replay/reflection messages
+lemma noninjective_agreement_tag_authenticates_reader:
+  "All T R r0 r1 #i.
+     CommitT(T, R, r0, r1) @ i
+   ==>
+       (Ex #j. Running(R, T, <r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// VERDICT: falsified - XOR linearity enables reflection attack
+// Reader may commit without Tag having run with matching parameters
+lemma noninjective_agreement_reader_authenticates_tag:
+  "All R T r0 r1 #i.
+     CommitR(R, T, r0, r1) @ i
+   ==>
+       (Ex #j. Running(T, R, <r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

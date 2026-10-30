@@ -1,0 +1,49 @@
+theory TESLA_Scheme1_Profile begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// PKI Setup: Sender S has long-term key
+rule Setup_PKI:
+  [
+    Fr(~sk_S)
+  ]
+  --[ Setup() ]->
+  [
+    !Pk($S, pk(~sk_S)),
+    !Ltk($S, ~sk_S),
+    Out(pk(~sk_S))
+  ]
+
+// Step 1: Receiver R sends SetupRequest
+rule RuleStep1:
+  [
+    Fr(~n_R),
+    Fr(~tid_R)
+  ]
+  --[ Test1(), StartR(~tid_R, $R, $S, ~n_R) ]->
+  [
+    Out(<$R, $S, ~n_R>),
+    !StateR1(~tid_R, $R, $S, ~n_R)
+  ]
+
+// Step 2: Sender S receives request, generates k_1, sends SetupResponse
+rule RuleStep2:
+  [
+    In(<$R, $S, ~n_R>),
+    Fr(~k_1),
+    Fr(~tid_S),
+    !Ltk($S, ~sk_S)
+  ]
+  --[ Test2(), StartS(~tid_S, $S, $R, ~k_1, ~n_R) ]->
+  [
+    Out(<$S, $R, f(~k_1), sign(<f(~k_1), ~n_R>, ~sk_S)>),
+    !StateS1(~tid_S, $S, $R, ~k_1)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

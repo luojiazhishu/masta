@@ -1,0 +1,6 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - send: <END>

@@ -1,0 +1,76 @@
+theory NaxosSimple
+begin
+
+builtins: hashing
+
+functions: h1/2, h2/1, dh/2
+
+rule Setup:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk('I', ~ltkI), !Ltk('R', ~ltkR) ]
+
+rule Initiator_Start:
+  [ Fr(~eskI), !Ltk('I', ~ltkI) ]
+  --[ Test1(), Create('I', 'tidI'), Running('I', 'R', <'init', 'I', 'R'>) ]->
+  [ Out(h1(~eskI, ~ltkI)), St_I('I', ~eskI, ~ltkI) ]
+
+rule Responder:
+  [ In(hkI), Fr(~eskR), !Ltk('R', ~ltkR) ]
+  --[ Test2(), Create('R', 'tidR'), Running('R', 'I', <'resp', 'I', 'R'>), Test3(), Commit('R', 'I', <'resp', 'I', 'R'>), Honest('R'), Secret('R', 'I', h2(<dh(hkI, ~ltkR), 'I', 'R', 'channelV1'>)) ]->
+  [ Out(h1(~eskR, ~ltkR)) ]
+
+rule Initiator_Finish:
+  [ St_I('I', ~eskI, ~ltkI), In(hkR) ]
+  --[ Test4(), Commit('I', 'R', <'resp', 'I', 'R'>), Honest('I'), Secret('I', 'R', h2(<dh(hkR, ~ltkI), 'I', 'R', 'channelV1'>)) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk('I', ~ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', ~ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(~ltkR) ]
+
+// category: secrecy
+lemma secrecy_initiator:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_responder:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

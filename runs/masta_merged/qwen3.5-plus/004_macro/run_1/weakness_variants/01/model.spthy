@@ -1,0 +1,52 @@
+theory BSKTStatic begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: k_fixed/0
+
+rule SetupKeys:
+  [
+    Fr(~sk_s)
+  ]
+  -->
+  [
+    !Ltk($S, ~sk_s),
+    !Pk($S, pk(~sk_s)),
+    Out(pk(~sk_s))
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~n_c),
+    !Pk($S, pk_s)
+  ]
+  --[ Test1() ]->
+  [
+    Out(aenc(k_fixed(), pk_s))
+  ]
+
+rule RuleStep2:
+  [
+    In(aenc(m, pk_s)),
+    !Ltk($S, sk_s)
+  ]
+  --[ Test2() ]->
+  [
+    Out(h(adec(m, sk_s)))
+  ]
+
+rule RuleStep3:
+  [
+    In(h(k_fixed()))
+  ]
+  --[ Test3() ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

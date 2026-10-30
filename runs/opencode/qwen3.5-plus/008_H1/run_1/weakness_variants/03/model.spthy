@@ -1,0 +1,72 @@
+theory MutualIdentitySignatureAuth
+begin
+
+builtins: signing
+
+// Long-term key registration
+rule Register_Ltk:
+  [ Fr(~ltk) ]
+  --[ CreateLtk($A, ~ltk), Honest($A) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+// Adversary can reveal long-term keys
+rule Ltk_Reveal:
+  [ !Ltk(X, ltkX) ]
+  --[ LtkReveal(X) ]->
+  [ Out(ltkX) ]
+
+// Action Block 1: Initiator constructs and sends mI = sign(<I, R>, ltkI)
+rule Initiator_Send:
+  [ !Ltk(I, ltkI), !Pk(R, pkR) ]
+  --[ Test1(), Running(I, R, <'initiator', I, R>) ]->
+  [ Out(sign(<I, R>, ltkI)), St_I_Wait(I, R, pkR) ]
+
+// Action Block 2: Responder receives mI signed by I, sends mR = sign('msg', ltkR)
+rule Responder_Reply:
+  [ !Ltk(R, ltkR), !Pk(I, pkI), In(sign(<I, R>, ltkI)) ]
+  --[ Test2(), Running(R, I, <'responder', R, I>) ]->
+  [ Out(sign('msg', ltkR)) ]
+
+// Action Block 3: Initiator receives mR signed by R, accepts
+rule Initiator_Accept:
+  [ St_I_Wait(I, R, pkR), In(sign('msg', ltkR)) ]
+  --[ Test3(), Commit(I, R, <'initiator', I, R>) ]->
+  [ ]
+
+// Safety lemmas
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma - witnesses one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

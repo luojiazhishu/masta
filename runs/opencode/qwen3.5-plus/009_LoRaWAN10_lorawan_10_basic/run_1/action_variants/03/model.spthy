@@ -1,0 +1,117 @@
+theory LoRaWAN10
+begin
+
+builtins: symmetric-encryption, hashing
+
+// Long-term key persistence
+rule Setup:
+  [ Fr(~AppKey) ]
+  --[ Create($Device, ~AppKey) ]->
+  [ !Ltk($Device, ~AppKey) ]
+
+// Ltk reveal for adversary
+rule LtkReveal:
+  [ !Ltk($Owner, ~Key) ]
+  --[ LtkReveal($Owner) ]->
+  [ Out(~Key) ]
+
+// Action block 1: Device sends JoinRequest
+rule Device_JoinRequest:
+  [ !Ltk($Device, ~AppKey), Fr(~DevNonce) ]
+  --[ Test1(), Running($Device, $Server, <'Device', ~DevNonce>) ]->
+  [ Out(< <'JoinRequest', $Device, ~DevNonce>, h(<<'JoinRequest', $Device, ~DevNonce>>, ~AppKey) >),
+      St_Dev($Device, ~AppKey, ~DevNonce) ]
+
+// Action block 2: Server receives JoinRequest and sends JoinAccept
+rule Server_JoinAccept:
+  [ !Ltk($Server, ~AppKey), 
+    In(< <'JoinRequest', $Device, DevNonce>, h(<<'JoinRequest', $Device, DevNonce>>, ~AppKey) >) ]
+  --[ Test2(), Running($Server, $Device, <'Server', DevNonce>) ]->
+  [ Out(< senc(<~AppKey, DevNonce>, ~AppKey), 'LoRa-1.0' >) ]
+
+// Action block 3: Device receives JoinAccept and verifies
+rule Device_VerifyAccept:
+  [ St_Dev($Device, ~AppKey, ~DevNonce), 
+    In(< senc(<~AppKey, ~DevNonce>, ~AppKey), 'LoRa-1.0' >) ]
+  --[ Test3(), Commit($Device, $Server, <'Device', ~DevNonce>), Honest($Device), Secret($Device, $Server, ~AppKey) ]->
+  [ ]
+
+// Secrecy of the session keys (AppKey represents the shared secret)
+// category: secrecy
+lemma secrecy_SessionKeys:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Injective Agreement at the Device
+// category: injective_agreement
+lemma injective_agreement_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Device
+// category: noninjective_agreement
+lemma noninjective_agreement_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Injective Agreement at the Network Server
+// category: injective_agreement
+lemma injective_agreement_Server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Server
+// category: noninjective_agreement
+lemma noninjective_agreement_Server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Injective Agreement on the Session Keys (Device side)
+// category: injective_agreement
+lemma injective_agreement_SessionKeys_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective Agreement on the Session Keys
+// category: noninjective_agreement
+lemma noninjective_agreement_SessionKeys:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

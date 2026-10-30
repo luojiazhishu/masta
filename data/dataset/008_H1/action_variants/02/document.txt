@@ -1,0 +1,176 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 29, 2026                                          FAMED
+                                                          April 27, 2026
+
+
+     Mutual Identity-Signature Authentication, Responder Nonce
+                       draft-famed-h1-rln-00
+
+
+Abstract
+
+   This document specifies a two-message mutual authentication
+   handshake in which each party signs the pair of party
+   identities under its own long-term private key.  The
+   Responder's reply additionally carries a fresh liveness
+   nonce alongside the signature.  The nonce is not bound
+   inside the signed plaintext; it is intended to provide the
+   Initiator with a per-reply handle for correlation with its
+   local processing log.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . .  2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . .  3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . .  4
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . .  4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . .  5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . .  6
+
+
+1.  Introduction
+
+   This document specifies a two-message mutual authentication
+   handshake.  At session start, the Initiator signs the
+   ordered pair of participant identities under its own
+   private key and transmits the resulting signature to the
+   Responder.  The Responder verifies the Initiator's
+   signature, signs the same ordered pair under its own
+   private key, draws a fresh liveness nonce, and returns the
+   pair of signature and nonce to the Initiator.  The
+   Initiator verifies the Responder's signature against the
+   Responder's public key.
+
+   The liveness nonce is conveyed at the framing layer
+   alongside the signature; it does not enter the signed
+   plaintext and does not contribute to the security argument
+   of the handshake.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted
+   as described in BCP 14 [RFC2119] [RFC8174] when, and only
+   when, they appear in all capitals, as shown here.
+
+   I             The Initiator party.
+   R             The Responder party.
+   ltkI, ltkR    The long-term signing private keys of I and R.
+   pk(x)         The long-term signing public key derived from
+                 the private key x.
+   sign(m, sk)   Digital signature of message m under signing
+                 key sk.
+   verify(s, m, pk)
+                 Predicate that returns true if s is a valid
+                 signature on m under pk.
+   rn            A fresh liveness nonce drawn by the Responder.
+
+3.  Protocol Overview
+
+       Initiator                                     Responder
+       ---------                                     ---------
+       construct mI = sign(<I, R>, ltkI)
+
+                            ----- mI ----->
+
+                                          verify(mI, <I, R>,
+                                                 pk(ltkI))
+                                          construct
+                                            mR = sign(<I, R>,
+                                                      ltkR)
+                                          draw fresh rn
+
+                       <----- <mR, rn> -----
+
+       parse <s, rn'>
+       verify(s, <I, R>, pk(ltkR))
+       accept the run.
+
+4.  Message Format
+
+   InitiatorAuthMessage carries sign(<I, R>, ltkI).
+
+   ResponderAuthMessage carries the pair <s, rn> where s is
+   sign(<I, R>, ltkR) and rn is the fresh liveness nonce.
+
+5.  Processing Rules
+
+   The Initiator transmits mI = sign(<I, R>, ltkI).  The
+   Responder verifies the Initiator's signature, computes
+   mR = sign(<I, R>, ltkR), draws a fresh nonce rn, and emits
+   the pair <mR, rn>.  The Initiator parses the pair, verifies
+   mR, and accepts the run.
+
+6.  Security Considerations
+
+   The protocol is intended to provide identity-level mutual
+   authentication.  Identity-level mutual authentication
+   follows from the unforgeability of the underlying signature
+   scheme together with the authenticated binding between each
+   party identity and its long-term public key.
+
+   The liveness nonce rn is conveyed in the clear and is
+   visible to a network adversary.  Implementations MUST NOT
+   rely on the secrecy of rn for any security property.  The
+   nonce is not bound inside the signed plaintext and
+   therefore does not strengthen the binding between the run
+   and the accepted state.
+
+   The handshake does not provide non-injective agreement on
+   any session-level parameters in addition to the named pair.
+   The signed plaintext consists only of the identities I and
+   R and does not contain a per-session value inside the
+   signature.  An adversary that observes a signature emitted
+   in one run can replay it as the corresponding message of a
+   later run with the same identities, and the verifier cannot
+   tell the two runs apart.  Implementations that require
+   non-injective or injective agreement on session-level
+   parameters MUST NOT rely on this handshake.
+
+   Compromise of either party's long-term signing key allows
+   the adversary to forge signatures under that key.  The
+   protocol does not provide forward secrecy.  The freshness
+   of rn MUST be ensured by drawing it from a strong random
+   source.  Implementations MUST verify each signature in
+   constant time relative to the signed plaintext.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC8032]  Josefsson, S. and I. Liusvaara, "Edwards-Curve
+              Digital Signature Algorithm (EdDSA)", RFC 8032,
+              January 2017.
+
+
+8. Analysis Targets
+
+8.1 Weak Agreement
+8.2 Non-injective Agreement
+8.3 Injective Agreement

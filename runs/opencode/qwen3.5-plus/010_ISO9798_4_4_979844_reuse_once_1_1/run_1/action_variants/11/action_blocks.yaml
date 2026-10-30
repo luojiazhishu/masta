@@ -1,0 +1,45 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+  - send:
+    - ~RB
+    - ~Text1
+- role: Responder_Duplicate
+  operations:
+  - send:
+    - ~RB
+    - text1
+- role: Initiator_Respond
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~RA
+    - ~Text3
+  - send:
+    - ~RA
+    - ~Text3
+    - mac(<'sid1_mut_cr', ~RA, rb, 'IdB'>, ~kAB)
+- role: Responder_Verify
+  operations:
+  - receive:
+    - ra
+    - text3
+    - mac(<'sid1_mut_cr', ra, ~RB, 'IdB'>, ~kAB)
+  - send: []
+- role: Responder_Finalize
+  operations:
+  - generate_nonces:
+    - ~Text5
+  - send:
+    - ~Text5
+    - mac(<'sid2_mut_cr', ~RB, ra>, ~kAB)
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - text5
+    - mac(<'sid2_mut_cr', rb, ~RA>, ~kAB)
+  - send: <END>

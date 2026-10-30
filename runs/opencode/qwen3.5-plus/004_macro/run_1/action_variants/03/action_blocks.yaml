@@ -1,0 +1,19 @@
+- role: Client_Init
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+    - '''init'''
+- role: Server_Respond
+  operations:
+  - receive:
+    - ciphertext
+    - '''init'''
+  - send:
+    - h(adec(ciphertext, skS))
+- role: Client_Verify
+  operations:
+  - receive:
+    - h(~k)
+  - send: <END>

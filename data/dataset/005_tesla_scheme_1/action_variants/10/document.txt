@@ -1,0 +1,191 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-10
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of
+   streamed data sent from a single source to many receivers using
+   only symmetric Message Authentication Codes (MACs) on the
+   broadcast path.  Source authenticity is anchored in a single
+   asymmetric signature exchanged once during a connection set-up
+   phase.  When responding to a SetupRequest the sender is
+   REQUIRED to compute a one-way derivative of the receiver-chosen
+   nonce and commit it to a local request log.  The derivative is
+   not transmitted and does not affect any verification step.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies Scheme 1.
+
+   For accountability purposes, operators of a TESLA sender often
+   need to retain a record of every set-up request they have
+   served, without retaining the request itself in clear.  This
+   document REQUIRES the sender to derive a one-way value from the
+   receiver-chosen nonce and append it to a local request log when
+   it sends the SetupResponse.  The derivative is computed by
+   means of a one-way function bar(.) and travels only inside the
+   sender's host; it is not part of any wire format.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      bar(x)            A one-way derivative function applied to x.
+      request_record    The value bar(n_R), committed to the
+                        sender's local request log when it
+                        responds to the matching SetupRequest.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+   The on-the-wire protocol is identical to standard TESLA Scheme
+   1.  In addition, the sender maintains an append-only request
+   log, to which it commits bar(n_R) at the moment it produces the
+   SetupResponse.
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                          (S logs bar(n_R))
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+4. Message Format
+
+   The on-the-wire message formats are unchanged from standard
+   TESLA Scheme 1.  The request log entry has the following
+   abstract form:
+
+      struct {
+          opaque   request_record;   /* equals bar(n_R) */
+      } RequestLogEntry;
+
+   RequestLogEntry never travels over the network.  Implementations
+   are free to encode the log entry in any form suitable for their
+   accountability pipeline.
+
+5. Processing Rules
+
+   The receiver-side processing is unchanged from standard TESLA
+   Scheme 1.
+
+   When responding to a SetupRequest from R the sender:
+
+   1.  Reads nonce_R from the request.
+
+   2.  Forms the SetupResponse with the previously prepared
+       commitment f(k_1).
+
+   3.  Computes signature = sign{f(k_1), nonce_R}_SK(S).
+
+   4.  Computes request_record = bar(nonce_R) and appends a
+       RequestLogEntry containing request_record to the local
+       request log.
+
+   5.  Transmits Msg 0b on the network destined to R.  The order
+       of step 3 and step 4 is unspecified; implementations MAY
+       perform them in either order or in parallel.
+
+   The handling of the broadcast phase is unchanged from standard
+   TESLA Scheme 1.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is the
+   following: if a receiver R, through the verification procedure
+   of Section 5, accepts a payload m as having been sent by S, then
+   either S did broadcast m as part of the same stream or the
+   long-term signing key SK(S) was disclosed to the adversary prior
+   to the completion of R's connection set-up.
+
+   The request_record value is a strictly local artefact of the
+   sender.  It does not reach receivers, intermediates, or the
+   adversary on the broadcast path.  An adversary that later
+   obtains a request_record cannot deduce the original nonce_R
+   without inverting bar(.); operators that publish their request
+   log accept the resulting fingerprintability of past sessions.
+
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed at
+   the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack, a one-way function f with adequate preimage resistance,
+   a MAC algorithm that resists forgery without knowledge of the
+   key, and a one-way function bar with adequate preimage
+   resistance for the lifetime of the request log.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

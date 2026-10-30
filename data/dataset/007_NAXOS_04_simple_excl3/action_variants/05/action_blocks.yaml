@@ -1,0 +1,33 @@
+- role: Init_1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(<~eskI, ~lkI>)
+    - hkI = 'g'^h1(<~eskI, ~lkI>)
+  - send:
+    - hkI
+- role: Resp_1
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - pkI = 'g'^~lkI
+    - exR = h1(<~eskR, ~lkR>)
+    - hkr = 'g'^h1(<~eskR, ~lkR>)
+    - kR = h2(<'g'^~lkI^h1(<~eskR, ~lkR>), X^~lkR, $I, $R>)
+    - aux1 = com($I, $R)
+    - aux2 = bar('g'^~lkI)
+  - send:
+    - hkr
+- role: Init_2
+  operations:
+  - receive:
+    - Y
+  - compute:
+    - pkR = 'g'^~lkR
+    - exI = h1(<~eskI, ~lkI>)
+    - kI = h2(<Y^~lkI, 'g'^~lkR^h1(<~eskI, ~lkI>), $I, $R>)
+  - send: <END>

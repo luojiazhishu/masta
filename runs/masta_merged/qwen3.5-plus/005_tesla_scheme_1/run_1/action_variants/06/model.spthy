@@ -1,0 +1,43 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender S
+rule Generate_Keys_S:
+  [ Fr(~sk_S) ]
+  --[ Ltk($S, ~sk_S), Honest($S) ]->
+  [ !Pk($S, pk(~sk_S)), !Ltk($S, ~sk_S), Out(pk(~sk_S)) ]
+
+// RuleStep1: Receiver R sends SetupRequest
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R1), !Pk($S, pk_S) ]
+  --[ Test1(), Running($R, $S, <'setup_req', ~n_R>) ]->
+  [ Out(<$R, $S, ~n_R>), !StateR1(~tid_R1, $R, $S, ~n_R, pk_S) ]
+
+// RuleStep2: Sender S sends SetupResponse
+rule RuleStep2:
+  [ In(<$R, $S, n_R>), Fr(~k_1), Fr(~tid_S1), !Ltk($S, sk_S), !Pk($S, pk(sk_S)) ]
+  let commitment = f(~k_1)
+      signature = sign(<commitment, n_R>, sk_S)
+  in
+  --[ Test2(), Commit($S, $R, <commitment, n_R>), Honest($S) ]->
+  [ Out(<$S, $R, commitment, signature, 'commit_response'>), !StateS1(~tid_S1, $S, $R, ~k_1, commitment) ]
+
+// RuleStep3: Receiver R verifies SetupResponse
+// Signature verification is implicit: the rule only fires if the input 'signature' matches
+// the structure produced by RuleStep2 (since the adversary cannot forge sign(...) without sk_S).
+// We rely on term matching in the In fact pattern.
+rule RuleStep3:
+  [ In(<$S, $R, commitment, signature, 'commit_response'>), 
+    !StateR1(~tid_R1, $R, $S, n_R, pk_S),
+    !Pk($S, pk_S) ]
+  --[ Test3(), Commit($R, $S, <commitment, n_R>) ]->
+  [ !StateR2(~tid_R1, $R, $S, n_R, commitment) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

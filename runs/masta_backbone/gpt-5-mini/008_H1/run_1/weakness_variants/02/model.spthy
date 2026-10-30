@@ -1,0 +1,26 @@
+theory FAMED begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~ltkI), Fr(~I), Fr(~R) ]
+  --[ Test1() ]->
+  [ Init(<~I, ~R>, ~ltkI, sign(<~I, ~R>, ~ltkI)) ]
+
+rule RuleStep2:
+  [ Init(<~I, ~R>, ~ltkI, sign(<~I, ~R>, ~ltkI)), Fr(~ltkR) ]
+  --[ Test2() ]->
+  [ Out(sign(~R, ~ltkR)) ]
+
+rule RuleStep3:
+  [ In(mR) ]
+  --[ Test3() ]->
+  [ Accepted(mR) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

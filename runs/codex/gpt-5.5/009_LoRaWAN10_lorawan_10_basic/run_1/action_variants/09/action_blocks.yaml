@@ -1,0 +1,39 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - reqmac = mac(appkey, <'JoinRequest', deveui, joineui, ~devnonce>)
+    - request = <'JoinRequest', deveui, joineui, ~devnonce, mac(appkey, <'JoinRequest',
+      deveui, joineui, ~devnonce>)>
+  - send:
+    - request
+- role: Server_Process_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - respmac = mac(appkey, <'JoinAccept', ~joinnonce, devaddr, 'protoV1'>)
+    - acceptbody = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      ~joinnonce, devaddr, 'protoV1'>)>
+    - accept = senc(<'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      ~joinnonce, devaddr, 'protoV1'>)>, appkey)
+    - appskey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwkskey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  - send:
+    - accept
+- role: Device_Validate_JoinAccept
+  operations:
+  - compute:
+    - respmac = mac(appkey, <'JoinAccept', joinnonce, devaddr, 'protoV1'>)
+    - acceptbody = <'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce,
+      devaddr, 'protoV1'>)>
+    - accept = senc(<'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      joinnonce, devaddr, 'protoV1'>)>, appkey)
+  - send: []
+- role: Device_Derive_SessionKeys
+  operations:
+  - compute:
+    - appskey = senc(<'cst1', devnonce, joinnonce>, appkey)
+    - nwkskey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  - send: <END>

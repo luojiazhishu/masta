@@ -1,0 +1,17 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_protocol --run-dir runs/claude/opus-4.7/008_H1/run_1 --dataset-dir data/dataset --protocol-id 008_H1 --tamarin-timeout 300 --force
+
+==== MASTA score_protocol ====
+ run_dir:     /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/008_H1/run_1
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    008_H1
+ [av 01] model.spthy missing — counted as 0
+
+==== Score ====
+ protocol: 008_H1
+ M1: 0.714
+ M2: 0.852
+ M3: 0.667
+ M4: 0.648  (7/8 action variants present)
+ M5: 1.000  (3/3 weakness variants present)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/008_H1/run_1/score.json

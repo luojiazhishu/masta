@@ -1,0 +1,85 @@
+theory ISO9798_4_4_ReuseOnce
+begin
+
+functions: mac/2
+
+rule Register_pair:
+  [ Fr(~k), Fr(~reuse_ra) ]
+  --[ Create($A, $B), Honest($A), Honest($B) ]->
+  [ !SharedKey($A, $B, ~k), !SharedKey($B, $A, ~k), !ReuseRA($A, ~reuse_ra) ]
+
+rule Reveal_key:
+  [ !SharedKey(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule B_Send_Challenge:
+  [ !SharedKey($B, $A, k), Fr(~rb), Fr(~text1), Fr(~nonceb1) ]
+  --[ Test1() ]->
+  [ Out(<~rb, ~text1, ~nonceb1>), St_B_1($B, $A, k, ~rb), Net_Challenge($B, $A, ~rb, ~text1, ~nonceb1) ]
+
+rule A_Send_Token_Fresh:
+  [ !SharedKey($A, $B, k), Net_Challenge($B, $A, rb, text1, nonceb1), Fr(~ra), Fr(~text2), Fr(~text3) ]
+  --[ Test2(), RunningA($A, $B, ~ra, rb) ]->
+  [ Out(<~ra, ~text3, <'sid1_mut_cr', ~ra, rb, $B, ~text2>, mac(<'sid1_mut_cr', ~ra, rb, $B>, k)>),
+    St_A_1($A, $B, k, ~ra, rb), Net_TokenAB($A, $B, ~ra, rb, ~text2, ~text3, mac(<'sid1_mut_cr', ~ra, rb, $B>, k)) ]
+
+rule A_Send_Token_Reuse:
+  [ !SharedKey($A, $B, k), !ReuseRA($A, ra), Net_Challenge($B, $A, rb, text1, nonceb1), Fr(~text2), Fr(~text3) ]
+  --[ RunningA($A, $B, ra, rb) ]->
+  [ Out(<ra, ~text3, <'sid1_mut_cr', ra, rb, $B, ~text2>, mac(<'sid1_mut_cr', ra, rb, $B>, k)>),
+    St_A_1($A, $B, k, ra, rb), Net_TokenAB($A, $B, ra, rb, ~text2, ~text3, mac(<'sid1_mut_cr', ra, rb, $B>, k)) ]
+
+rule B_Send_Response:
+  [ St_B_1($B, $A, k, rb), Net_TokenAB($A, $B, ra, rb, text2, text3, mac(<'sid1_mut_cr', ra, rb, $B>, k)), Fr(~text4), Fr(~text5) ]
+  --[ Test3(), CommitB($B, $A, ra, rb), RunningB($B, $A, ra, rb) ]->
+  [ Out(<~text5, mac(<'sid2_mut_cr', rb, ra>, k)>), St_B_Done($B, $A, k, ra, rb), Net_TokenBA($B, $A, ra, rb, ~text5, mac(<'sid2_mut_cr', rb, ra>, k)) ]
+
+rule A_Verify_Response:
+  [ St_A_1($A, $B, k, ra, rb), Net_TokenBA($B, $A, ra, rb, text5, mac(<'sid2_mut_cr', rb, ra>, k)) ]
+  --[ Test4(), CommitA($A, $B, ra, rb) ]->
+  [ St_A_Done($A, $B, k, ra, rb) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All A B ra rb #i.
+     CommitA(A, B, ra, rb) @ #i
+   ==>
+     ( (Ex #j. RunningB(B, A, ra, rb) @ #j
+          & #j < #i
+          & not (Ex #i2. CommitA(A, B, ra, rb) @ #i2 & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All B A ra rb #i.
+     CommitB(B, A, ra, rb) @ #i
+   ==>
+     ( (Ex #j. RunningA(A, B, ra, rb) @ #j
+          & #j < #i
+          & not (Ex #i2. CommitB(B, A, ra, rb) @ #i2 & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All A B ra rb #i.
+     CommitA(A, B, ra, rb) @ #i
+   ==>
+     (Ex #j. RunningB(B, A, ra, rb) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All B A ra rb #i.
+     CommitB(B, A, ra, rb) @ #i
+   ==>
+     (Ex #j. RunningA(A, B, ra, rb) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+end

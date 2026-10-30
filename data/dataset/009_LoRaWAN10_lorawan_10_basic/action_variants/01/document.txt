@@ -1,0 +1,210 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+                  LoRaWAN 1.0 Join Procedure
+                       draft-famed-lora10-00
+
+
+Abstract
+
+   This document specifies the over-the-air activation handshake
+   used by LoRaWAN 1.0 end devices to join a network.  The
+   JoinRequest carries, alongside the MAC-protected request
+   body, a freshly generated transport identifier that allows
+   the end device to correlate the asynchronous JoinAccept with
+   its own pending state.  This memo describes the wire-level
+   messages, the processing rules applied by end devices and the
+   network-side join server, and the security properties that
+   result from the design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Provisioning  . . . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  7
+   7.  Session-Key Derivation  . . . . . . . . . . . . . . . . . .  8
+   8.  Security Considerations . . . . . . . . . . . . . . . . . .  8
+   9.  References  . . . . . . . . . . . . . . . . . . . . . . . . 10
+
+
+1.  Introduction
+
+   LoRaWAN end devices that join a network through the
+   over-the-air activation procedure share, prior to deployment,
+   a long-term application key with the join server that owns
+   the device's identity.  The JoinRequest is augmented with a
+   freshly generated TransportId in its outer envelope so that
+   an end device that has many concurrent runs can route the
+   corresponding JoinAccept back to the right pending state
+   without parsing the MAC-protected body twice.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   senc(m, k), mac(k, m), verif_mac(k, m, t), <a, b, ...>, cst1,
+   cst2 are as defined for the symmetric primitives used by
+   LoRaWAN 1.0.  Fresh random values include ~DevNonce,
+   ~JoinNonce, and ~TransportId.
+
+
+3.  Provisioning
+
+   The join server provisions each device with DevEUI, JoinEUI,
+   AppKey, and DevAddr; the server retains a matching entry.
+
+
+4.  Protocol Overview
+
+         Device                                          Server
+            |                                                |
+            |  <"JoinRequest", DevEUI, JoinEUI, DevNonce,    |
+            |   m, ~TransportId>                             |
+            |  m = mac(AppKey, <"JoinRequest", DevEUI,       |
+            |                   JoinEUI, DevNonce>)          |
+            |----------------------------------------------->|
+            |                                                |
+            |  senc(<"JoinAccept", JoinNonce, DevAddr, mm>,  |
+            |       AppKey)                                  |
+            |<-----------------------------------------------|
+
+
+5.  Message Format
+
+      struct {
+          opaque  Tag = "JoinRequest";
+          opaque  DevEUI;
+          opaque  JoinEUI;
+          opaque  DevNonce;
+          opaque  RequestMAC;
+          opaque  TransportId;
+      } JoinRequest;
+
+   TransportId is a freshly generated random value carried in
+   the outer envelope; it does not enter RequestMAC.
+
+      struct {
+          opaque  Tag = "JoinAccept";
+          opaque  JoinNonce;
+          opaque  DevAddr;
+          opaque  ResponseMAC;
+      } JoinAcceptBody;
+
+   The wire format of JoinAccept is senc(JoinAcceptBody, AppKey).
+
+
+6.  Processing Rules
+
+   1.  When initiating a join, the Device SHALL draw a fresh
+       ~DevNonce and a fresh ~TransportId, compute
+       RequestMAC = mac(AppKey, <"JoinRequest", DevEUI,
+       JoinEUI, ~DevNonce>), and emit the JoinRequest carrying
+       all six fields including ~TransportId.
+
+   2.  Upon receiving a JoinRequest, the join server SHALL
+       extract TransportId from the outer envelope without
+       interpretation, perform
+       verif_mac(AppKey, <"JoinRequest", DevEUI, JoinEUI,
+       DevNonce>, RequestMAC), and reject the message if the
+       function returns false.
+
+   3.  After successful verification, the join server SHALL
+       draw a fresh ~JoinNonce, derive AppSKey and NwkSKey, and
+       emit the JoinAccept body
+       <"JoinAccept", ~JoinNonce, DevAddr, ResponseMAC>
+       encrypted under AppKey.
+
+   4.  Upon receiving a JoinAccept, the Device SHALL decrypt the
+       message under its AppKey, validate ResponseMAC, and
+       derive AppSKey and NwkSKey.
+
+
+7.  Session-Key Derivation
+
+      AppSKey = senc(<cst1, DevNonce, JoinNonce>, AppKey)
+      NwkSKey = senc(<cst2, DevNonce, JoinNonce>, AppKey)
+
+
+8.  Security Considerations
+
+   The integrity of the JoinRequest is protected by RequestMAC
+   under the long-term AppKey.  TransportId is a transport
+   correlator only; it does not enter RequestMAC and SHALL NOT
+   be relied upon as authentication evidence.  An attacker that
+   observes the JoinRequest trivially learns TransportId.
+
+   AppSKey and NwkSKey are derived from AppKey and the two
+   per-session nonces; an on-path observer that does not hold
+   AppKey cannot recover either session key.
+
+   The Device-side commit on the five-tuple (AppKey, DevNonce,
+   JoinNonce) is taken on the JoinAccept actually received and
+   not on a JoinNonce that the join server is required to have
+   generated in the same exchange.  An attacker that captures a
+   JoinAccept emitted in any earlier exchange can replay that
+   message to a Device that has just sent a fresh JoinRequest;
+   the replayed JoinAccept passes MAC verification because
+   AppKey is long-term, and the Device installs session keys
+   computed from its current DevNonce and the JoinNonce of the
+   replayed message.
+
+   The join server is permitted to process more than one
+   JoinRequest carrying the same DevNonce.  Implementations
+   that need injectivity at the network side SHOULD maintain a
+   per-device short-window cache of recently processed DevNonce
+   values.
+
+
+9.  References
+
+9.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+9.2.  Informative References
+
+   [LoRaWAN10]
+              LoRa Alliance, "LoRaWAN 1.0 Specification",
+              October 2017.
+
+
+10. Analysis Targets
+
+10.1 Injective Agreement at the Device
+10.2 Non-injective Agreement at the Device
+10.3 Injective Agreement at the Network Server
+10.4 Non-injective Agreement at the Network Server
+10.5 Injective Agreement on the Session Keys
+10.6 Non-injective Agreement on the Session Keys
+10.7 Secrecy of the Session Keys

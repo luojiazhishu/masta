@@ -1,0 +1,77 @@
+theory CR_XOR_DiscK
+begin
+
+builtins: hashing, xor
+
+// ============================================================
+// Rules: one per action block, emitting Test<N>() facts
+// ============================================================
+
+// Action Block 1: Setup announcement - publish k on network
+rule Setup_Announce:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ Out(~k), !Ltk(~k) ]
+
+// Action Block 2: Initiator generates na and sends challenge
+rule Initiator_Start:
+  [ Fr(~na), !Ltk(~k) ]
+  --[ Test2(), Running(~na, ~k, 'initiator') ]->
+  [ Out(~na), St_I_1(~na, ~k) ]
+
+// Action Block 3: Responder receives na, generates nb, sends response
+rule Responder_Respond:
+  [ Fr(~nb), In(na), !Ltk(~k) ]
+  --[ Test3(), Running(~k, na, 'responder'), Create(~k, na) ]->
+  [ Out(<h(na XOR ~k XOR ~nb), ~nb>), St_R_1(na, ~k, ~nb) ]
+
+// Action Block 4: Initiator receives response and verifies
+rule Initiator_Verify:
+  [ St_I_1(na, ~k), In(<tag, nb>) ]
+  --[ Test4(), Commit(na, ~k, 'initiator', tag, nb), Honest(na) ]->
+  [ ]
+
+// ============================================================
+// Adversary capability: learn k from setup announcement
+// ============================================================
+
+rule Ltk_Reveal:
+  [ !Ltk(~k) ]
+  --[ LtkReveal(~k) ]->
+  [ Out(~k) ]
+
+// ============================================================
+// Safety Property Lemmas
+// ============================================================
+
+// Category: aliveness - Responder aliveness (expected: falsified)
+// Since k is published, attacker can impersonate responder
+// category: aliveness
+lemma aliveness:
+  "All a k role tag nb #i.
+     Commit(a, k, role, tag, nb) @ i
+   ==>
+       (Ex na #j. Create(k, na) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Category: noninjective_agreement - Agreement on verification tag
+// Expected: falsified due to key disclosure
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a k role tag nb #i.
+     Commit(a, k, role, tag, nb) @ i
+   ==>
+       (Ex #j. Running(k, a, 'responder') @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// ============================================================
+// Executable Lemma: witness complete honest protocol run
+// ============================================================
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

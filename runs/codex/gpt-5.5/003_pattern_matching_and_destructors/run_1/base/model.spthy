@@ -1,0 +1,59 @@
+theory SkPmd
+begin
+
+builtins: symmetric-encryption
+
+functions: encSucc/2, isPair/1, and/2, true/0
+
+equations:
+  encSucc(senc(m, k), k) = true,
+  isPair(<x, y>) = true,
+  and(true, true) = true
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Shared_Key_Setup:
+  [ Fr(~k) ]
+  --[ Create('I', ~k), Create('R', ~k) ]->
+  [ !SharedKey('I', 'R', ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey('I', 'R', k) ]
+  --[ LtkReveal('I'), LtkReveal('R') ]->
+  [ Out(k) ]
+
+rule Initiator_Send:
+  let
+    body = <~sec, ~pub>
+    msg = senc(body, k)
+  in
+  [ !SharedKey('I', 'R', k), Fr(~sec), Fr(~pub) ]
+  --[ Test1(), Secret('I', 'R', ~sec), Honest('I'), Honest('R'), Running('I', 'R', <'sk-pmd', ~sec, ~pub>) ]->
+  [ Out(msg), !Sent(msg) ]
+
+rule Responder_Process:
+  let
+    msg = senc(<sec, pub>, k)
+    body = sdec(msg, k)
+  in
+  [ !SharedKey('I', 'R', k), !Sent(msg), In(msg) ]
+  --[ Test2(), Eq(and(encSucc(msg, k), isPair(body)), true), Commit('R', 'I', <'sk-pmd', sec, pub>), Honest('I'), Honest('R') ]->
+  [ Out(pub) ]
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All x #i.
+     Secret('I', 'R', x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex #r. LtkReveal('I') @ r)
+     | (Ex #r. LtkReveal('R') @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

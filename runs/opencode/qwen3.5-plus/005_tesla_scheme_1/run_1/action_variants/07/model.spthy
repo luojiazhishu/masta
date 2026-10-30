@@ -1,0 +1,57 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: f/1, MAC/2
+
+rule Setup_Ltk:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk('S', ~skS), !Pk('S', pk(~skS)) ]
+
+rule Receiver_Init:
+  [ Fr(~n_R) ]
+  --[ Test1(), Create('R', ~n_R) ]->
+  [ Out(<'init', 'R', 'S', ~n_R>), St_R_Init('R', 'S', ~n_R) ]
+
+rule Sender_Respond:
+  [ In(<'init', R, 'S', n_R>), !Ltk('S', skS), Fr(~k_1) ]
+  --[ Test2(), Running('S', R, n_R, f(~k_1)), Honest('S') ]->
+  [ Out(<'S', R, f(~k_1), sign(<f(~k_1), n_R>, skS)>), St_S_Key('S', R, ~k_1) ]
+
+rule Receiver_VerifySetup:
+  [ St_R_Init(R, 'S', n_R), In(<'S', R, fk1, sig>) ]
+  --[ Test3(), CommitSetup(R, 'S', n_R, fk1), Honest(R) ]->
+  [ St_R_Key(R, 'S', fk1, n_R) ]
+
+rule Sender_Stream1:
+  [ St_S_Key('S', R, k1), Fr(~k_2), Fr(~m_1) ]
+  --[ Test4(), Running('S', R, ~m_1, f(~k_2)), Honest('S') ]->
+  [ Out(<<~m_1, f(~k_2)>, MAC(k1, <~m_1, f(~k_2)>), 'data1_marker'>), St_S_Stream('S', R, k1, ~k_2) ]
+
+rule Receiver_Stream1:
+  [ St_R_Key(R, 'S', fk1, n_R), In(<<m1, fk2>, mac1, marker>) ]
+  --[ Test5(), CommitStream(R, 'S', m1, fk2), Honest(R) ]->
+  [ St_R_Stream1(R, 'S', <m1, fk2>, mac1) ]
+
+rule LtkReveal:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+lemma aliveness_setup:
+  // category: aliveness
+  "All R n fk #i.
+     CommitSetup(R, 'S', n, fk) @ i
+   ==>
+       (Ex id #j. Create('R', id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

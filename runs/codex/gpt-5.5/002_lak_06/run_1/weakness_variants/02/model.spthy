@@ -1,0 +1,72 @@
+theory LakRfidOffset
+begin
+
+builtins: hashing
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+functions: x3/3
+
+rule Provision:
+  [ Fr(~k), Fr(~tag_id) ]
+  --[ Create($R, <'reader', $T>), Create($T, <'tag', $R>) ]->
+  [ !SharedKey($R, $T, ~k), !TagIdentifier($T, ~tag_id) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !SharedKey($R, $T, k) ]
+  --[ Test1(), Running($R, $T, <'tag', ~r0>), Honest($R), Honest($T) ]->
+  [ Out(~r0), ReaderState($R, $T, ~r0, k) ]
+
+rule Tag_Send_T1_And_Commit:
+  let tag_mac = h(x3(r0, ~r1, k)) in
+  [ In(r0), Fr(~r1), !SharedKey($R, $T, k), !TagIdentifier($T, tag_id) ]
+  --[ Test2(), Running($T, $R, <'reader', r0, ~r1>), Commit($T, $R, <'tag', r0>), Secret($R, $T, tag_id), Honest($R), Honest($T) ]->
+  [ Out(<~r1, tag_mac>) ]
+
+rule Reader_Verify_T1_And_Send_R1:
+  let expected = h(x3(r0, r1, k))
+      reader_mac = h(x3(tag_mac, k, r0))
+  in
+  [ ReaderState($R, $T, r0, k), In(<r1, tag_mac>) ]
+  --[ Test3(), Eq(tag_mac, expected), Commit($R, $T, <'reader', r0, r1>), Honest($R), Honest($T) ]->
+  [ Out(reader_mac) ]
+
+// category: secrecy
+lemma tag_identifier_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ #i
+   ==>
+       not (Ex #j. K(x) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b t r0 #i.
+     Commit(a, b, t) @ #i
+   & t = <'tag', r0>
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma reader_noninjective_agreement:
+  "All a b t r0 r1 #i.
+     Commit(a, b, t) @ #i
+   & t = <'reader', r0, r1>
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

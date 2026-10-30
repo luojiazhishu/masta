@@ -1,0 +1,77 @@
+theory FAMED begin
+
+builtins: symmetric-encryption
+
+functions: aux/1, pk/1
+
+/*
+  Persistent long-term key generation (produces !Ltk and !Pk facts)
+  and an optional PSK generator producing !Psk facts. These ensure that
+  any rule that uses a long-term key must include a matching !Ltk(...) in
+  its left-hand side, avoiding unconstrained key variables.
+*/
+rule Generate_key_pair:
+  [ Fr(~lk) ]
+  -->
+  [ !Ltk($A, ~lk), !Pk($A, pk(~lk)), Out(pk(~lk)) ]
+
+rule Generate_psk:
+  [ Fr(~psk) ]
+  -->
+  [ !Psk($A, ~psk), Out(~psk) ]
+
+/*
+  Protocol step corresponding to Initiator sending an encrypted message.
+  Note: the key variable ~lk is constrained by the persistent !Ltk fact
+  in the left-hand side, so it is not unconstrained.
+  Added action facts: Secret(...) and Honest(...) so that the secrecy
+  lemma's trigger is actually emitted by a rule (avoids vacuous proofs).
+  Also added Fr(~peer) so the Secret fact has a second participant term.
+*/
+rule RuleStep1:
+  let
+    auxv = aux(~sec)
+    msg = senc(<~sec, ~pub>, ~lk)
+  in
+  [ Fr(~sec), Fr(~pub), Fr(~peer), !Ltk($A, ~lk) ]
+  --[ Test1(), Secret($A, ~peer, ~sec), Honest($A) ]->
+  [ Out(msg) ]
+
+/*
+  Protocol step corresponding to Responder receiving and replying.
+  It consumes an In(msg) and replies with a terminal marker.
+*/
+rule RuleStep2:
+  [ In(msg) ]
+  --[ Test2() ]->
+  [ Out('<END>') ]
+
+/*
+  Canonical LtkReveal rule: allowed per Auditor write rules because the
+  threat model includes long-term key compromise; the label emits
+  LtkReveal($A) which the secrecy lemma references.
+*/
+rule LtkReveal:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+/*
+  Note on LtkReveal: we do NOT add other reveal rules beyond this
+  canonical long-term-key reveal; long-term keys are otherwise produced
+  only by Generate_key_pair.
+*/
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

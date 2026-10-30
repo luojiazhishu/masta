@@ -1,0 +1,26 @@
+theory CR_XOR begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [ Fr(~na) ]
+  --[ Test1() ]->
+  [ Out(~na), StateI(~na) ]
+
+rule RuleStep2:
+  [ StateI(~na), In(~na), Fr(~nb) ]
+  --[ Test2() ]->
+  [ Out(<h(~na ⊕ ~nb), ~nb>), StateR(~na, ~nb) ]
+
+rule RuleStep3:
+  [ StateR(~na, ~nb), In(<h(~na ⊕ ~nb), ~nb>) ]
+  --[ Test3() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

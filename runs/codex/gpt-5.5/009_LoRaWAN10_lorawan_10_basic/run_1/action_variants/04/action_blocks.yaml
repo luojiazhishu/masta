@@ -1,0 +1,40 @@
+- role: Device_Audit
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - send: []
+- role: Device_Send_JoinRequest
+  operations:
+  - compute:
+    - req = <'JoinRequest', $D, joineui, devnonce>
+    - request_mac = mac(appkey, <'JoinRequest', $D, joineui, devnonce>)
+  - send:
+    - req
+    - request_mac
+- role: Server_Handle_JoinRequest
+  operations:
+  - receive:
+    - req
+    - mac(appkey, req)
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - req = <'JoinRequest', $D, joineui, devnonce>
+    - response_mac = mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)
+    - body = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept', ~joinnonce,
+      devaddr>)>
+    - app_s_key = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwk_s_key = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  - send:
+    - senc(body, appkey)
+- role: Device_Receive_JoinAccept
+  operations:
+  - receive:
+    - senc(body, appkey)
+  - compute:
+    - response_mac = mac(appkey, <'JoinAccept', joinnonce, devaddr>)
+    - body = <'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce,
+      devaddr>)>
+    - app_s_key = senc(<'cst1', devnonce, joinnonce>, appkey)
+    - nwk_s_key = senc(<'cst2', devnonce, joinnonce>, appkey)
+  - send: <END>

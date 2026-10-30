@@ -1,0 +1,85 @@
+theory FAMED_ISO979844 begin
+
+builtins: hashing
+
+functions: mac/2
+
+// Long-term symmetric key shared between A and B
+rule SetupKey:
+  [ Fr(~kAB) ]
+  --[ Honest('IdA'), Honest('IdB') ]->
+  [ !SharedKey('IdA', 'IdB', ~kAB) ]
+
+// RuleStep1: Responder sends Challenge1 = <RB, Text1>
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Create('IdB', ~RB) ]->
+  [ Out(<~RB, ~Text1>), ResponderState('IdB', ~RB) ]
+
+// RuleStep2: Initiator receives Challenge1, sends TokenAB = <RA, Text3>
+rule RuleStep2:
+  [ In(<xRB, xText1>), Fr(~RA), Fr(~Text3) ]
+  --[ Test2(), Running('IdA', 'IdB', <~RA, xRB>) ]->
+  [ Out(<~RA, ~Text3>), InitiatorState('IdA', ~RA, xRB) ]
+
+// RuleStep3: Responder receives TokenAB, computes mac2, sends TokenBA
+rule RuleStep3:
+  [ In(<xRA, xText3>), ResponderState('IdB', xRB), !SharedKey('IdA', 'IdB', kAB), Fr(~Text5) ]
+  --[ Test3(), Running('IdB', 'IdA', <xRB, xRA>), Commit('IdB', 'IdA', <xRB, xRA>) ]->
+  [ Out(<~Text5, mac(<'sid2_mut_cr', xRB, xRA>, kAB)>) ]
+
+// RuleStep4: Initiator receives TokenBA, verifies mac2
+rule RuleStep4:
+  [ In(<xText5, mac2>), InitiatorState('IdA', xRA, xRB), !SharedKey('IdA', 'IdB', kAB) ]
+  --[ Test4(), Authenticated('IdA', 'IdB'), Commit('IdA', 'IdB', <xRA, xRB>) ]->
+  [ ]
+
+// Key reveal rule for kAB compromise
+rule LtkReveal:
+  [ !SharedKey('IdA', 'IdB', kAB) ]
+  --[ LtkReveal('IdA'), LtkReveal('IdB') ]->
+  [ Out(kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

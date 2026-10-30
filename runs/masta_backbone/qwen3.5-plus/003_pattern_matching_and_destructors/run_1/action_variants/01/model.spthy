@@ -1,0 +1,55 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption
+
+rule Setup_SharedKey:
+  [
+    Fr(~k)
+  ]
+  -->
+  [
+    !SharedKey(~k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    !SharedKey(~k)
+  ]
+  --[ Test1(), Secret('I', 'R', ~sec), Honest('I'), Honest('R') ]->
+  [
+    Out(<senc(<~sec, ~pub>, ~k), 'pmd'>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<senc(<sec, pub>, k), 'pmd'>),
+    !SharedKey(k)
+  ]
+  --[ Test2() ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !SharedKey(k)
+  ]
+  --[ LtkReveal('I'), LtkReveal('R') ]->
+  [
+    Out(k)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_secrecy_of_encapsulated_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

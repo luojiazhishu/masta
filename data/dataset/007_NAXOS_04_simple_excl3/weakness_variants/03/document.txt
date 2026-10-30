@@ -1,0 +1,177 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+              A Simplified NAXOS Authenticated
+                       Key Exchange Protocol
+                      draft-famed-naxos-s-00
+
+
+Abstract
+
+   This document specifies a two-message authenticated key exchange
+   between an Initiator and a Responder using long-term Diffie-
+   Hellman keys and per-session ephemeral exponents.  The
+   long-term key registration step publishes both the public key
+   and the matching long-term secret on the same registration
+   directory entry, so that auditing tools and recovery systems
+   that share the directory can index every issued credential by
+   its private value.  This memo describes the wire-level
+   messages, the processing rules applied by Initiator and
+   Responder, and the security properties that result from the
+   design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+     2.1.  Requirements Language . . . . . . . . . . . . . . . . .  3
+     2.2.  Notation  . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Long-Term Key Registration  . . . . . . . . . . . . . . . .  5
+   5.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  7
+   7.  Security Considerations . . . . . . . . . . . . . . . . . .  8
+   8.  References  . . . . . . . . . . . . . . . . . . . . . . . . 10
+
+
+1.  Introduction
+
+   This document describes a two-message authenticated key
+   exchange between an Initiator and a Responder.  Both parties
+   register a long-term Diffie-Hellman key pair through a public
+   directory.  The directory entry for a party records the
+   public key g^lk(P) together with the matching long-term
+   secret lk(P), so that auditing tools and account recovery
+   systems that share the directory can index every issued
+   credential by its private value.
+
+
+2.  Terminology
+
+2.1.  Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+2.2.  Notation
+
+   g, x^y, lk(P), ~eskI, ~eskR, h1, h2 are as defined for the
+   Diffie-Hellman group.
+
+
+3.  Protocol Overview
+
+         Initiator                                    Responder
+            |                                                |
+            |  hkI = g^h1(~eskI, lk(I))                      |
+            |----------------------------------------------->|
+            |                                                |
+            |              hkR = g^h1(~eskR, lk(R))          |
+            |<-----------------------------------------------|
+
+
+4.  Long-Term Key Registration
+
+   When a party P generates its long-term key pair, the key
+   registration service SHALL publish, for each registered
+   party P, a directory record of the form
+
+      Directory(P) = <g^lk(P), lk(P)>
+
+   that contains both the long-term public key and the
+   long-term secret.  The directory is reachable by every party
+   on the network as well as by auditing and recovery tools.
+
+
+5.  Message Format
+
+      struct {
+          opaque  HashedEphemeral;   // hkI
+      } Message1;
+
+      struct {
+          opaque  HashedEphemeral;   // hkR
+      } Message2;
+
+
+6.  Processing Rules
+
+   1.  When initiating the exchange, the Initiator SHALL emit
+       Message 1 carrying hkI = g^h1(~eskI, lk(I)).
+
+   2.  Upon receiving Message 1, the Responder SHALL generate a
+       fresh ~eskR, compute hkR = g^h1(~eskR, lk(R)), and emit
+       Message 2 carrying hkR.  The Responder SHALL compute the
+       session key as
+       kR = h2(<g^lk(I)^exR, X^lk(R), I, R>).
+
+   3.  Upon receiving Message 2, the Initiator SHALL compute
+       the session key as
+       kI = h2(<Y^lk(I), g^lk(R)^exI, I, R>).
+
+
+7.  Security Considerations
+
+   The directory entry that registers a long-term key pair
+   carries the long-term secret lk(P) in cleartext.  Any party
+   that reads the directory recovers lk(P) for every registered
+   party and can therefore compute every Diffie-Hellman shared
+   secret involving that party, and from there the session key
+   of every run that the party participates in.  The protocol
+   accordingly does not protect the confidentiality of the
+   session key against any party that has read access to the
+   registration directory, regardless of which long-term keys
+   the adversary has been authorised to compromise through
+   other channels.
+
+   Implementations that need confidentiality of the session key
+   MUST NOT publish lk(P) in the directory and MUST limit the
+   directory entry to the long-term public key.
+
+   This specification deliberately omits the third Diffie-Hellman
+   component that is present in the original NAXOS construction.
+
+
+8.  References
+
+8.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+8.2.  Informative References
+
+   [LLM07]    LaMacchia, B., Lauter, K., and Mityagin, A.,
+              "Stronger Security of Authenticated Key Exchange",
+              in Proceedings of ProvSec 2007, Lecture Notes in
+              Computer Science, vol. 4784, Springer, 2007.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Session Key

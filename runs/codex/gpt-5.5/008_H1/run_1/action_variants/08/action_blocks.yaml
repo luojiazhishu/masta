@@ -1,0 +1,32 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~sid
+  - compute:
+    - mI = sign(<$I, $R>, ltkI)
+  - send:
+    - mI
+- role: Responder_Verify_Send_First
+  operations:
+  - receive:
+    - mI
+  - compute:
+    - pair = <I, R>
+    - mR = sign(<I, R>, ltkR)
+  - assert:
+    - verify(mI, pair, pkI) = true
+  - send:
+    - mR
+- role: Responder_Send_Duplicate
+  operations:
+  - send:
+    - mR
+- role: Initiator_Verify_Accept
+  operations:
+  - receive:
+    - mR
+  - compute:
+    - pair = <I, R>
+  - assert:
+    - verify(mR, pair, pkR) = true
+  - send: <END>

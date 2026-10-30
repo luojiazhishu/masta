@@ -1,0 +1,31 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+    - IMK()
+- role: RuleStep2
+  operations:
+  - receive:
+    - na
+    - '''Init'''
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - x1 = na XOR k
+    - x2 = na XOR k XOR ~nb
+    - tag = h(na XOR k XOR ~nb)
+  - send:
+    - tag
+    - ~nb
+- role: RuleStep3
+  operations:
+  - receive:
+    - tag
+    - nb
+  - compute:
+    - x1 = na XOR k
+    - x2 = na XOR k XOR nb
+    - t_prime = h(na XOR k XOR nb)
+  - send: <END>

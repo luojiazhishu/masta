@@ -1,0 +1,62 @@
+theory CRXORDiscK
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// Block 1: Setup generates fresh shared key k, provisions it to the two
+// endpoints, and publishes the same value on the network.
+rule Setup_Announce:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ !Shared($A, $B, ~k), Out(~k) ]
+
+// Block 2: Initiator generates fresh challenge nonce na and transmits it.
+rule I_Start:
+  [ Fr(~na), !Shared($A, $B, k) ]
+  --[ Test2(), Create($A, ~na) ]->
+  [ St_I_1($A, $B, ~na, k), Out(~na) ]
+
+// Block 3: Responder receives na, generates nb, computes t = H(na XOR k XOR nb),
+// transmits <t, nb>, and records its Running claim.
+rule R_Respond:
+  let t = h(na XOR k XOR ~nb) in
+  [ In(na), !Shared($A, $B, k), Fr(~nb) ]
+  --[ Test3(),
+      Create($B, ~nb),
+      Honest($A), Honest($B),
+      Running($B, $A, <'R', na, ~nb, t>) ]->
+  [ Out(<t, ~nb>) ]
+
+// Block 4: Initiator receives <t, nb>, recomputes the tag and verifies equality.
+rule I_Finish:
+  [ St_I_1($A, $B, ~na, k), In(<t, nb>) ]
+  --[ Test4(),
+      Eq(t, h(~na XOR k XOR nb)),
+      Honest($A), Honest($B),
+      Commit($A, $B, <'R', ~na, nb, t>) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,89 @@
+theory Iso979844ReuseOnce
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk($A, $B, ~k), !Ltk($B, $A, ~k) ]
+
+rule Reveal_A:
+  [ !Ltk($A, $B, k) ]
+  --[ LtkReveal($A) ]->
+  [ Out(k) ]
+
+rule Reveal_B:
+  [ !Ltk($B, $A, k) ]
+  --[ LtkReveal($B) ]->
+  [ Out(k) ]
+
+rule Responder_Challenge:
+  [ !Ltk($B, $A, k), In(<rb, text1>) ]
+  --[ Test1(), Create($B, <'resp', rb>), Running($B, $A, <'B', rb>) ]->
+  [ Out(<rb, text1>), St_B_1($B, $A, k, rb) ]
+
+rule Initiator_TokenAB:
+  [ !Ltk($A, $B, k), Fr(~ra), Fr(~text2), Fr(~text3), In(<rb, text1>) ]
+  --[ Test2(), Create($A, <'init', ~ra>), Running($A, $B, <'A', ~ra, rb>) ]->
+  [ Out(<~ra, ~text3, <'sid1_mut_cr', ~ra, rb, $B, ~text2>, mac(<'sid1_mut_cr', ~ra, rb, $B>, k)>),
+    St_A_1($A, $B, k, ~ra, rb) ]
+
+rule Responder_TokenBA:
+  [ St_B_1($B, $A, k, rb), Fr(~text4), Fr(~text5),
+    In(<ra, text3, tagged1, mac(<'sid1_mut_cr', ra, rb, $B>, k)>) ]
+  --[ Test3(), Running($B, $A, <'B', ra, rb>), Commit($B, $A, <'B', ra, rb>), Honest($A), Honest($B) ]->
+  [ Out(<~text5, mac(<'sid2_mut_cr', rb, ra>, k)>) ]
+
+rule Initiator_Finish:
+  [ St_A_1($A, $B, k, ra, rb), In(<text5, mac(<'sid2_mut_cr', rb, ra>, k)>) ]
+  --[ Test4(), Commit($A, $B, <'A', ra, rb>), Honest($A), Honest($B) ]->
+  [ ]
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All a b ra rb #i.
+     Commit(a, b, <'A', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'B', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'A', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All a b ra rb #i.
+     Commit(a, b, <'B', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'A', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'B', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All a b ra rb #i.
+     Commit(a, b, <'A', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'B', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All a b ra rb #i.
+     Commit(a, b, <'B', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'A', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

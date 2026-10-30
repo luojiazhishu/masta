@@ -1,0 +1,73 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing
+
+// ============================================================================
+// TESLA Scheme 1 Protocol Model
+// Action blocks: 1=SetupRequest, 2=SetupResponse, 3=Msg1, 4=Msg2, 5=Verify
+// ============================================================================
+
+rule SetupLtk:
+  [ Fr(~skS) ]
+  --[ Create('S') ]->
+  [ !Ltk('S', ~skS) ]
+
+// Action Block 1: Receiver sends SetupRequest
+rule Receiver_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1() ]->
+  [ Out(<'req', ~nR>), St_R(~nR) ]
+
+// Action Block 2: Sender sends SetupResponse  
+rule Sender_SetupResponse:
+  [ In(<'req', nR>), !Ltk('S', ~skS), Fr(~k1) ]
+  --[ Test2() ]->
+  [ Out(<'resp', h(~k1)>), St_S(~k1, nR) ]
+
+// Action Block 3: Sender broadcasts Msg 1
+rule Sender_Broadcast_Msg1:
+  [ St_S(k1, nR), Fr(~k2), Fr(~m1) ]
+  --[ Test3(), Commit('S', 'R', ~m1) ]->
+  [ Out(<'msg1', ~m1, h(~k2)>), St_S1(~k2, nR, ~m1, k1) ]
+
+// Action Block 4: Sender broadcasts Msg 2 (discloses k_1)
+rule Sender_Broadcast_Msg2:
+  [ St_S1(k2, nR, m1, k1), Fr(~k3), Fr(~m2) ]
+  --[ Test4() ]->
+  [ Out(<'msg2', ~m2, h(~k3), k1>), St_S2(nR, m1, k1) ]
+
+// Action Block 5: Receiver verifies Msg 1
+rule Receiver_Verify_Msg1:
+  [ St_R(nR), St_S2(nR, m1, k1), In(<'msg2', m2, hk3, k1>) ]
+  --[ Test5(), Commit('R', 'S', m1) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(X, skX) ]
+  --[ LtkReveal(X) ]->
+  [ Out(skX) ]
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All m #i.
+     Commit('R', 'S', m) @ i
+   ==>
+     (Ex #j. Commit('S', 'R', m) @ j)
+   | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma sender_aliveness:
+  "All m #i.
+     Commit('R', 'S', m) @ i
+   ==>
+     (Ex #j. Create('S') @ j)
+   | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+     Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+   & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

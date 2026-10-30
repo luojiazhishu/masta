@@ -1,0 +1,62 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: f/1, mac/2, aux/1
+
+rule Setup_Ltk:
+  [ Fr(~ltk_S) ]
+  --[ ]->
+  [ !Ltk($S), !Pk($S, pk(~ltk_S)) ]
+
+rule Setup_Ltk_R:
+  [ Fr(~ltk_R) ]
+  --[ ]->
+  [ !Ltk($R) ]
+
+rule LtkReveal_Rule:
+  [ !Ltk(X) ]
+  --[ LtkReveal(X) ]->
+  [ Out(X) ]
+
+rule Receiver_Start:
+  [ Fr(~n_R), !Ltk($R) ]
+  --[ Test1(), Create($R, ~n_R) ]->
+  [ Out(<$R, $S, ~n_R>), St_R_Setup($R, $S, ~n_R) ]
+
+rule Sender_Respond:
+  [ In(<$R, $S, n_R>), !Ltk($S), !Pk($S, pk_S), Fr(~k_1), Fr(~sk_S) ]
+  --[ Test2(), Running($S, $R, <'setup', $S, $R, f(~k_1), n_R>), Create($S, ~k_1) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~sk_S)>), !St_S_Key($S, $R, ~k_1) ]
+
+rule Sender_Stream1:
+  [ !St_S_Key($S, $R, ~k_1), Fr(~k_2), Fr(~m_1) ]
+  --[ Test3(), Running($S, $R, <'stream', $S, $R, ~m_1, f(~k_2)>), Secret($S, $R, ~k_1), Honest($S) ]->
+  [ Out(<~m_1, f(~k_2), mac(~k_1, <~m_1, f(~k_2)>)>), !St_S_Stream($S, $R, ~m_1, f(~k_2), ~k_1) ]
+
+rule Receiver_VerifySetup:
+  [ St_R_Setup($R, $S, n_R), In(<$S, $R, fk1, sig>) ]
+  --[ Test4(), Running($R, $S, <'setup', $S, $R, fk1, n_R>) ]->
+  [ St_R_Key($R, $S, fk1, n_R) ]
+
+rule Receiver_VerifyStream:
+  [ St_R_Key($R, $S, fk1, n_R), In(<m_1, fk2, mac_val>), !St_S_Stream($S, $R, m_1, fk2, k1) ]
+  --[ Test5(), Commit($R, $S, <'stream', $S, $R, m_1, fk2>), Honest($R) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All R S m fk2 #i.
+     Commit(R, S, <'stream', S, R, m, fk2>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'stream', S, R, m, fk2>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

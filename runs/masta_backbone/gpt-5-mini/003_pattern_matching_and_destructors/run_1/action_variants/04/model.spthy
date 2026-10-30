@@ -1,0 +1,38 @@
+theory FAMED_SK_PMD begin
+
+builtins: symmetric-encryption
+
+functions: tag_aux/2
+
+/* helper rule that provisions a long-term symmetric key */
+rule KeyGen:
+  [ Fr(~k) ]
+  -->
+  [ !SymKey(~k), Out(~k) ]
+
+rule KeyReveal:
+  [ !SymKey(k) ]
+  --[ LtkReveal('Responder') ]->
+  [ Out(k) ]
+
+/* RuleStep1 corresponds to responder processing and releasing pub. */
+rule RuleStep1:
+  let auxr = tag_aux(sec,pub)
+  in
+  [ In(senc(<sec,pub>,k)), !SymKey(k) ]
+  --[ Test1(), Secret('Initiator','Responder',sec), Honest('Responder') ]->
+  [ Out(pub) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_secrecy:
+  "All x #i.
+     Secret('Initiator','Responder', x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex #r. LtkReveal('Responder') @ r & Honest('Responder') @ i)"
+
+end

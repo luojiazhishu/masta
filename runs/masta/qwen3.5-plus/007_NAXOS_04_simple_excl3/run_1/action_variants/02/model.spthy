@@ -1,0 +1,93 @@
+theory SimplifiedNAXOS begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+// Key generation rule - creates persistent long-term keys for all agents
+rule Generate_DH_key_pair:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, 'g'^~ltk)
+  , Out('g'^~ltk)
+  ]
+
+// RuleStep1: Initiator sends Message 1 (hkI)
+rule RuleStep1:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tid)
+  , !Ltk($I, ~lkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1(), Honest($I), Create($I, ~tid) ]->
+  [ Out(hkI)
+  , !InitState1(~tid, $I, $R, ~lkI, exI)
+  ]
+
+// RuleStep2: Responder receives hkI, generates ~eskR and ~SessionCorrelator, sends <hkR, ~SessionCorrelator>
+rule RuleStep2:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+  in
+  [ In(hkI)
+  , Fr(~eskR)
+  , Fr(~sessionCorr)
+  , Fr(~tidR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), Running($R, $I, <hkR, ~sessionCorr>), Honest($R), Create($R, ~tidR) ]->
+  [ Out(<hkR, ~sessionCorr>)
+  , !RespState1(~tidR, $R, $I, ~lkR, exR, hkI)
+  ]
+
+// RuleStep3: Initiator receives <hkR, ~SessionCorrelator>, terminates
+rule RuleStep3:
+  [ In(<hkR, sessionCorr>)
+  , !InitState1(~tid, $I, $R, ~lkI, exI)
+  ]
+  --[ Test3(), Commit($I, $R, <hkR, sessionCorr>), Honest($I), Secret($I, $R, exI) ]->
+  [ Out('<END>')
+  ]
+
+// Long-term key reveal rule for compromise modeling
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

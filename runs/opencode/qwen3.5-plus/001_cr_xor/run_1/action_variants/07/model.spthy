@@ -1,0 +1,58 @@
+theory CR_XOR_RRtx
+begin
+
+builtins: hashing
+
+// Long-term symmetric key shared between parties
+// Modeled as a persistent fact !Ltk(k)
+
+// Initiator starts: generate fresh na, send it
+rule Initiator_Start:
+  [ Fr(~na) ]
+  --[ Test1(), Create('R', ~na) ]->
+  [ Out(~na), St_I(~na) ]
+
+// Responder receives na, generates nb, computes tag, sends response twice
+rule Responder_Reply:
+  [ In(na), Fr(~nb) ]
+  --[ Test2(), Running('R', 'I', ~nb) ]->
+  [ Out(~nb), Out(~nb), St_R(~nb) ]
+
+// Initiator receives response, verifies tag, completes
+rule Initiator_Verify:
+  [ St_I(~na), St_R(nb) ]
+  --[ Test3(), Commit('I', 'R', nb), Honest('I') ]->
+  [ ]
+
+// Adversary can reveal long-term key
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ ]
+
+// Aliveness property: if I commits, R must have been active
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement on the nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma: witness a complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,70 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - serverPk
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - securityPolicy
+    - userTokenPolicy
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - req_body = <'OSCReq', clientPk, ~Nc>
+    - req_digest = h(<'OSCReq', clientPk, ~Nc>)
+    - req_sig = sign(h(<'OSCReq', clientPk, ~Nc>), skC)
+  - send:
+    - clientPk
+    - req_body
+    - req_sig
+    - req_digest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - clientPk
+    - req_body
+    - sign(req_digest, clientSk)
+    - req_digest
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - compute:
+    - req_body = <'OSCReq', clientPk, clientNonce>
+    - req_digest = h(<'OSCReq', clientPk, clientNonce>)
+    - auditCommitment = com(clientPk, ~Ns)
+    - keyFingerprint = bar(serverPk)
+    - resp_body = <'OSCRes', ~Ns, ~ST, ~TTL>
+    - resp_digest = h(<'OSCRes', ~Ns, ~ST, ~TTL>)
+    - resp_sig = sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), skS)
+    - channelBinding = h(<clientNonce, ~Ns>)
+  - send:
+    - serverPk
+    - resp_body
+    - resp_sig
+    - resp_digest
+- role: Client_OpenSecureChannelComplete
+  operations:
+  - receive:
+    - serverCert
+    - resp_body
+    - sign(resp_digest, serverSk)
+    - resp_digest
+  - compute:
+    - resp_body = <'OSCRes', serverNonce, securityToken, tokenLifetime>
+    - resp_digest = h(<'OSCRes', serverNonce, securityToken, tokenLifetime>)
+    - channelBinding = h(<~Nc, serverNonce>)
+  - send: <END>

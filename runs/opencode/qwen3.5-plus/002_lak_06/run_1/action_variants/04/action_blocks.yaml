@@ -1,0 +1,35 @@
+- role: Reader_Challenge
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~R
+  - send:
+    - '''INIT'''
+    - ~r0
+    - ~R
+- role: Tag_Response
+  operations:
+  - receive:
+    - '''INIT'''
+    - r0
+    - R
+  - generate_nonces:
+    - ~r1
+    - ~T
+  - send:
+    - ~r1
+    - h(<r0, ~r1, k>)
+    - ~T
+- role: Reader_Verify
+  operations:
+  - receive:
+    - r1
+    - h(<r0, r1, k>)
+    - T
+  - send:
+    - h(<h(<r0, r1, k>), k, r0>)
+- role: Tag_Verify
+  operations:
+  - receive:
+    - h(<h(<r0, r1, k>), k, r0>)
+  - send: <END>

@@ -1,0 +1,439 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-00
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of streamed
+   data sent from a single source to many receivers using only
+   symmetric Message Authentication Codes (MACs) on the broadcast
+   path.  Source authenticity is anchored in a single asymmetric
+   signature exchanged once during a connection set-up phase.  The
+   sender commits to a chain of MAC keys and discloses each key only
+   after a delay, so that an adversary observing a disclosed key
+   cannot forge messages that were already accepted by the receivers.
+
+   Scheme 1 is the simplest variant in the TESLA family.  It assumes a
+   loose upper bound on network propagation delay between the sender
+   and each receiver.  Receivers MUST discard messages whose key has
+   already been disclosed by the time of receipt.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+      2.1. Requirements Language ......................................3
+      2.2. Notation ...................................................3
+   3. Protocol Overview ...............................................4
+      3.1. Roles ......................................................4
+      3.2. Message Sequence ...........................................4
+   4. Message Format ..................................................5
+      4.1. Connection Set-Up Messages .................................5
+      4.2. Authenticated Stream Messages ..............................6
+   5. Processing Rules ................................................6
+      5.1. Sender Initialization ......................................6
+      5.2. Connection Set-Up at the Sender ............................7
+      5.3. Connection Set-Up at the Receiver ..........................7
+      5.4. Sending Authenticated Data .................................8
+      5.5. Receiving Authenticated Data ...............................8
+   6. Security Considerations .........................................9
+   7. References ....................................................11
+      7.1. Normative References ......................................11
+      7.2. Informative References ....................................11
+
+1. Introduction
+
+   Many distribution scenarios require a single source to send a
+   continuous stream of data to a potentially large set of receivers,
+   while allowing each receiver to verify that every accepted message
+   originated at the legitimate source.  Examples include software
+   update channels, sensor data fan-out, and routing protocol
+   announcements.  Per-message asymmetric signatures provide the
+   strongest authentication guarantees but are too expensive at the
+   bandwidth and computation budgets imposed by these scenarios.
+
+   The TESLA family of protocols achieves source authentication using
+   only symmetric MACs on the broadcast path.  TESLA tolerates the
+   asymmetric cost of a single signature, which is exchanged during a
+   per-receiver connection set-up phase.  After set-up, the sender
+   broadcasts data accompanied by a MAC computed under a key that is
+   not yet known to the receivers.  After a fixed delay the sender
+   discloses the key as part of a later broadcast.  Receivers cache
+   each message together with its MAC until the corresponding key is
+   disclosed, at which point they verify the cached MAC.
+
+   This document specifies Scheme 1, the simplest member of the
+   family.  Scheme 1 differs from later schemes by committing to the
+   first MAC key explicitly through a signature in the set-up phase
+   and by relying on a single, conservative upper bound on network
+   propagation delay.  Scheme 2, defined elsewhere, supports loose
+   time synchronization through additional set-up state and is not
+   covered here.
+
+2. Terminology
+
+2.1. Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+2.2. Notation
+
+   The following notation is used throughout this document:
+
+      S            The sender of an authenticated stream.
+      R            A receiver of an authenticated stream.
+      SK(S)        The long-term private signing key of S.
+      PK(S)        The long-term public verification key of S.
+      sign{X}K     A digital signature on X computed with key K.
+      MAC(K, X)    A symmetric Message Authentication Code on X
+                   computed under key K.
+      f(k)         A one-way function applied to MAC key k; f(k) is
+                   referred to as the commitment to k.
+      n_R          A nonce drawn fresh at the receiver during set-up.
+      k_i          The i-th MAC key in the sender's key chain.
+      m_i          The i-th payload broadcast by the sender.
+      D_i          The i-th data block; for i = 1, D_1 = m_1, f(k_2);
+                   for i > 1, D_i = m_i, f(k_{i+1}), k_{i-1}.
+      A, B         Concatenation of A and B in a single message.
+      <A, B, C>    A tuple field within a message.
+
+   Implementations MAY substitute concrete primitives for sign{}, MAC,
+   and f provided the substitutions meet the requirements stated in
+   Section 6.
+
+3. Protocol Overview
+
+3.1. Roles
+
+   The protocol distinguishes two roles:
+
+   o  The sender S is the single source authorised to broadcast
+      authenticated data.  S holds a long-term signing key SK(S) and
+      maintains, per active stream, a fresh chain of MAC keys.
+
+   o  A receiver R initiates a connection to S, establishes an
+      authenticated commitment to the first key of the chain, and
+      thereafter consumes the broadcast stream.  Multiple receivers
+      MAY be connected to the same sender concurrently, each with an
+      independent set-up state.
+
+3.2. Message Sequence
+
+   A complete protocol session between one sender S and one receiver R
+   is composed of a connection set-up phase followed by an
+   authenticated broadcast phase.  The set-up phase exchanges two
+   messages.  The broadcast phase produces an indefinitely long
+   sequence of one-way messages from S to R.
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                          (sender selects k_1)
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+      (R verifies signature; commits f(k_1))
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+      (R caches D_1 with MAC; defers verification)
+
+                                       <-----------
+                                                Msg 2:  D_2,
+                                                MAC(k_2, D_2)
+                                       D_2 = m_2, f(k_3), k_1
+
+      (R uses k_1 to verify the cached MAC over D_1)
+
+                                       ...
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+   The arrow direction indicates the network direction of each
+   message.  Msg 0a is initiated by R; all later messages are
+   broadcast by S.  In the broadcast phase Msg n discloses the MAC key
+   k_{n-1} that was used to authenticate the previously broadcast
+   payload m_{n-1}.
+
+4. Message Format
+
+   This section describes the on-the-wire content of each message.
+   Field encodings are intentionally left to the implementation
+   profile.
+
+4.1. Connection Set-Up Messages
+
+   Msg 0a (R -> S) carries the receiver's request for the initial key
+   commitment:
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+   The fields receiver_id and sender_id name the parties at the
+   protocol layer.  The field nonce_R is a fresh value of sufficient
+   length to prevent collisions across the lifetime of the deployment.
+   Implementations MUST select nonce_R uniformly at random from a
+   space of at least 2^96 possible values.
+
+   Msg 0b (S -> R) carries the signed commitment to the first MAC
+   key:
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R}_SK(S) */
+      } SetupResponse;
+
+   The signature MUST be computed over the concatenation of
+   commitment and nonce_R in that order, using the sender's long-term
+   signing key SK(S).
+
+4.2. Authenticated Stream Messages
+
+   Each broadcast message in the stream phase has the structure:
+
+      struct {
+          opaque   payload;          /* m_i */
+          opaque   next_commitment;  /* equals f(k_{i+1}) */
+          opaque   disclosed_key;    /* equals k_{i-1};
+                                        absent for i = 1 */
+          opaque   mac;              /* equals
+                                        MAC(k_i, <payload,
+                                                  next_commitment,
+                                                  disclosed_key>) */
+      } StreamMessage;
+
+   The MAC is computed over the concatenation, in order, of the
+   payload, the next commitment, and (when present) the disclosed
+   key.  For the first message in the stream the disclosed_key field
+   is absent; the MAC is computed over the remaining two fields only.
+
+5. Processing Rules
+
+5.1. Sender Initialization
+
+   Before broadcasting on a stream, the sender S MUST:
+
+   1.  Select a fresh MAC key k_1 from the key space of the chosen
+       MAC algorithm.
+
+   2.  Allocate an internal counter i, initialised to 1.
+
+   3.  Make the commitment f(k_1) available to the connection set-up
+       handler associated with the stream.
+
+   The key k_1 MUST NOT be revealed to any party at this point.
+
+5.2. Connection Set-Up at the Sender
+
+   Upon receipt of Msg 0a from a receiver R, the sender S:
+
+   1.  Constructs the SetupResponse with the commitment f(k_1)
+       previously prepared in Section 5.1.
+
+   2.  Computes signature = sign{f(k_1), n_R}_SK(S).
+
+   3.  Transmits Msg 0b on the network destined to R.
+
+   The sender MAY answer multiple set-up requests for the same stream
+   from different receivers, all bound to the same f(k_1).
+
+5.3. Connection Set-Up at the Receiver
+
+   The receiver R:
+
+   1.  Selects a fresh n_R as described in Section 4.1.
+
+   2.  Transmits Msg 0a to S and stores the local state needed to
+       process the corresponding response.
+
+   3.  Upon receipt of a SetupResponse claiming to come from S,
+       verifies signature using PK(S) over (commitment, n_R).  If the
+       verification fails, R MUST silently discard the response.
+
+   4.  If verification succeeds, R records (S, commitment) as the
+       expected commitment for the first MAC key and transitions to
+       the broadcast phase.
+
+   A receiver MAY perform set-up against multiple senders
+   independently; each set-up state is identified internally by a
+   fresh receiver thread identifier rid.
+
+5.4. Sending Authenticated Data
+
+   For i = 1, the sender:
+
+   1.  Selects a fresh MAC key k_2.
+
+   2.  Selects a fresh payload m_1 to broadcast.
+
+   3.  Forms D_1 = (m_1, f(k_2)).
+
+   4.  Computes MAC(k_1, D_1) and broadcasts (D_1, MAC(k_1, D_1)).
+
+   5.  Retains k_1 for future disclosure and increments i.
+
+   For i > 1, the sender:
+
+   1.  Selects a fresh MAC key k_{i+1}.
+
+   2.  Selects a fresh payload m_i.
+
+   3.  Forms D_i = (m_i, f(k_{i+1}), k_{i-1}), thereby disclosing
+       k_{i-1}.
+
+   4.  Computes MAC(k_i, D_i) and broadcasts (D_i, MAC(k_i, D_i)).
+
+   5.  Retains k_i for future disclosure, drops k_{i-1} and
+       increments i.
+
+5.5. Receiving Authenticated Data
+
+   For each broadcast message accepted from S, the receiver R:
+
+   1.  Records the message together with its MAC and the timestamp at
+       which it was received.  R MUST NOT treat the contained payload
+       as authentic at this stage.
+
+   2.  When a later broadcast discloses a key k_{i-1}, verifies that
+       f(k_{i-1}) matches the commitment held for slot i-1.  If the
+       check fails, R MUST discard both the disclosed key and any
+       cached message authenticated under k_{i-1}.
+
+   3.  If the commitment check succeeds and the cached message under
+       slot i-1 was received before k_{i-1} could have been disclosed
+       by S, R recomputes MAC(k_{i-1}, D_{i-1}) and compares it with
+       the cached MAC.  A match authenticates the payload m_{i-1}.
+
+   4.  Updates the expected commitment for slot i to f(k_i)
+       carried by the most recently received message.
+
+   The receiver MUST keep track, per slot, of whether its commitment
+   may already have expired, that is, whether the corresponding key
+   may have been disclosed prior to receipt.  Messages whose key
+   commitment has expired MUST NOT be considered authentic regardless
+   of the outcome of the MAC verification.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is best
+   summarised as follows.  If a receiver R, through the verification
+   procedure of Section 5.5, accepts a payload m as having been sent
+   by S, then either S did broadcast m as part of the same stream or
+   the long-term signing key SK(S) was disclosed to the adversary
+   prior to the completion of R's connection set-up.  No additional
+   pre-shared key material is needed between S and R.
+
+   The argument above relies on the fact that, at the moment the
+   receiver caches a MAC under key k_i, the key k_i is known only to
+   S.  An adversary observing the cached MAC therefore cannot forge a
+   substitute message under the same key.  Once k_i is later
+   disclosed, every receiver has either already accepted (or
+   rejected) the cached message; subsequent forgeries are detected
+   because the corresponding cached MAC is no longer pending
+   verification.
+
+   Because the protocol depends on the relative ordering of "message
+   received" and "key disclosed", implementations MUST refuse to
+   accept any message for which the key disclosure could already have
+   occurred.  This document does not mandate a specific clock model;
+   deployments are responsible for justifying the bound used to
+   evaluate the freshness of cached messages.  Receivers SHOULD
+   prefer rejecting a candidate message rather than relax the bound.
+
+   The set-up signature commits to f(k_1), and through the MAC chain
+   transitively to all subsequent f(k_i).  Implementations MUST use a
+   signature scheme with existential unforgeability under chosen
+   message attack, and MUST use a one-way function f with a
+   sufficient preimage-resistance margin to make extracting k_i from
+   f(k_i) infeasible for the lifetime of the stream.  The MAC
+   algorithm MUST resist forgery without knowledge of the key.
+
+   This document does not address denial-of-service against the
+   sender, key chain exhaustion, or the secrecy of the broadcast
+   payload.  Confidentiality, where required, is expected to be
+   provided by an additional layer.  Receivers should be aware that
+   long-term compromise of SK(S) cannot be detected by the protocol
+   itself; out-of-band revocation channels are expected to handle
+   this case.
+
+   Despite the simplicity of Scheme 1, there are deployment pitfalls
+   that implementations should be aware of:
+
+   o  Loose synchronisation between the sender and the receivers
+      directly affects the maximum tolerable network delay.  A clock
+      drift larger than the safety margin invalidates the
+      authenticity argument.
+
+   o  The protocol does not protect against a passive observer
+      learning the broadcast payload; eavesdropping resistance is out
+      of scope.
+
+   o  Receivers that share their cached MACs with third parties
+      before key disclosure effectively transfer the authenticity
+      guarantee to those parties as well; this is generally not
+      desirable and SHOULD NOT be done.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+   [HOPLOWE]  Hopcroft, P. and G. Lowe, "Analysing a stream
+              authentication protocol using model checking",
+              International Journal of Information Security, Volume
+              3, Number 1, pp. 2-13, 2004.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

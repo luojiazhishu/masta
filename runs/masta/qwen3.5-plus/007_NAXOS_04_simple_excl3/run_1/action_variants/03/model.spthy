@@ -1,0 +1,115 @@
+theory NAXOS_Simplified begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/1, h2/1
+
+// Long-term key generation for each agent
+rule Generate_DH_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, 'g'^~ltk)
+  , Out('g'^~ltk)
+  ]
+
+// Long-term key reveal rule for compromised agents
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(ltk) ]
+
+// RuleStep1: Initiator sends Message1 with hkI
+rule RuleStep1:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tid1)
+  , !Ltk($I, ~lkI)
+  , !Pk($I, 'g'^~lkI)
+  ]
+  --[ Test1(), Create($I, ~tid1), Running($I, $I, ~tid1), Honest($I) ]->
+  [ Out(hkI)
+  , !InitState1(~tid1, $I, ~lkI, exI)
+  ]
+
+// RuleStep2: Responder receives hkI, sends Message2 with hkR and version tag
+rule RuleStep2:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+  in
+  [ In(hkI)
+  , Fr(~eskR)
+  , Fr(~tid2)
+  , !Ltk($R, ~lkR)
+  , !Pk($R, 'g'^~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), Running($R, $I, ~tid2), Honest($R) ]->
+  [ Out(<hkR, 'NAXOS-v1'>)
+  , !RespState2(~tid2, $R, ~lkR, exR, hkI, pkI)
+  ]
+
+// RuleStep3: Initiator receives Message2, asserts version, computes session key kI
+rule RuleStep3:
+  let
+    kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ In(<Y, 'NAXOS-v1'>)
+  , !InitState1(~tid1, $I, ~lkI, exI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3(), Commit($I, $R, <~tid1, kI>), Secret($I, $R, kI), Honest($I) ]->
+  [ ]
+
+// RuleStep4: Responder computes session key kR and terminates
+rule RuleStep4:
+  let
+    kR = h2(<pkI^exR, hkI^~lkR, $I, $R>)
+  in
+  [ !RespState2(~tid2, $R, ~lkR, exR, hkI, pkI)
+  ]
+  --[ Test4(), Commit($R, $I, <~tid2, kR>), Secret($R, $I, kR), Honest($R) ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

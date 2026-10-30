@@ -1,0 +1,65 @@
+theory TeslaScheme1 begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~ltk) ]
+  --[ Create($S, ~ltk) ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nr) ]
+  --[ Test1(), Create($R, ~nr) ]->
+  [ Out(<$R, $S, ~nr, 'init_request'>), St_R_Setup($R, $S, ~nr) ]
+
+rule Sender_Setup_Response:
+  let commitment = h(~k1)
+      sig = sign(<commitment, nr, 'init_request'>, ltk)
+  in
+  [ Fr(~k1), In(<R, S, nr, 'init_request'>), !Ltk(S, ltk) ]
+  --[ Test2(), Running(S, R, <'setup', commitment, nr>) ]->
+  [ Out(<S, R, commitment, sig>), St_S_Stream(S, R, ~k1, commitment) ]
+
+rule Receiver_Accept_Setup:
+  [ St_R_Setup(R, S, nr), In(<S, R, commitment, sign(<commitment, nr, 'init_request'>, ltk)>), !Ltk(S, ltk) ]
+  --[ Test3(), Commit(R, S, <'setup', commitment, nr>), Honest(S) ]->
+  [ St_R_Stream(R, S, commitment) ]
+
+rule Sender_Broadcast_First:
+  let d1 = <~m1, h(~k2)>
+      tag = mac(~k1, d1)
+  in
+  [ Fr(~m1), Fr(~k2), St_S_Stream(S, R, ~k1, commitment) ]
+  --[ Test4(), Running(S, R, <'stream', ~m1, commitment>) ]->
+  [ Out(<d1, tag>), !DisclosedKey(commitment, ~k1), !SentPayload(S, R, ~m1, commitment) ]
+
+rule Receiver_Accept_First:
+  let d1 = <m, next_commitment>
+      tag = mac(k1, d1)
+  in
+  [ St_R_Stream(R, S, commitment), In(<d1, tag>), !DisclosedKey(commitment, k1), !SentPayload(S, R, m, commitment) ]
+  --[ Test5(), Commit(R, S, <'stream', m, commitment>), Honest(S) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: noninjective_agreement
+lemma broadcast_noninjective_agreement:
+  "All a b m commitment #i.
+     Commit(a, b, <'stream', m, commitment>) @ i
+   ==> 
+       (Ex #j. Running(b, a, <'stream', m, commitment>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,38 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~tid
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+    - ~tid
+  - compute:
+    - tag_mac = h(<r0, ~r1, k>)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Send_R1
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - compute:
+    - tag_mac = h(<r0, r1, k>)
+    - reader_mac = h(<h(<r0, r1, k>), k, r0>)
+  - send:
+    - reader_mac
+    - reader_mac
+- role: Tag_Accept_R1
+  operations:
+  - receive:
+    - reader_mac
+    - reader_mac
+  - compute:
+    - reader_mac = h(<tag_mac, k, r0>)
+  - send: <END>

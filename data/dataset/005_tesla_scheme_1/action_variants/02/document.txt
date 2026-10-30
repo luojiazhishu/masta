@@ -1,0 +1,221 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-02
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of
+   streamed data sent from a single source to many receivers using
+   only symmetric Message Authentication Codes (MACs) on the
+   broadcast path.  Source authenticity is anchored in a single
+   signature exchanged once during a connection set-up phase.  The
+   set-up response carries an additional sender-chosen reply tag
+   that allows clients to deduplicate and correlate multiple
+   in-flight responses.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................2
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................7
+   7. References ......................................................8
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  Authenticity is anchored in a single signature
+   exchanged once between the sender and each receiver during a
+   set-up phase.  This document specifies Scheme 1, the simplest
+   variant.
+
+   In addition to the signed commitment, the set-up response
+   includes a fresh tag chosen by the sender.  The tag is not part
+   of the signed material; its purpose is to give a recipient that
+   may have issued multiple set-up requests in parallel a stable
+   identifier that distinguishes one response from another.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S            The sender of an authenticated stream.
+      R            A receiver of an authenticated stream.
+      SK(S), PK(S) Long-term signing/verification keys of S.
+      sign{X}K     A digital signature on X computed with key K.
+      MAC(K, X)    A MAC on X computed under key K.
+      f(k)         The commitment to MAC key k.
+      n_R          A fresh nonce drawn by the receiver during
+                   set-up.
+      stag_S       A fresh reply tag drawn by the sender during the
+                   set-up response.
+
+3. Protocol Overview
+
+   A complete protocol session between one sender S and one receiver
+   R is composed of a connection set-up phase followed by an
+   authenticated broadcast phase.
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                          (sender selects k_1)
+                                       <-----------
+                                            Msg 0b:  S, R, f(k_1),
+                                            sign{f(k_1), n_R}_SK(S),
+                                                            stag_S
+
+      (R verifies signature; commits f(k_1))
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+4. Message Format
+
+4.1. Connection Set-Up Messages
+
+   Msg 0a (R -> S):
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+   Msg 0b (S -> R) carries the signed commitment to the first MAC
+   key followed by the sender's reply tag:
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R}_SK(S) */
+          opaque   reply_tag;        /* equals stag_S */
+      } SetupResponse;
+
+   The signature MUST be computed over (commitment, nonce_R) only;
+   reply_tag MUST NOT be covered by the signature.  Implementations
+   MUST draw reply_tag uniformly at random from a space of at least
+   2^96 possible values, independent of the value chosen for any
+   prior response.
+
+4.2. Authenticated Stream Messages
+
+      struct {
+          opaque   payload;          /* m_i */
+          opaque   next_commitment;  /* equals f(k_{i+1}) */
+          opaque   disclosed_key;    /* equals k_{i-1};
+                                        absent for i = 1 */
+          opaque   mac;
+      } StreamMessage;
+
+5. Processing Rules
+
+   The sender, upon receiving a SetupRequest from R:
+
+   1.  Reads nonce_R from the request.
+
+   2.  Forms the SetupResponse with the previously prepared
+       commitment f(k_1).
+
+   3.  Computes signature = sign{f(k_1), nonce_R}_SK(S).
+
+   4.  Selects a fresh reply_tag uniformly at random.
+
+   5.  Transmits Msg 0b on the network destined to R.
+
+   The receiver, upon receiving a SetupResponse:
+
+   1.  Reads commitment, signature, and reply_tag from the response.
+
+   2.  Verifies signature using PK(S) over (commitment, nonce_R).
+       If verification fails the response MUST be discarded.
+
+   3.  MAY use reply_tag to associate the response with a specific
+       set-up request when multiple are in flight; the value carries
+       no further meaning.
+
+   The handling of the broadcast phase, including cache-and-verify,
+   is unchanged from standard TESLA Scheme 1.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is the
+   following: if a receiver R, through the verification procedure
+   of Section 5, accepts a payload m as having been sent by S, then
+   either S did broadcast m as part of the same stream or the
+   long-term signing key SK(S) was disclosed to the adversary prior
+   to the completion of R's connection set-up.
+
+   The reply_tag field is not covered by the signature and provides
+   no integrity properties.  An adversary on the network MAY freely
+   modify reply_tag in transit; receivers MUST NOT base any
+   security-sensitive decision on its value.  Receivers SHOULD treat
+   reply_tag purely as an opaque correlator within their own
+   software.
+
+   The remaining security considerations of TESLA Scheme 1 apply
+   without modification.  In particular, implementations MUST refuse
+   to accept any broadcast message for which the corresponding key
+   could already have been disclosed at the time of receipt.
+   Confidentiality of the broadcast payload is out of scope and
+   expected to be provided by an additional layer.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

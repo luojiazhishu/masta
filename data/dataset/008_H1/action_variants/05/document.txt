@@ -1,0 +1,154 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 29, 2026                                          FAMED
+                                                          April 27, 2026
+
+
+   Mutual Identity-Signature Authentication with Initiator Audit Marker
+                       draft-famed-h1-iam-00
+
+
+Abstract
+
+   This document specifies a two-message mutual authentication
+   handshake in which the Initiator emits an audit marker
+   derived from its own identity in addition to the signature
+   on the ordered pair of participant identities.  The audit
+   marker allows external operational telemetry to associate
+   Initiator emissions with the local processing log without
+   exposing private material.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . .  2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . .  3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . .  3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . .  4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . .  4
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . .  5
+
+
+1.  Introduction
+
+   This document specifies a two-message mutual authentication
+   handshake.  The Initiator transmits a signature on the
+   ordered pair of participant identities and additionally
+   emits an audit marker computed by the one-way function bar
+   over its own identity.  The audit marker is intended for
+   external operational telemetry; it is not part of the
+   security argument of the handshake.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted
+   as described in BCP 14 [RFC2119] [RFC8174] when, and only
+   when, they appear in all capitals, as shown here.
+
+   I             The Initiator party.
+   R             The Responder party.
+   ltkI, ltkR    The long-term signing private keys of I and R.
+   pk(x)         The long-term signing public key derived from
+                 the private key x.
+   sign(m, sk)   Digital signature of message m under signing
+                 key sk.
+   bar(x)        A one-way function from a party identifier to
+                 a fixed audit-marker space.
+
+3.  Protocol Overview
+
+       Initiator                                     Responder
+       ---------                                     ---------
+       construct mI = sign(<I, R>, ltkI)
+       audit_marker = bar(I)
+
+                            ----- mI ----->
+                            ----- audit_marker ----->
+
+                                          (process mI)
+
+                            <----- mR -----
+
+       (verify mR, accept)
+
+4.  Message Format
+
+   InitiatorAuthMessage carries sign(<I, R>, ltkI).
+
+   The Initiator additionally emits an InitiatorAuditMarker
+   that carries the value bar(I).
+
+   ResponderAuthMessage carries sign(<I, R>, ltkR).
+
+5.  Processing Rules
+
+   The Initiator computes mI = sign(<I, R>, ltkI), emits mI on
+   the network, and emits audit_marker = bar(I) on its
+   operational output.  The Responder processes mI as in the
+   conventional flow and does not consume audit_marker.
+
+6.  Security Considerations
+
+   The protocol is intended to provide identity-level mutual
+   authentication.  Identity-level mutual authentication
+   follows from the unforgeability of the underlying signature
+   scheme.
+
+   The audit marker bar(I) is emitted in the clear and is
+   visible to a network adversary.  The marker contains the
+   Initiator identity in transformed form; for an adversary
+   that already observes the network, the Initiator identity
+   is also recoverable from the signed plaintext, so the
+   marker does not introduce additional disclosure.
+   Implementations MUST select bar so that no algebraic
+   identity admits inversion or substitution under
+   deployment-relevant key material.
+
+   The handshake does not provide non-injective agreement on
+   any session-level parameters in addition to the named pair.
+   The signed plaintext consists only of the identities I and
+   R; the audit marker does not strengthen this binding.
+
+   Compromise of either party's long-term signing key allows
+   the adversary to forge signatures under that key.  The
+   protocol does not provide forward secrecy.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC8032]  Josefsson, S. and I. Liusvaara, "Edwards-Curve
+              Digital Signature Algorithm (EdDSA)", RFC 8032,
+              January 2017.
+
+
+8. Analysis Targets
+
+8.1 Weak Agreement
+8.2 Non-injective Agreement
+8.3 Injective Agreement

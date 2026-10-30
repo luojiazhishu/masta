@@ -1,0 +1,24 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~ltkI
+    - ~ltkR
+    - ~eskI
+    - ~exI
+    - ~g
+  - send:
+    - pm(~g, h1(~eskI, ~ltkI))
+- role: Responder_Receive
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+    - ~exR
+  - send:
+    - pair(pm(g, h1(~eskR, ltkR)), 'NAXOS-v1')
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - pair(hkR, 'NAXOS-v1')
+  - send: <END>

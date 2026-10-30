@@ -1,0 +1,78 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: MAC/2, f/1
+
+equations: verify(sign(m, sk), m, pk(sk)) = true
+
+rule Setup_Receiver:
+  [
+    Fr(~n_R),
+    Fr(~tid_R)
+  ]
+  --[ Test1(), Start_R(~tid_R, ~n_R) ]->
+  [
+    Out(<R, S, ~n_R>),
+    !StateR(~tid_R, R, S, ~n_R)
+  ]
+
+rule Setup_Sender:
+  [
+    In(<R, S, n_R>),
+    Fr(~k_1),
+    Fr(~tid_S),
+    !Ltk(S, sk_S)
+  ]
+  --[ Test2(), Start_S(~tid_S, ~k_1, n_R) ]->
+  [
+    let f_k1 = f(~k_1)
+        sig = sign(<f_k1, n_R>, sk_S)
+    in
+    [
+      Out(<S, R, f_k1, sig>),
+      !StateS(~tid_S, S, R, ~k_1, f_k1)
+    ]
+  ]
+
+rule Stream_Msg1:
+  [
+    !StateS(tid_S, S, R, k_1, f_k1),
+    Fr(~k_2),
+    Fr(~m_1)
+  ]
+  --[ Test3(), Send1(tid_S, ~m_1, f(~k_2)) ]->
+  [
+    let D_1 = <~m_1, f(~k_2)>
+        mac_1 = MAC(k_1, D_1)
+    in
+    [
+      Out(<D_1, mac_1>),
+      !StateS(tid_S, S, R, ~k_2, f(~k_2))
+    ]
+  ]
+
+rule Stream_MsgN:
+  [
+    !StateS(tid_S, S, R, k_curr, f_k_curr),
+    Fr(~k_next),
+    Fr(~m_i)
+  ]
+  --[ Test4(), SendN(tid_S, ~m_i, f(~k_next)) ]->
+  [
+    let D_i = <~m_i, f(~k_next), k_curr>
+        mac_i = MAC(k_curr, D_i)
+    in
+    [
+      Out(<D_i, mac_i, 'channel_tag'>),
+      !StateS(tid_S, S, R, ~k_next, f(~k_next))
+    ]
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

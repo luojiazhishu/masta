@@ -1,0 +1,69 @@
+theory MutualAuthUnverified
+begin
+
+builtins: signing
+
+rule Setup:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ Test1(), !Ltk($I, ~ltkI), !Ltk($R, ~ltkR), !Pk($I, pk(~ltkI)), !Pk($R, pk(~ltkR)), Create($I, 'tidI'), Create($R, 'tidR') ]->
+  [ !Ltk($I, ~ltkI), !Ltk($R, ~ltkR), !Pk($I, pk(~ltkI)), !Pk($R, pk(~ltkR)) ]
+
+rule Initiator_Send:
+  [ !Ltk($I, ~ltkI), !Pk($I, pk(~ltkI)) ]
+  --[ Test2(), Running($I, $R, <'init', $I, $R>) ]->
+  [ Out(sign(<$I, $R>, ~ltkI)), St_I_Wait($I, $R) ]
+
+rule Responder_ReceiveAndSend:
+  [ In(m), !Ltk($R, ~ltkR), !Pk($I, pkI) ]
+  --[ Test3(), Eq(verify(m, <$I, $R>, pkI)), Running($R, $I, <'resp', $R, $I>), Commit($R, $I, <'resp', $R, $I>), Honest($R) ]->
+  [ Out(sign(<$I, $R>, ~ltkR)) ]
+
+rule Initiator_Finish:
+  [ St_I_Wait($I, $R), In(mR) ]
+  --[ Test4(), Commit($I, $R, <'init', $I, $R>), Honest($I) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk($I, ~ltkI) ]
+  --[ LtkReveal($I) ]->
+  [ Out(~ltkI), !Ltk($I, ~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk($R, ~ltkR) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~ltkR), !Ltk($R, ~ltkR) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: weak_agreement
+lemma weak_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

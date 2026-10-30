@@ -1,0 +1,54 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nr
+  - send:
+    - $R
+    - $S
+    - ~nr
+    - '''init_request'''
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - R
+    - S
+    - nr
+    - '''init_request'''
+  - generate_nonces:
+    - ~k1
+  - compute:
+    - commitment = h(~k1)
+    - sig = sign(<h(~k1), nr, 'init_request'>, ltk)
+  - send:
+    - S
+    - R
+    - commitment
+    - sig
+- role: Receiver_Accept_Setup
+  operations:
+  - receive:
+    - S
+    - R
+    - commitment
+    - sign(<commitment, nr, 'init_request'>, ltk)
+  - send: []
+- role: Sender_Broadcast_First
+  operations:
+  - generate_nonces:
+    - ~m1
+    - ~k2
+  - compute:
+    - d1 = <~m1, h(~k2)>
+    - tag = mac(~k1, <~m1, h(~k2)>)
+  - send:
+    - d1
+    - tag
+- role: Receiver_Accept_First
+  operations:
+  - receive:
+    - d1
+    - tag
+  - compute:
+    - d1 = <m, next_commitment>
+    - tag = mac(k1, <m, next_commitment>)
+  - send: <END>

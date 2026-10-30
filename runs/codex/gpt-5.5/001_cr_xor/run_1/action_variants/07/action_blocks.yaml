@@ -1,0 +1,30 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: Responder_First_Reply
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(na XOR k XOR ~nb)
+  - send:
+    - tag
+    - ~nb
+- role: Responder_Retransmit_Reply
+  operations:
+  - send:
+    - tag
+    - nb
+- role: Initiator_Accept
+  operations:
+  - receive:
+    - tag
+    - nb
+  - assert:
+    - tag = h(na XOR k XOR nb)
+  - send: <END>

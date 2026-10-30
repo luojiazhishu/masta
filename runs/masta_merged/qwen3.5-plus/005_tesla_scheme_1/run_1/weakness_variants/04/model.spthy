@@ -1,0 +1,72 @@
+theory tesla_scheme1 begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+// PKI Setup: Sender has long-term key
+rule Setup_PKI:
+  [ Fr(~ltk_S) ]
+  --[ Create('S', ~ltk_S) ]->
+  [ !Ltk('S', ~ltk_S), !Pk('S', pk(~ltk_S)), Out(pk(~ltk_S)) ]
+
+// RuleStep1: Receiver R sends setup request with nonce
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Start_R(~tid_R, ~n_R) ]->
+  [ Out(< 'R', 'S', ~n_R >), !State_R_1(~tid_R, ~n_R) ]
+
+// RuleStep2: Sender S receives request, generates k_1, sends setup response
+rule RuleStep2:
+  [ In(< 'R', 'S', n_R >), Fr(~k_1), Fr(~tid_S), !Ltk('S', ~ltk_S) ]
+  --[ Test2(), Start_S(~tid_S, ~k_1) ]->
+  [ Out(< 'S', 'R', h(~k_1), sign(<h(~k_1), n_R>, ~ltk_S) >), !State_S_1(~tid_S, ~k_1, h(~k_1)) ]
+
+// RuleStep3: R accepts setup
+rule RuleStep3:
+  [ In(< 'S', 'R', commitment, signature >), !State_R_1(~tid_R, n_R), !Pk('S', pk_S) ]
+  --[ Test3(), SetupAccepted(~tid_R, commitment) ]->
+  [ !State_R_2(~tid_R, commitment) ]
+
+// RuleStep4: S sends Msg 1 (MAC with k_1, commit k_2)
+rule RuleStep4:
+  [ !State_S_1(~tid_S, k_1, commitment_1), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4(), SendMsg1(~tid_S, ~m_1) ]->
+  let
+    payload_1 = <~m_1, h(~k_2)>
+    mac_1 = mac(k_1, payload_1)
+  in
+  [ Out(< payload_1, mac_1 >), !State_S_2(~tid_S, k_1, ~k_2, h(~k_2)), !Cached(1, payload_1, mac_1) ]
+
+// RuleStep5: R caches Msg 1
+rule RuleStep5:
+  [ In(< payload_1, mac_1 >), !State_R_2(~tid_R, expected_commitment) ]
+  --[ Test5(), CacheMsg1(~tid_R, payload_1, mac_1) ]->
+  [ !State_R_3(~tid_R, expected_commitment, payload_1, mac_1) ]
+
+// RuleStep6: S sends Msg 2 (MAC with k_2, disclose k_1)
+rule RuleStep6:
+  [ !State_S_2(~tid_S, k_1, k_2, commitment_2), Fr(~m_2), Fr(~k_3) ]
+  --[ Test6(), SendMsg2(~tid_S, ~m_2, k_1) ]->
+  let
+    payload_2 = <~m_2, h(~k_3), k_1>
+    mac_2 = mac(k_2, payload_2)
+  in
+  [ Out(< payload_2, mac_2 >), !State_S_3(~tid_S, k_2, ~k_3, h(~k_3)), !Cached(2, payload_2, mac_2) ]
+
+// RuleStep7: R receives Msg 2, verifies MAC with disclosed k_1 (NO commitment check)
+rule RuleStep7:
+  [ In(< payload_2, mac_2 >), !State_R_3(~tid_R, old_commitment, cached_payload_1, cached_mac_1) ]
+  --[ Test7(), VerifyMsg2(~tid_R, snd(snd(payload_2))) ]->
+  let
+    disclosed_key = snd(snd(payload_2))
+  in
+  [ !State_R_4(~tid_R, payload_2, mac_2) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ t1 & Test2() @ t2 & Test3() @ t3 & Test4() @ t4 & Test5() @ t5 & Test6() @ t6 & Test7() @ t7
+     & t1 < t2 & t2 < t3 & t3 < t4 & t4 < t5 & t5 < t6 & t6 < t7"
+
+end

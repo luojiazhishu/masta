@@ -1,0 +1,31 @@
+- role: I_Send_Msg1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - hkI = 'g'^h1(~eskI, ~lkI)
+  - send:
+    - hkI
+- role: R_Recv_Send
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h1(~eskR, ~lkR)
+    - hkR = 'g'^h1(~eskR, ~lkR)
+    - kR = h2(<pkI^h1(~eskR, ~lkR), X^~lkR, $I, $R>)
+  - send:
+    - hkR
+- role: I_Recv_Msg2
+  operations:
+  - receive:
+    - Y
+  - send: []
+- role: I_Compute_Key
+  operations:
+  - compute:
+    - exI = h1(~eskI, ~lkI)
+    - kI = h2(<Y^~lkI, pkR^h1(~eskI, ~lkI), $I, $R>)
+  - send: <END>

@@ -1,0 +1,33 @@
+- role: Initiator_Send_Message1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(<~eskI, ltkI>)
+    - hkI = 'g'^h1(<~eskI, ltkI>)
+  - send:
+    - hkI
+- role: Responder_Send_Message2
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h1(<~eskR, ltkR>)
+    - hkR = 'g'^h1(<~eskR, ltkR>)
+    - kR = h2(<h1(<~eskR, ltkR>), ltkR, hkI, $I, $R>)
+  - send:
+    - hkR
+- role: Initiator_Log_PeerKeyTag
+  operations:
+  - receive:
+    - hkR
+  - compute:
+    - peer_key_tag = tag(pkR)
+  - send: []
+- role: Initiator_Compute_Key
+  operations:
+  - compute:
+    - kI = h2(<exI, ltkI, hkR, $I, $R>)
+  - send: <END>

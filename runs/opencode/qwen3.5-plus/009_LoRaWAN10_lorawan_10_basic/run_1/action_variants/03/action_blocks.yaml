@@ -1,0 +1,21 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - send:
+    - <'JoinRequest', $Device, ~DevNonce>
+    - h(<<'JoinRequest', $Device, ~DevNonce>>, ~AppKey)
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - <'JoinRequest', $Device, DevNonce>
+    - h(<<'JoinRequest', $Device, DevNonce>>, ~AppKey)
+  - send:
+    - senc(<~AppKey, DevNonce>, ~AppKey)
+    - '''LoRa-1.0'''
+- role: Device_VerifyAccept
+  operations:
+  - receive:
+    - senc(<~AppKey, ~DevNonce>, ~AppKey)
+    - '''LoRa-1.0'''
+  - send: <END>

@@ -1,0 +1,65 @@
+theory TeslaWeaknessVariant02
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+rule Setup_Keys:
+  [ Fr(~sk_S) ]
+  --[ ]->
+  [ !Ltk(~sk_S), !Pk(pk(~sk_S)) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Create('R', ~tid_R), Running('R', 'S', <'setup_req', ~n_R>) ]->
+  [ St_R_Setup(~tid_R, ~n_R), Out(<'R', 'S', ~n_R>) ]
+
+rule Sender_Setup_Response:
+  [ In(<'R', 'S', n_R>), !Ltk(~sk_S), Fr(~k_1), Fr(~tid_S) ]
+  --[ Test2(), Create('S', ~tid_S), Running('S', 'R', <'setup_resp', ~k_1, n_R>) ]->
+  [ St_S_Setup(~tid_S, ~k_1, n_R), Out(<'S', 'R', h(~k_1), sign(<h(~k_1), n_R>, ~sk_S)>) ]
+
+rule Sender_Msg1:
+  [ St_S_Setup(~tid_S, k_1, n_R), Fr(~m_1), Fr(~k_2) ]
+  --[ Test3(), Running('S', 'R', <'msg1', ~m_1, h(~k_2), k_1>) ]->
+  [ St_S_State(~tid_S, ~k_2, k_1), Out(<~m_1, h(~k_2), mac(k_1, <~m_1, h(~k_2)>)>) ]
+
+rule Sender_MsgN:
+  [ St_S_State(~tid_S, k_new, k_old), Fr(~m_n), Fr(~k_next) ]
+  --[ Test4(), Running('S', 'R', <'msgN', ~m_n, h(~k_next), k_old, k_new>) ]->
+  [ St_S_State(~tid_S, ~k_next, k_new), Out(<~m_n, h(~k_next), k_old, mac(k_new, <~m_n, h(~k_next), k_old>)>) ]
+
+rule Receiver_Accept_Without_MAC:
+  [ St_R_Setup(~tid_R, n_R), In(<m_n, next_comm, disclosed_key, mac_val>) ]
+  --[ Test5(), Honest('R'), Commit('R', 'S', <'accept', m_n, next_comm, disclosed_key>) ]->
+  [ St_R_Accepted(~tid_R, m_n, next_comm, disclosed_key) ]
+
+rule Ltk_Reveal:
+  [ !Ltk(sk) ]
+  --[ LtkReveal(pk(sk)) ]->
+  [ Out(sk) ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

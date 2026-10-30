@@ -1,0 +1,27 @@
+- role: I_Init
+  operations:
+  - generate_nonces:
+    - ~na
+  - compute:
+    - tag_audit = com(~na, ~na)
+  - send:
+    - ~na
+- role: R_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(na XOR ~k XOR ~nb)
+  - send:
+    - t
+    - ~nb
+- role: I_Verify
+  operations:
+  - receive:
+    - t_prime
+    - nb
+  - compute:
+    - t_prime = h(~na XOR ~k XOR nb)
+  - send: <END>

@@ -1,0 +1,76 @@
+theory NAXOS_Simple
+begin
+
+builtins: hashing
+
+functions: h1/2, pm/2, mul/2, h2/4
+
+rule Initiator_Start:
+  [ Fr(~ltkI), Fr(~ltkR), Fr(~eskI), Fr(~exI), Fr(~g) ]
+  --[ Test1(), Create('I', ~eskI), Running('I', 'R', ~eskI, ~exI) ]->
+  [ !Pk('I', ~ltkI), !Pk('R', ~ltkR), !Pub(~g), St_I('I', ~eskI, ~exI, ~ltkI), Out(pm(~g, h1(~eskI, ~ltkI))) ]
+
+rule Responder_Receive:
+  [ In(hkI), Fr(~eskR), Fr(~exR), !Pub(g), !Pk('R', ltkR) ]
+  --[ Test2(), Running('R', 'I', ~eskR, ~exR) ]->
+  [ St_R('R', ~eskR, ~exR, hkI, ltkR), Out(pair(pm(g, h1(~eskR, ltkR)), 'NAXOS-v1')) ]
+
+rule Initiator_Finish:
+  [ St_I('I', ~eskI, ~exI, ltkI), !Pub(g), !Pk('R', ltkR), In(pair(hkR, 'NAXOS-v1')) ]
+  --[ Test3(), Commit('I', 'R', ~eskI, ~exI, hkR), Honest('I'), Honest('R'), Secret('I', 'R', h2(pm(hkR, ltkI), pm(g, mul(ltkR, ~exI)), 'I', 'R')) ]->
+  [ ]
+
+rule Responder_Finish:
+  [ St_R('R', ~eskR, ~exR, hkI, ltkR), !Pub(g), !Pk('I', ltkI) ]
+  --[ Commit('R', 'I', ~eskR, ~exR, hkI), Honest('R'), Honest('I'), Secret('R', 'I', h2(pm(g, mul(ltkI, ~exR)), pm(hkI, ltkR), 'I', 'R')) ]->
+  [ ]
+
+rule Ltk_Reveal_I:
+  [ !Pk('I', ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(ltkI) ]
+
+rule Ltk_Reveal_R:
+  [ !Pk('R', ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(ltkR) ]
+
+// category: secrecy
+lemma secrecy_initiator:
+  "All I R sk #i.
+     Secret(I, R, sk) @ i
+   ==>
+       not (Ex #j. K(sk) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_responder:
+  "All R I sk #i.
+     Secret(R, I, sk) @ i
+   ==>
+       not (Ex #j. K(sk) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma agreement_initiator:
+  "All I R esk ex hk #i.
+     Commit(I, R, esk, ex, hk) @ i
+   ==>
+       (Ex #j. Running(R, I, esk, ex) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma agreement_responder:
+  "All R I esk ex hk #i.
+     Commit(R, I, esk, ex, hk) @ i
+   ==>
+       (Ex #j. Running(I, R, esk, ex) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

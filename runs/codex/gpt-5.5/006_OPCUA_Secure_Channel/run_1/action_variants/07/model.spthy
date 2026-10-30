@@ -1,0 +1,103 @@
+theory OpcUaSecureChannel
+begin
+
+builtins: hashing, signing
+
+functions: com/2, bar/1
+
+rule Setup:
+  [ Fr(~skC), Fr(~skS) ]
+  --[ Create('Client', ~skC), Create('Server', ~skS) ]->
+  [ !Ltk('Client', ~skC), !Ltk('Server', ~skS),
+    !Pk('Client', pk(~skC)), !Pk('Server', pk(~skS)),
+    Out(pk(~skC)), Out(pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Client_GetEndpointsRequest:
+  [ !Pk('Client', clientPk) ]
+  --[ Test1(), Create('Client', 'ge_req') ]->
+  [ Out('GEReq'), St_C_1(clientPk) ]
+
+rule Server_GetEndpointsResponse:
+  [ In('GEReq'), !Pk('Server', serverPk) ]
+  --[ Test2() ]->
+  [ Out(<'GERes', serverPk, 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>) ]
+
+rule Client_OpenSecureChannelRequest:
+  let
+    req_body = <'OSCReq', clientPk, ~Nc>
+    req_digest = h(req_body)
+    req_sig = sign(req_digest, skC)
+  in
+  [ St_C_1(clientPk), !Ltk('Client', skC), !Pk('Client', clientPk), Fr(~Nc),
+    In(<'GERes', serverCert, 'Sign', securityPolicy, userTokenPolicy>) ]
+  --[ Test3(), Running('Client', serverCert, <'client_nonce', clientPk, serverCert, ~Nc>) ]->
+  [ Out(<clientPk, req_body, req_sig, req_digest>), St_C_2(clientPk, serverCert, skC, ~Nc) ]
+
+rule Server_OpenSecureChannelResponse:
+  let
+    req_body = <'OSCReq', clientPk, clientNonce>
+    req_digest = h(req_body)
+    auditCommitment = com(clientPk, ~Ns)
+    keyFingerprint = bar(serverPk)
+    resp_body = <'OSCRes', ~Ns, ~ST, ~TTL>
+    resp_digest = h(resp_body)
+    resp_sig = sign(resp_digest, skS)
+    channelBinding = h(<clientNonce, ~Ns>)
+  in
+  [ !Ltk('Server', skS), !Pk('Server', serverPk), !Ltk('Client', clientSk), !Pk('Client', clientPk),
+    Fr(~Ns), Fr(~ST), Fr(~TTL),
+    In(<clientPk, req_body, sign(req_digest, clientSk), req_digest>) ]
+  --[ Test4(), Commit('Server', clientPk, <'client_nonce', clientPk, serverPk, clientNonce>),
+      Running('Server', clientPk, <'server_nonce', clientPk, serverPk, clientNonce, ~Ns, ~ST>),
+      Secret('Server', clientPk, channelBinding), Honest('Server') ]->
+  [ Out(<serverPk, resp_body, resp_sig, resp_digest>),
+    AuditLog('Server', auditCommitment, keyFingerprint, clientPk, ~Ns) ]
+
+rule Client_OpenSecureChannelComplete:
+  let
+    resp_body = <'OSCRes', serverNonce, securityToken, tokenLifetime>
+    resp_digest = h(resp_body)
+    channelBinding = h(<~Nc, serverNonce>)
+  in
+  [ St_C_2(clientPk, serverCert, skC, ~Nc), !Ltk('Server', serverSk), !Pk('Server', serverCert),
+    In(<serverCert, resp_body, sign(resp_digest, serverSk), resp_digest>) ]
+  --[ Test5(), Commit('Client', serverCert, <'server_nonce', clientPk, serverCert, ~Nc, serverNonce, securityToken>),
+      Secret('Client', serverCert, channelBinding), Honest('Client') ]->
+  [ Channel('Client', serverCert, channelBinding, securityToken) ]
+
+// category: secrecy
+lemma secrecy_channel_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All clientPk serverPk clientNonce #i.
+     Commit('Server', clientPk, <'client_nonce', clientPk, serverPk, clientNonce>) @ i
+   ==>
+       (Ex #j. Running('Client', serverPk, <'client_nonce', clientPk, serverPk, clientNonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All serverPk clientPk clientNonce serverNonce securityToken #i.
+     Commit('Client', serverPk, <'server_nonce', clientPk, serverPk, clientNonce, serverNonce, securityToken>) @ i
+   ==>
+       (Ex #j. Running('Server', clientPk, <'server_nonce', clientPk, serverPk, clientNonce, serverNonce, securityToken>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

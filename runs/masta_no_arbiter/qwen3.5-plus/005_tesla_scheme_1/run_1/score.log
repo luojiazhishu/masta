@@ -1,0 +1,16 @@
+$ /root/project/agents/formal-multi-agent/.venv/bin/python -m scripts.score_protocol --run-dir runs/masta_no_arbiter/qwen3.5-plus/005_tesla_scheme_1/run_1 --dataset-dir data/dataset --protocol-id 005_tesla_scheme_1 --tamarin-timeout 300
+
+==== MASTA score_protocol ====
+ run_dir:     /root/project/llm-tamarin/masta/rebuttal_material/runs/masta_no_arbiter/qwen3.5-plus/005_tesla_scheme_1/run_1
+ dataset_dir: /root/project/llm-tamarin/masta/rebuttal_material/data/dataset
+ protocol:    005_tesla_scheme_1
+
+==== Score ====
+ protocol: 005_tesla_scheme_1
+ M1: 0.871
+ M2: 0.000
+ M3: 0.000
+ M4: 0.279  (14/14 action variants present)
+ M5: 0.000  (4/4 weakness variants present)
+
+ score saved to: /root/project/llm-tamarin/masta/rebuttal_material/runs/masta_no_arbiter/qwen3.5-plus/005_tesla_scheme_1/run_1/score.json

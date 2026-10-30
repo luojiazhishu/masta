@@ -1,0 +1,17 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_protocol --run-dir runs/claude/opus-4.7/010_ISO9798_4_4_979844_reuse_once_1_1/run_1 --dataset-dir data/dataset --protocol-id 010_ISO9798_4_4_979844_reuse_once_1_1 --tamarin-timeout 300 --force
+
+==== MASTA score_protocol ====
+ run_dir:     /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/010_ISO9798_4_4_979844_reuse_once_1_1/run_1
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    010_ISO9798_4_4_979844_reuse_once_1_1
+ [wv 04] model.spthy missing — counted as 0
+
+==== Score ====
+ protocol: 010_ISO9798_4_4_979844_reuse_once_1_1
+ M1: 0.762
+ M2: 0.716
+ M3: 0.522
+ M4: 0.837  (12/12 action variants present)
+ M5: 0.667  (6/7 weakness variants present)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/010_ISO9798_4_4_979844_reuse_once_1_1/run_1/score.json

@@ -1,0 +1,73 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Reveal_Ltk:
+  [ !Ltk(x) ]
+  --[ LtkReveal(x) ]->
+  [ Out(x) ]
+
+rule Setup_Server:
+  [ Fr(~serverPrivKey), Fr(~serverCert) ]
+  --[ ]->
+  [ !Ltk(~serverPrivKey), !Pk(~serverPrivKey, pk(~serverPrivKey)), !ServerCert(pk(~serverPrivKey), ~serverCert) ]
+
+rule Setup_Client:
+  [ Fr(~clientPrivKey), Fr(~clientCert) ]
+  --[ ]->
+  [ !Ltk(~clientPrivKey), !Pk(~clientPrivKey, pk(~clientPrivKey)), !ClientCert(pk(~clientPrivKey), ~clientCert) ]
+
+rule Server_GetEndpoints_1:
+  [ !Ltk(~serverPrivKey), !ServerCert(serverPubKey, serverCert) ]
+  --[ Test1() ]->
+  [ Out(<$GERes, serverCert, $Sign, $SecPol, $UserTokPol>) ]
+
+rule Server_GetEndpoints_2:
+  [ !Ltk(~serverPrivKey), !ServerCert(serverPubKey, serverCert) ]
+  --[ Test2() ]->
+  [ Out(<$GERes, serverCert, $Sign, $SecPol, $UserTokPol>) ]
+
+rule Client_Receive_Endpoints:
+  [ Fr(~tid), In(<$GERes, srvCert, $Sign, $SecPol, $UserTokPol>), !ServerCert(srvPubKey, srvCert) ]
+  --[ Test3(), Create($Client, ~tid) ]->
+  [ St_C_Session(~tid, srvCert, srvPubKey) ]
+
+rule Client_Send_OSCRequest:
+  [ St_C_Session(tid, srvCert, srvPubKey), !Ltk(~clientPrivKey), !ClientCert(clientPubKey, clientCert), Fr(~Nc) ]
+  --[ Test4(), Running($Client, $Server, <clientPubKey, ~Nc>) ]->
+  [ Out(<clientCert, $OSCReq, clientPubKey, ~Nc, sign(h(<$OSCReq, clientPubKey, ~Nc>), ~clientPrivKey), h(<$OSCReq, clientPubKey, ~Nc>)>), St_C_Nc(tid, ~Nc), St_C_Session(tid, srvCert, srvPubKey) ]
+
+rule Server_Receive_OSCRequest_Send_Response:
+  [ In(<clientCert, $OSCReq, clientPubKey, Nc, reqSig, reqHash>), !Ltk(~serverPrivKey), !ServerCert(serverPubKey, serverCert), Fr(~Ns) ]
+  --[ Test5(), Running($Server, $Client, <clientPubKey, Nc, serverPubKey, ~Ns>), Eq(reqHash, h(<$OSCReq, clientPubKey, Nc>)), Eq(verify(reqSig, reqHash, clientPubKey), true) ]->
+  [ Out(<serverCert, $OSCRes, ~Ns, $SecTok, $TTL, sign(h(<$OSCRes, ~Ns, $SecTok, $TTL>), ~serverPrivKey), h(<$OSCRes, ~Ns, $SecTok, $TTL>)>) ]
+
+rule Client_Receive_OSCResponse:
+  [ St_C_Session(tid, srvCert, srvPubKey), St_C_Nc(tid, Nc), In(<srvCert, $OSCRes, Ns, $SecTok, $TTL, respSig, respHash>), !Ltk(~clientPrivKey), !ClientCert(clientPubKey, clientCert) ]
+  --[ Test6(), Commit($Client, $Server, <clientPubKey, Nc, srvPubKey, Ns>), Eq(respHash, h(<$OSCRes, Ns, $SecTok, $TTL>)), Eq(verify(respSig, respHash, srvPubKey), true) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+// category: noninjective_agreement
+lemma client_nonce_agreement:
+  "All A B Nc #i.
+     Commit(A, B, Nc) @ i
+   ==>
+     (Ex #j. Running(A, B, Nc) @ j)
+   | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma server_nonce_agreement:
+  "All A B Nc Ns #i.
+     Commit(A, B, <Nc, Ns>) @ i
+   ==>
+     (Ex #j. Running(B, A, <Nc, Ns>) @ j)
+   | (Ex X #r. LtkReveal(X) @ r)"
+
+end

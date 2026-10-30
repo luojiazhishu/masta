@@ -1,0 +1,115 @@
+theory MutualCR begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule SetupKeys:
+  [
+    Fr(~kAB)
+  ]
+  -->
+  [
+    !SharedKey($IdA, $IdB, ~kAB)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~RB),
+    Fr(~Text1)
+  ]
+  --[ Test1(), Honest($IdB) ]->
+  [
+    Out(<~RB, ~Text1>),
+    !RespState($IdB, ~RB)
+  ]
+
+rule RuleStep2:
+  [
+    In(<RB, Text1>),
+    Fr(~RA),
+    Fr(~Text2),
+    Fr(~Text3),
+    !SharedKey($IdA, $IdB, kAB)
+  ]
+  --[ Test2(), Honest($IdA), Running($IdA, $IdB, <RB, ~RA>) ]->
+  [
+    Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, $IdB, ~Text2>, mac(< 'sid1_mut_cr', ~RA, RB, $IdB >, kAB)>),
+    !InitState($IdA, ~RA, RB)
+  ]
+
+rule RuleStep3:
+  [
+    In(<RA, Text3, <'sid1_mut_cr', RA, RB, $IdB, Text2>, mac1>),
+    !RespState($IdB, RB),
+    !SharedKey($IdA, $IdB, kAB),
+    Fr(~Text5),
+    Fr(~NonceB2)
+  ]
+  --[ Test3(), Honest($IdB), Running($IdB, $IdA, <RB, RA>), Commit($IdB, $IdA, <RB, RA>) ]->
+  [
+    Out(<~Text5, mac(< 'sid2_mut_cr', RB, RA >, kAB), ~NonceB2>)
+  ]
+
+rule RuleStep4:
+  [
+    In(<Text5, mac2, NonceB2>),
+    !InitState($IdA, RA, RB),
+    !SharedKey($IdA, $IdB, kAB)
+  ]
+  --[ Test4(), Honest($IdA), Commit($IdA, $IdB, <RA, RB>) ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !SharedKey(A, B, k)
+  ]
+  --[ LtkReveal(A) ]->
+  [
+    Out(k)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_a:
+  "All A B RA RB #i.
+     Commit(A, B, <RA, RB>) @ i
+   ==>
+       ( (Ex #j. Running(B, A, <RA, RB>) @ j
+             & j < i
+             & not (Ex A2 B2 #i2. Commit(A2, B2, <RA, RB>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_b:
+  "All A B RA RB #i.
+     Commit(A, B, <RA, RB>) @ i
+   ==>
+       ( (Ex #j. Running(B, A, <RA, RB>) @ j
+             & j < i
+             & not (Ex A2 B2 #i2. Commit(A2, B2, <RA, RB>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_a:
+  "All A B RA RB #i.
+     Commit(A, B, <RA, RB>) @ i
+   ==>
+       (Ex #j. Running(B, A, <RB, RA>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_b:
+  "All A B RA RB #i.
+     Commit(A, B, <RA, RB>) @ i
+   ==>
+       (Ex #j. Running(B, A, <RB, RA>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

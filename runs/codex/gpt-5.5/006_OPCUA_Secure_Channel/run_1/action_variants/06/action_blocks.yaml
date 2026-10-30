@@ -1,0 +1,66 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+    - '''Client'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+    - '''Client'''
+  - send:
+    - '''GERes'''
+    - '''Server'''
+    - pkS
+    - '''Sign'''
+    - '''Policy'''
+    - '''UserToken'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - '''Server'''
+    - pkS
+    - '''Sign'''
+    - policy
+    - usertoken
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - request_body = <'OSCReq', pkC, ~Nc>
+    - request_digest = h(<'OSCReq', pkC, ~Nc>)
+    - audit_commitment = com(pkC, ~Nc)
+    - key_fingerprint = bar(pkS)
+  - send:
+    - pkC
+    - request_body
+    - sign(request_digest, skC)
+    - request_digest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - compute:
+    - request_body = <'OSCReq', pkC, Nc>
+    - request_digest = h(<'OSCReq', pkC, Nc>)
+    - response_body = <'OSCRes', ~Ns, ~ST, ~TTL>
+    - response_digest = h(<'OSCRes', ~Ns, ~ST, ~TTL>)
+    - channel_binding = h(<Nc, ~Ns>)
+  - assert:
+    - verify(request_signature, request_digest, pkC) = true
+  - send:
+    - '''Server'''
+    - response_body
+    - sign(response_digest, skS)
+    - response_digest
+- role: Client_AcceptOpenSecureChannelResponse
+  operations:
+  - compute:
+    - response_body = <'OSCRes', Ns, ST, TTL>
+    - response_digest = h(<'OSCRes', Ns, ST, TTL>)
+    - channel_binding = h(<Nc, Ns>)
+  - assert:
+    - verify(response_signature, response_digest, pkS) = true
+  - send: <END>

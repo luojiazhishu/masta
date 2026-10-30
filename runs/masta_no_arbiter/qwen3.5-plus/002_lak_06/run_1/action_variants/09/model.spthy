@@ -1,0 +1,19 @@
+theory LAK06 begin
+
+builtins: hashing
+
+// RuleStep1: Reader generates r0 and sends R0
+rule RuleStep1:
+  [
+    Fr(~r0)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+end

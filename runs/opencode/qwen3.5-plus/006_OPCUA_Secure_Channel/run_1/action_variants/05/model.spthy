@@ -1,0 +1,65 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Client_GetEndpoints:
+  [ Fr(~sessionId) ]
+  --[ Test1(), Create($Client, ~sessionId) ]->
+  [ Out('GEReq'), St_C1($Client, ~sessionId) ]
+
+rule Server_GetEndpoints:
+  [ In('GEReq'), Fr(~serverKey) ]
+  --[ Test2() ]->
+  [ Out(<'GERes', pk(~serverKey), 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>), St_S1($Server, pk(~serverKey), ~serverKey) ]
+
+rule Client_OpenSecureChannel:
+  let requestBody = <'OSCReq', pk(~clientKey), ~nc>
+      requestSig = sign(h(requestBody), ~clientKey)
+      requestDigest = h(requestBody) in
+  [ St_C1($Client, ~sessionId), In(< 'GERes', serverCert, 'Sign', securityPolicy, userTokenPolicy >), Fr(~clientKey), Fr(~nc) ]
+  --[ Test3(), Running($Client, $Server, <'client', ~nc>) ]->
+  [ Out(<pk(~clientKey), requestBody, requestSig, requestDigest>), St_C2($Client, ~sessionId, ~clientKey, ~nc, serverCert) ]
+
+rule Server_OpenSecureChannel:
+  let responseBody = <'OSCRes', ~ns, 'SecurityToken', 'TokenLifetime'>
+      responseSig = sign(h(responseBody), serverKey)
+      responseDigest = h(responseBody) in
+  [ St_S1($Server, serverCert, serverKey), In(<clientCert, <'OSCReq', clientPk, nc>, requestSig, requestDigest>), Fr(~ns) ]
+  --[ Test4(), Running($Server, $Client, <'client', nc>), Commit($Server, $Client, <'server', ~ns>) ]->
+  [ Out(<serverCert, responseBody, responseSig, responseDigest, 'TokenType'>), St_S2($Server, serverCert, ~ns, clientCert, nc) ]
+
+rule Client_Verify:
+  let channelBinding = h(<nc, responseBody>) in
+  [ St_C2($Client, sessionId, clientKey, nc, serverCert), In(<serverCert, responseBody, responseSig, responseDigest, 'TokenType'>) ]
+  --[ Test5(), Commit($Client, $Server, <'client', nc, 'server', responseBody>), Secret($Client, $Server, channelBinding) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_binding:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b nc responseBody #i.
+     Commit(a, b, <'client', nc, 'server', responseBody>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'client', nc>) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b ns #i.
+     Commit(a, b, <'server', ns>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server', ns>) @ j)"
+
+end

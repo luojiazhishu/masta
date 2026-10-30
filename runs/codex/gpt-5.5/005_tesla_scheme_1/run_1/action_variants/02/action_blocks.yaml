@@ -1,0 +1,80 @@
+- role: Receiver_Send_SetupRequest
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - '''setup_request'''
+    - $R
+    - $S
+    - ~nR
+- role: Sender_Send_SetupResponse
+  operations:
+  - receive:
+    - '''setup_request'''
+    - R
+    - S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+    - ~stag
+    - ~m1
+    - ~m2
+  - compute:
+    - commitment1 = h(~k1)
+    - signature = sign(<h(~k1), nR>, sk)
+  - send:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - signature
+    - ~stag
+- role: Receiver_Accept_SetupResponse
+  operations:
+  - receive:
+    - '''setup_response'''
+    - S
+    - R
+    - commitment1
+    - signature
+    - stag
+  - assert:
+    - verify(signature, <commitment1, nR>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_Message1
+  operations:
+  - compute:
+    - data1 = <m1, h(k2)>
+    - auth1 = mac(k1, <m1, h(k2)>)
+  - send:
+    - '''stream'''
+    - S
+    - data1
+    - '''none'''
+    - auth1
+- role: Sender_Broadcast_Message2_Disclose_Key1
+  operations:
+  - generate_nonces:
+    - ~k3
+  - compute:
+    - data2 = <m2, h(~k3)>
+    - auth2 = mac(k2, <m2, h(~k3)>)
+  - send:
+    - '''stream'''
+    - S
+    - data2
+    - k1
+    - auth2
+- role: Receiver_Accept_Message1
+  operations:
+  - receive:
+    - '''stream'''
+    - S
+    - data2
+    - k1
+    - auth2
+  - assert:
+    - h(k1) = commitment1
+    - auth1 = mac(k1, <m1, commitment2>)
+  - send: <END>

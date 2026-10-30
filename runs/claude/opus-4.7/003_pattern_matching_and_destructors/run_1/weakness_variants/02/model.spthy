@@ -1,0 +1,46 @@
+theory SkPmdW02
+begin
+
+builtins: symmetric-encryption
+
+// Establish a shared symmetric key k between initiator $I and responder $R
+rule Setup_Key:
+    [ Fr(~k) ]
+  -->
+    [ !SharedKey($I, $R, ~k) ]
+
+// Action block 1: initiator draws fresh sec and pub, forms the ciphertext
+// msg = senc(<sec, pub>, k), and transmits msg followed by the bare pair
+// <sec, pub> on the wire as a separate value (the W02 weakness).
+rule Initiator_Send:
+  let body = <~sec, ~pub>
+      msg  = senc(body, ~k)
+  in
+    [ !SharedKey($I, $R, ~k), Fr(~sec), Fr(~pub) ]
+  --[ Test1(),
+      Create($I, ~sec),
+      Honest($I), Honest($R),
+      Secret($I, $R, ~sec) ]->
+    [ Out(msg), Out(body) ]
+
+// Action block 2: responder accepts the ciphertext under k via the symmetric
+// destructor; the plaintext pair on the wire is ignored by the responder.
+rule Responder_Receive:
+    [ !SharedKey($I, $R, ~k), In(senc(<sec, pub>, ~k)) ]
+  --[ Test2() ]->
+    [ ]
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

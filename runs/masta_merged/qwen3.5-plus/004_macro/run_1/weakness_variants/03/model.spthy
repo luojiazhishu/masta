@@ -1,0 +1,73 @@
+theory UnboundKeyTransport begin
+
+builtins: asymmetric-encryption, hashing
+
+// PKI Setup: Generate long-term keys for Server
+rule Setup_Server:
+  [ Fr(~skS) ]
+  --[ Create('S', ~skS) ]->
+  [ !Ltk('S', ~skS), !Pk('S', pk(~skS)), Out(pk(~skS)) ]
+
+// Key Compromise Rule (needed for the Reveal action in lemmas)
+rule Reveal_Ltk:
+  [ !Ltk(A, sk) ]
+  --[ Reveal(A) ]->
+  [ Out(sk) ]
+
+// RuleStep1: Client sends encrypted session key
+rule RuleStep1:
+  [ Fr(~k), !Pk('S', pkS) ]
+  --[ Test1(), Secret('C', 'S', ~k), Honest('C'), Honest('S') ]->
+  [ Out(aenc(~k, pkS)), StC('C', 'S', ~k) ]
+
+// RuleStep2: Server receives and replies with confirmation pair
+// Pattern match the ciphertext to extract k using the private key
+rule RuleStep2:
+  [ In(aenc(~k, pk('S'))), !Ltk('S', ~skS) ]
+  --[ Test2(), Running('S', 'C', ~k) ]->
+  [ Out(<~k, h(~k)>) ]
+
+// RuleStep3: Client receives and verifies confirmation pair
+// The client checks hash consistency d == h(v) but does NOT check v == k
+// This models the flaw: v is not bound to the original k
+rule RuleStep3:
+  [ In(<v, d>), StC('C', 'S', k) ]
+  --[ Test3(), Commit('C', 'S', k) ]->
+  [ ]
+
+// Executable Lemma
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// Property 1: Secrecy of the Transported Session Key
+lemma secrecy_session_key:
+  "All x #i.
+     Secret('C', 'S', x) @ i
+   ==> 
+     not (Ex #j. K(x) @ j)
+   | (Ex X #r. Reveal(X) @ r & Honest(X) @ i)"
+
+// Property 2: Non-injective Agreement on the Transported Key
+// This property is expected to be falsified due to the unbound confirm check
+lemma noninjective_agreement_transported_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> 
+     (Ex #j. Running(b, a, t) @ j)
+   | (Ex X #r. Reveal(X) @ r & Honest(X) @ i)"
+
+// Property 3: Injective Agreement on the Transported Key
+lemma injective_agreement_transported_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> 
+     ( (Ex #j. Running(b, a, t) @ j
+           & j < i
+           & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                              & not (#i2 = #i))) )
+   | (Ex X #r. Reveal(X) @ r & Honest(X) @ i)"
+
+end

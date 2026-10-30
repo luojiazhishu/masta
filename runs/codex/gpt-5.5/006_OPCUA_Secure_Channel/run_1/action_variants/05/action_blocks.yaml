@@ -1,0 +1,75 @@
+- role: Client_Send_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - '''GEReq'''
+    - $C
+    - $S
+- role: Server_Send_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+    - C
+    - S
+  - send:
+    - '''GERes'''
+    - S
+    - C
+    - pkS
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_Send_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - S
+    - C
+    - serverCert
+    - '''Sign'''
+    - policy
+    - userTokenPolicy
+  - generate_nonces:
+    - ~nc
+  - compute:
+    - requestBody = <'OSCReq', pk(ltkC), ~nc>
+  - send:
+    - pk(ltkC)
+    - requestBody
+    - sign(h(requestBody), ltkC)
+    - h(requestBody)
+- role: Server_Send_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - clientCert
+    - <'OSCReq', clientCert, nc>
+    - reqSig
+    - reqDigest
+  - generate_nonces:
+    - ~ns
+    - ~st
+    - ~ttl
+  - compute:
+    - responseBody = <'OSCRes', ~ns, ~st, ~ttl>
+  - assert:
+    - reqDigest = h(<'OSCReq', clientCert, nc>)
+    - verify(reqSig, h(<'OSCReq', clientCert, nc>), clientCert) = true
+  - send:
+    - pk(ltkS)
+    - responseBody
+    - sign(h(responseBody), ltkS)
+    - h(responseBody)
+    - '''TokenType'''
+- role: Client_Accept_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - serverCert
+    - <'OSCRes', ns, st, ttl>
+    - resSig
+    - resDigest
+    - '''TokenType'''
+  - assert:
+    - resDigest = h(<'OSCRes', ns, st, ttl>)
+    - verify(resSig, h(<'OSCRes', ns, st, ttl>), serverCert) = true
+  - send: <END>

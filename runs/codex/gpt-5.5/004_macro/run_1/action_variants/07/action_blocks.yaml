@@ -1,0 +1,17 @@
+- role: Client_Initiates
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: Server_Confirms
+  operations:
+  - receive:
+    - aenc(k, pk(ltk))
+  - send:
+    - h(<k, S>)
+- role: Client_Accepts
+  operations:
+  - receive:
+    - h(<k, S>)
+  - send: <END>

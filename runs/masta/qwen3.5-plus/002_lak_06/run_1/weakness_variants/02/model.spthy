@@ -1,0 +1,85 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+/* Setup: provision shared long-term key k between Reader $R and Tag $T */
+rule Setup:
+  [ Fr(~k) ]
+  --[ Honest($R), Honest($T), Secret($R, $T, ~k) ]->
+  [ !Ltk($R, $T, ~k) ]
+
+/* RuleStep1: Reader generates fresh r0 and sends R0 challenge */
+rule RuleStep1:
+  [ Fr(~r0)
+  , !Ltk($R, $T, ~k)
+  ]
+  --[ Test1() ]->
+  [ Out(~r0)
+  , !State_Reader_1($R, $T, ~k, ~r0)
+  ]
+
+/* RuleStep2: Tag receives r0, generates r1, computes tag_mac, sends T1 */
+rule RuleStep2:
+  [ In(~r0)
+  , Fr(~r1)
+  , !Ltk($R, $T, ~k)
+  ]
+  --[ Test2(), Running($T, $R, <~r0, ~r1>) ]->
+  [ Out(<~r1, h(~r0 ⊕ ~r1 ⊕ ~k)>)
+  , !State_Tag_1($R, $T, ~k, ~r0, ~r1)
+  ]
+
+/* RuleStep3: Reader receives T1, verifies tag_mac, computes reader_mac, sends R1 */
+rule RuleStep3:
+  [ In(<~r1, tag_mac>)
+  , !State_Reader_1($R, $T, ~k, ~r0)
+  ]
+  --[ Test3(), Running($R, $T, <~r0, ~r1>), Commit($R, $T, <~r0, ~r1>) ]->
+  [ Out(h(tag_mac ⊕ ~k ⊕ ~r0))
+  , !State_Reader_2($R, $T, ~k, ~r0, ~r1, tag_mac)
+  ]
+
+/* RuleStep4: Tag sends terminal marker <END> */
+rule RuleStep4:
+  [ !State_Tag_1($R, $T, ~k, ~r0, ~r1)
+  ]
+  --[ Test4(), Commit($T, $R, <~r0, ~r1>) ]->
+  [ Out('<END>')
+  , !Session_Commit_Tag($R, $T, ~r0, ~r1)
+  ]
+
+/* LtkReveal rule for long-term key compromise */
+rule LtkReveal:
+  [ !Ltk($R, $T, ~k) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag_non_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader_non_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

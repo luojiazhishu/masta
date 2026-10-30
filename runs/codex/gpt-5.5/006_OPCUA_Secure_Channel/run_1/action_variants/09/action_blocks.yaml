@@ -1,0 +1,53 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(skS)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - policy
+    - userPolicy
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - pk(skC)
+    - <'OSCReq', pk(skC), ~Nc>
+    - sign(h(<'OSCReq', pk(skC), ~Nc>), skC)
+    - h(<'OSCReq', pk(skC), ~Nc>)
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - clientCert
+    - <'OSCReq', clientCert, clientNonce>
+    - sign(h(<'OSCReq', clientCert, clientNonce>), skC)
+    - h(<'OSCReq', clientCert, clientNonce>)
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - send:
+    - pk(skS)
+    - <'OSCRes', ~Ns, ~ST, ~TTL>
+    - sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), skS)
+    - h(<'OSCRes', ~Ns, ~ST, ~TTL>)
+- role: Client_ValidateResponse
+  operations:
+  - receive:
+    - serverCert
+    - <'OSCRes', serverNonce, securityToken, tokenLifetime>
+    - sign(h(<'OSCRes', serverNonce, securityToken, tokenLifetime>), skS)
+    - h(<'OSCRes', serverNonce, securityToken, tokenLifetime>)
+  - send: <END>

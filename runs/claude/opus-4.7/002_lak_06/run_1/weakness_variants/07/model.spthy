@@ -1,0 +1,84 @@
+theory Lak06WeaknessV07
+begin
+
+builtins: hashing
+
+/* Provision a long-term symmetric key shared between a Reader and a Tag. */
+rule Setup_Pair:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk($R, $T, ~k) ]
+
+/* Action block 1: Reader draws a fresh r0 and transmits R0 = r0. */
+rule Reader_Start:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1() ]->
+  [ Out(~r0), St_R_1($R, $T, k, ~r0) ]
+
+/* Action block 2: Tag receives R0, draws a fresh r1 and transmits
+   T1 = (r1, h(r0 XOR r1 XOR k)). */
+rule Tag_Respond:
+  let tag_mac = h(<r0, ~r1, k>)
+  in
+  [ Fr(~r1), !Ltk($R, $T, k), In(r0) ]
+  --[ Test2(),
+      Running($T, $R, <'tag', r0, ~r1, k>)
+    ]->
+  [ Out(<~r1, tag_mac>), St_T_2($T, $R, k, r0, ~r1, tag_mac) ]
+
+/* Action block 3: Reader receives T1, verifies tag_mac and transmits
+   R1 = (h(tag_mac XOR k XOR r0), k). The long-term key k is delivered
+   alongside reader_mac in this variant. */
+rule Reader_Confirm:
+  let
+    tag_mac    = h(<~r0, r1, k>)
+    reader_mac = h(<tag_mac, k, ~r0>)
+  in
+  [ St_R_1($R, $T, k, ~r0), In(<r1, tag_mac>) ]
+  --[ Test3(),
+      Commit($R, $T, <'reader', ~r0, r1, k>),
+      Running($R, $T, <'reader', ~r0, r1, k>),
+      Honest($R), Honest($T),
+      Secret($R, $T, k)
+    ]->
+  [ Out(<reader_mac, k>) ]
+
+/* Action block 4: Tag receives R1 and verifies reader_mac. */
+rule Tag_Finish:
+  let reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ St_T_2($T, $R, k, r0, ~r1, tag_mac), In(<reader_mac, k>) ]
+  --[ Test4(),
+      Commit($T, $R, <'tag', r0, ~r1, k>),
+      Honest($R), Honest($T)
+    ]->
+  [ ]
+
+// category: secrecy
+lemma secret_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+     not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma agreement_reader:
+  "All a b t #i.
+     Commit(a, b, <'reader', t>) @ i
+   ==>
+     Ex #j. Running(b, a, <'tag', t>) @ j"
+
+// category: noninjective_agreement
+lemma agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'tag', t>) @ i
+   ==>
+     Ex #j. Running(b, a, <'reader', t>) @ j"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

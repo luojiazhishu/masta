@@ -1,0 +1,24 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~tid
+  - send:
+    - ~na
+    - '''Init'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - na
+    - '''Init'''
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR ~k XOR ~nb)
+    - ~nb
+- role: RuleStep3
+  operations:
+  - receive:
+    - tag
+    - nb
+  - send: <END>

@@ -1,0 +1,150 @@
+theory LoRaWAN10
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Provision_Device:
+  [ Fr(~appkey), Fr(~deveui), Fr(~joineui) ]
+  --[ ]->
+  [ !Device(~deveui, ~joineui, ~appkey),
+    !Server(~deveui, ~joineui, ~appkey),
+    !Ltk(~deveui, ~joineui, ~appkey) ]
+
+rule Reveal_AppKey:
+  [ !Ltk(~deveui, ~joineui, ~appkey) ]
+  --[ LtkReveal(~deveui), LtkReveal(~joineui) ]->
+  [ Out(~appkey) ]
+
+rule DeviceSendJoinRequest:
+  let m = mac(~appkey, <'JoinRequest', ~deveui, ~joineui, ~devnonce>)
+  in
+  [ !Device(~deveui, ~joineui, ~appkey),
+    Fr(~devnonce) ]
+  --[ Test1(),
+      Create(~deveui, ~devnonce),
+      Running(~deveui, ~joineui, <'Server', ~deveui, ~joineui, ~devnonce>) ]->
+  [ Out(<'JoinRequest', ~deveui, ~joineui, ~devnonce, m>),
+    St_D_1(~deveui, ~joineui, ~appkey, ~devnonce) ]
+
+rule NetworkRecvJoinRequest:
+  let appskey = senc(<'cst1', devnonce, ~joinnonce>, ~appkey)
+      nwkskey = senc(<'cst2', devnonce, ~joinnonce>, ~appkey)
+      responsemac = mac(~appkey, <'JoinAccept', ~joinnonce, ~devaddr>)
+      body = <'JoinAccept', ~joinnonce, ~devaddr, responsemac>
+      ct = senc(body, ~appkey)
+  in
+  [ !Server(~deveui, ~joineui, ~appkey),
+    Fr(~joinnonce), Fr(~devaddr),
+    In(<'JoinRequest', ~deveui, ~joineui, devnonce, m>) ]
+  --[ Test2(),
+      Eq(m, mac(~appkey, <'JoinRequest', ~deveui, ~joineui, devnonce>)),
+      Create(~joineui, ~joinnonce),
+      Running(~joineui, ~deveui, <'Device', ~deveui, ~joineui, devnonce, ~joinnonce>),
+      Running(~joineui, ~deveui, <'Keys', appskey, nwkskey>),
+      Commit(~joineui, ~deveui, <'Server', ~deveui, ~joineui, devnonce>),
+      Secret(~joineui, ~deveui, appskey),
+      Secret(~joineui, ~deveui, nwkskey),
+      Honest(~deveui), Honest(~joineui) ]->
+  [ Out(ct),
+    Out(ct) ]
+
+rule DeviceRecvJoinAccept:
+  [ St_D_1(~deveui, ~joineui, ~appkey, ~devnonce),
+    In(senc(<'JoinAccept', joinnonce, devaddr, mm>, ~appkey)) ]
+  --[ Test3(),
+      Eq(mm, mac(~appkey, <'JoinAccept', joinnonce, devaddr>)) ]->
+  [ St_D_2(~deveui, ~joineui, ~appkey, ~devnonce, joinnonce, devaddr) ]
+
+rule DeviceDeriveKeys:
+  let appskey = senc(<'cst1', ~devnonce, joinnonce>, ~appkey)
+      nwkskey = senc(<'cst2', ~devnonce, joinnonce>, ~appkey)
+  in
+  [ St_D_2(~deveui, ~joineui, ~appkey, ~devnonce, joinnonce, devaddr) ]
+  --[ Test4(),
+      Commit(~deveui, ~joineui, <'Device', ~deveui, ~joineui, ~devnonce, joinnonce>),
+      Commit(~deveui, ~joineui, <'Keys', appskey, nwkskey>),
+      Secret(~deveui, ~joineui, appskey),
+      Secret(~deveui, ~joineui, nwkskey),
+      Honest(~deveui), Honest(~joineui) ]->
+  [ ]
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All deveui joineui devnonce joinnonce #i.
+     Commit(deveui, joineui, <'Device', deveui, joineui, devnonce, joinnonce>) @ i
+   ==>
+       ( (Ex #j. Running(joineui, deveui, <'Device', deveui, joineui, devnonce, joinnonce>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2.
+                      Commit(a2, b2, <'Device', deveui, joineui, devnonce, joinnonce>) @ i2
+                    & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All deveui joineui devnonce joinnonce #i.
+     Commit(deveui, joineui, <'Device', deveui, joineui, devnonce, joinnonce>) @ i
+   ==>
+       (Ex #j. Running(joineui, deveui, <'Device', deveui, joineui, devnonce, joinnonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All deveui joineui devnonce #i.
+     Commit(joineui, deveui, <'Server', deveui, joineui, devnonce>) @ i
+   ==>
+       ( (Ex #j. Running(deveui, joineui, <'Server', deveui, joineui, devnonce>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2.
+                      Commit(a2, b2, <'Server', deveui, joineui, devnonce>) @ i2
+                    & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All deveui joineui devnonce #i.
+     Commit(joineui, deveui, <'Server', deveui, joineui, devnonce>) @ i
+   ==>
+       (Ex #j. Running(deveui, joineui, <'Server', deveui, joineui, devnonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_keys:
+  "All deveui joineui appskey nwkskey #i.
+     Commit(deveui, joineui, <'Keys', appskey, nwkskey>) @ i
+   ==>
+       ( (Ex #j. Running(joineui, deveui, <'Keys', appskey, nwkskey>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2.
+                      Commit(a2, b2, <'Keys', appskey, nwkskey>) @ i2
+                    & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_keys:
+  "All deveui joineui appskey nwkskey #i.
+     Commit(deveui, joineui, <'Keys', appskey, nwkskey>) @ i
+   ==>
+       (Ex #j. Running(joineui, deveui, <'Keys', appskey, nwkskey>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All a b x #i.
+     Secret(a, b, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

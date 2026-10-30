@@ -1,0 +1,87 @@
+theory TeslaScheme1 begin
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction Timely_Disclosure:
+  "All R S nR k m c #i #j. VerifyUses(R, S, nR, k, m, c) @ i & Disclose(S, k) @ j ==> (Ex #h. CacheFirst(R, S, nR, k, m, c) @ h & h < j & j < i)"
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~ltkS) ]
+  --[ ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR>), St_R_Setup($R, $S, ~nR) ]
+
+rule Sender_Setup_Response:
+  let c1 = h(~k1)
+      sig = sign(<c1, nR>, ltkS)
+  in
+  [ Fr(~sid), Fr(~k1), Fr(~k2), Fr(~k3), In(<R, $S, nR>), !Ltk($S, ltkS) ]
+  --[ Test2(), Create($S, ~sid), Running($S, R, <'sender_setup', c1, nR>) ]->
+  [ Out(<$S, R, c1, sig>), St_S_Stream($S, R, ~sid, ~k1, ~k2, ~k3, nR) ]
+
+rule Receiver_Verify_Setup:
+  [ St_R_Setup($R, $S, nR), !Pk($S, pkS), In(<$S, $R, c1, sig>) ]
+  --[ Test3(), Eq(verify(sig, <c1, nR>, pkS), true), Running($R, $S, <'receiver_setup', c1, nR>), Honest($S) ]->
+  [ St_R_Ready($R, $S, nR, c1) ]
+
+rule Sender_Broadcast_First:
+  let c2 = h(k2)
+      d1 = <~m1, c2>
+      tagmsg = <d1, 'stream'>
+  in
+  [ Fr(~m1), St_S_Stream($S, R, sid, k1, k2, k3, nR) ]
+  --[ Test4(), Running($S, R, <'stream_payload', sid, ~m1>) ]->
+  [ Out(<d1, mac(k1, tagmsg)>), St_S_After_First($S, R, sid, k1, k2, k3, nR, ~m1, d1, mac(k1, tagmsg)) ]
+
+rule Receiver_Cache_First:
+  [ St_R_Ready($R, $S, nR, c1), In(<<m1, c2>, mac1>) ]
+  --[ Test5(), CacheFirst($R, $S, nR, c1, m1, c2) ]->
+  [ St_R_Cached_First($R, $S, nR, c1, m1, c2, mac1) ]
+
+rule Sender_Broadcast_Second:
+  let c3 = h(k3)
+      d2 = <~m2, c3, k1>
+      tagmsg = <d2, 'stream'>
+  in
+  [ Fr(~m2), St_S_After_First($S, R, sid, k1, k2, k3, nR, ~m1, d1, mac1) ]
+  --[ Test6(), Disclose($S, k1) ]->
+  [ Out(<d2, mac(k2, tagmsg)>) ]
+
+rule Receiver_Verify_First:
+  let d1 = <m1, c2>
+      tagmsg = <d1, 'stream'>
+  in
+  [ St_R_Cached_First($R, $S, nR, h(k1), m1, c2, mac(k1, tagmsg)), In(<<m2, c3, k1>, mac2>) ]
+  --[ Test7(), VerifyUses($R, $S, nR, k1, m1, c2), Commit($R, $S, <'stream_payload', c2, m1>), Honest($S) ]->
+  [ Accepted($R, $S, m1) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+     Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+   & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+   & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All R S c2 m #i.
+     Commit(R, S, <'stream_payload', c2, m>) @ i
+   ==>
+     (Ex sid #j. Running(S, R, <'stream_payload', sid, m>) @ j & j < i)
+   | (Ex #r #s. LtkReveal(S) @ r & Honest(S) @ s & s < i & r < s)"
+
+end

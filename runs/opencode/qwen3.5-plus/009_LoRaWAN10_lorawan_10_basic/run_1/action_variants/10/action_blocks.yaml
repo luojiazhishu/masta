@@ -1,0 +1,25 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - ~Dev
+  - send:
+    - ~Dev
+    - ~DevNonce
+    - h(<AppKey, 'JoinRequest', ~Dev, ~DevNonce>)
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - d
+    - dn
+    - macVal
+  - generate_nonces:
+    - ~JoinNonce
+    - ~Server
+  - send:
+    - senc(<~Server, ~JoinNonce, 'channelV1'>, AppKey)
+- role: Device_Commit
+  operations:
+  - receive:
+    - msg
+  - send: <END>

@@ -1,0 +1,235 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                  with Responder Reply Retransmission
+                       draft-famed-crxor-rrtx-00
+
+
+Abstract
+
+   This document specifies CR-XOR-RRtx, a two-flow challenge-response
+   authentication protocol between two endpoints that already share
+   a long-term symmetric key.  To improve reachability over lossy
+   links, the responder transmits each reply twice in immediate
+   succession.  Both transmissions carry identical content; the
+   initiator accepts the first that arrives and silently discards
+   any subsequent identical copy.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-RRtx provides a compact mechanism by which an initiator
+   verifies that a peer holding a pre-shared key is reachable and
+   currently active, while tolerating single-packet loss on the
+   return path.  After computing its hash tag and fresh nonce, the
+   responder transmits the resulting flight twice in immediate
+   succession.  The two transmissions carry identical content.  The
+   initiator's processing logic is invariant with respect to which
+   transmission arrives first; later identical copies are ignored.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  na is the
+   initiator nonce, nb is the responder nonce, and k is the shared
+   symmetric key.  The role names I and R denote the initiator and
+   the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-RRtx runs in a single logical round trip:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb                  |
+          |<-----------------------------------------------|
+          |        H(na XOR k XOR nb), nb                  |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify H tag on first arrival                 |
+          |  discard duplicates                            |
+          |                                                |
+
+   The initiator generates a uniformly random nonce na of length
+   L_n and transmits it.  The responder, upon receipt, generates a
+   fresh nb of length L_n, computes t = H(na XOR k XOR nb), and
+   transmits the pair <t, nb> twice in immediate succession on the
+   same outgoing path.  The initiator processes the first such
+   flight that arrives and silently drops any subsequent flight
+   bearing the same value of (t, nb).
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+      } ResponderFlight;
+
+   The two transmissions of the ResponderFlight are byte-for-byte
+   identical.  No sequence number, retransmission counter, or
+   timestamp is added.
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band.  k MUST be
+   drawn uniformly at random and MUST be kept secret to both
+   endpoints.
+
+   An implementation in role I performs the following steps.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na.
+
+   3.  Wait for a ResponderFlight.  Upon receipt of <tag, nb>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(na XOR k XOR nb).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  If t' equals tag, declare the responder authenticated
+           for the current run; otherwise abort.
+
+       e.  Any subsequent flight whose contents are byte-for-byte
+           identical to the accepted flight MUST be silently
+           discarded for the duration of the run.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   MUST verify that na has length L_n and is non-zero, generate a
+   fresh nb of length L_n, compute t = H(na XOR k XOR nb), and
+   transmit two identical copies of ResponderFlight{ tag = t,
+   response_nonce = nb } in immediate succession on the same
+   outgoing path.
+
+
+6.  Security Considerations
+
+   CR-XOR-RRtx is designed to convince the initiator that the
+   holder of k has reacted to the current challenge.  When the
+   verification at step 5.3.c succeeds, the initiator can conclude
+   that the responder has been active at some point in time and is
+   in possession of k.  This property is sometimes referred to as
+   aliveness of the responder.
+
+   The duplicate transmission is intended only as a robustness
+   mechanism for lossy links and contributes nothing to the
+   cryptographic guarantees.  Implementations that operate over
+   reliable transports MAY transmit only a single copy of the
+   ResponderFlight without affecting the security analysis.
+
+   Implementations should be aware that the duplicate transmission
+   doubles the volume of cleartext nonces and tags observable on
+   the wire.  An attacker that captures the second copy after the
+   initiator has already discarded the first cannot derive any
+   additional information that was not already present in the
+   first copy.
+
+   The hash function H provides the cryptographic barrier against
+   forgery of the responder flight.  H MUST be selected so that
+   the work factor of preimage and collision attacks exceeds the
+   lifetime value of k.
+
+   The non-zero check on the nonces removes a degenerate case in
+   which an attacker submits the all-zeros nonce; without the
+   check, the algebraic identity x XOR x = 0 could be exploited
+   to drive the hash input into a state that is independent of
+   one of the nonces.
+
+   Implementers should be aware that the construction H(na XOR k
+   XOR nb) is bilinear with respect to its operands.  An active
+   attacker that observes either copy of one valid responder
+   flight for a challenge na', and that is in a position to
+   reroute traffic, can choose a fresh challenge na for an honest
+   initiator and deliver a crafted response_nonce nb' = na XOR
+   na' XOR nb together with the originally observed tag.  Under
+   these circumstances the initiator's tag check succeeds even
+   though the responder did not react to na.  CR-XOR-RRtx
+   therefore does not provide agreement on the per-session
+   parameters; it provides aliveness of the entity holding k, and
+   nothing stronger.
+
+   Compromise of k breaks all guarantees of CR-XOR-RRtx, both for
+   past and for future runs.  Implementations SHOULD provide a
+   mechanism to rotate k.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments operating
+   over open networks SHOULD rate-limit incoming InitiatorFlights
+   at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

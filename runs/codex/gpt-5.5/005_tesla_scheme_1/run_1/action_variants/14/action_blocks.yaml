@@ -1,0 +1,69 @@
+- role: Receiver_send_setup_request
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - S
+    - ~nR
+- role: Sender_send_duplicated_setup_response
+  operations:
+  - receive:
+    - R
+    - S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+  - compute:
+    - commitment = h(~k1)
+    - signature = sign(<h(~k1), nR>, ltkS)
+  - send:
+    - S
+    - R
+    - commitment
+    - signature
+    - S
+    - R
+    - commitment
+    - signature
+- role: Receiver_accept_setup_response
+  operations:
+  - receive:
+    - S
+    - R
+    - commitment
+    - signature
+    - S
+    - R
+    - commitment
+    - signature
+  - send: []
+- role: Sender_broadcast_payload
+  operations:
+  - generate_nonces:
+    - ~m
+  - compute:
+    - commitment = h(k1)
+    - payload = <~m, h(k2)>
+  - send:
+    - payload
+    - mac(k1, payload)
+- role: Receiver_buffer_stream_message
+  operations:
+  - receive:
+    - payload
+    - tag
+  - send: []
+- role: Sender_disclose_current_key
+  operations:
+  - send:
+    - k1
+- role: Receiver_accept_broadcast_payload
+  operations:
+  - receive:
+    - k1
+  - compute:
+    - commitment = h(k1)
+    - tag = mac(k1, payload)
+  - send: <END>

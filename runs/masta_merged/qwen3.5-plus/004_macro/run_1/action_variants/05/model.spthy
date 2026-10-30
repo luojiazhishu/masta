@@ -1,0 +1,39 @@
+theory BSKT_D begin
+
+builtins: hashing, asymmetric-encryption
+
+// PKI Setup: Server has long-term key pair
+rule Setup_Server:
+  [ Fr(~skS) ]
+  --[ Create('S', ~skS) ]->
+  [ !Pk('S', pk(~skS)), !Ltk('S', ~skS), Out(pk(~skS)) ]
+
+// RuleStep1: Client generates session key k, stores state, sends m1
+rule RuleStep1:
+  [ Fr(~k), !Pk('S', pkS) ]
+  --[ Test1(), Secret('C', 'S', ~k), Honest('C') ]->
+  [ Out(aenc(~k, pkS)), !StateC('C', 'S', ~k) ]
+
+// RuleStep2: Server receives m1, decrypts to get k, computes hash, sends m2
+// Use let-binding to ensure k is derived from the input ciphertext and the stored key skS
+rule RuleStep2:
+  let k = adec(cipher, skS)
+  in
+  [ In(cipher), !Ltk('S', skS) ]
+  --[ Test2(), Running('S', 'C', k), Honest('S') ]->
+  [ Out(<h(k), 'done'>) ]
+
+// RuleStep3: Client receives m2, looks up state to get k, verifies hash and marker
+// The state fact !StateC('C', 'S', ~k) binds the fresh variable ~k from the premise
+rule RuleStep3:
+  [ In(<digest, 'done'>), !StateC('C', 'S', ~k) ]
+  --[ Test3(), Commit('C', 'S', ~k), Honest('C') ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

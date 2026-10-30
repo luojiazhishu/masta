@@ -1,0 +1,54 @@
+theory famed_auth begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~rn), Fr(~ltkI) ]
+  --[ Test1(), Running($I,$R,<$I,$R>), Honest($I) ]->
+  [ Out(<sign(<$I,$R>,~ltkI),~rn>) ]
+
+rule RuleStep2:
+  [ In(<sign(<$I,$R>,~ltkI),~rn>), Fr(~ltkR) ]
+  --[ Test2(), Commit($R,$I,<$I,$R>), Honest($R) ]->
+  [ Out(sign(<$I,$R>,~ltkR)) ]
+
+rule LtkIReveal:
+  [ !Ltk($I, ~ltkI) ]
+  --[ LtkReveal($I) ]->
+  [ Out(~ltkI) ]
+
+rule LtkRReveal:
+  [ !Ltk($R, ~ltkR) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~ltkR) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: weak_agreement
+lemma weak_agreement_identity_mutual_authentication:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_identity_mutual_authentication:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

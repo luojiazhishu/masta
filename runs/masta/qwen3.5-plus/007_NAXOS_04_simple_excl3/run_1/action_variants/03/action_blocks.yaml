@@ -1,0 +1,36 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tid1
+  - compute:
+    - exI = h1(<~eskI, ~lkI>)
+    - hkI = 'g'^h1(<~eskI, ~lkI>)
+  - send:
+    - hkI
+- role: RuleStep2
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+    - ~tid2
+  - compute:
+    - exR = h1(<~eskR, ~lkR>)
+    - hkR = 'g'^h1(<~eskR, ~lkR>)
+  - send:
+    - hkR
+    - '''NAXOS-v1'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - Y
+    - '''NAXOS-v1'''
+  - compute:
+    - kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  - send: []
+- role: RuleStep4
+  operations:
+  - compute:
+    - kR = h2(<pkI^exR, hkI^~lkR, $I, $R>)
+  - send: <END>

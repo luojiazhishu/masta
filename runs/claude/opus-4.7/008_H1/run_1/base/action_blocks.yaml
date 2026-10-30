@@ -1,0 +1,19 @@
+- role: Init_1
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+- role: Resp_1
+  operations:
+  - receive:
+    - mI
+  - assert:
+    - verify(mI, <$I, $R>, pkI) = true
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: Init_2
+  operations:
+  - receive:
+    - mR
+  - assert:
+    - verify(mR, <$I, $R>, pkR) = true
+  - send: <END>

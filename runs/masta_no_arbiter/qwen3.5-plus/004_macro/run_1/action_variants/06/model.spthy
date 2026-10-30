@@ -1,0 +1,78 @@
+theory FAMED_BSKTDSH begin
+
+builtins: hashing, asymmetric-encryption
+
+rule Setup_Server:
+  [
+    Fr(~sk_S)
+  ]
+  --[
+    Create('S', ~sk_S),
+    Honest('S')
+  ]->
+  [
+    !Ltk('S', ~sk_S),
+    !Pk('S', pk(~sk_S)),
+    Out(pk(~sk_S))
+  ]
+
+rule Client_Send:
+  [
+    Fr(~k),
+    !Pk('S', pk_S)
+  ]
+  --[
+    Secret('C', 'S', ~k),
+    Commit('C', 'S', ~k)
+  ]->
+  [
+    Out(aenc(~k, pk_S))
+  ]
+
+rule Server_Respond:
+  [
+    In(c),
+    !Ltk('S', sk_S)
+  ]
+  --[
+    Running('S', 'C', adec(c, sk_S))
+  ]->
+  [
+    Out(h(<adec(c, sk_S), 'session'>))
+  ]
+
+rule Client_Verify:
+  [
+    Fr(~k),
+    In(d),
+    !Pk('S', pk_S)
+  ]
+  --[
+  ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !Ltk(A, ltk)
+  ]
+  --[
+    LtkReveal(A)
+  ]->
+  [
+    Out(ltk)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Create('S', ~sk_S) @ #t1 & Secret('C', 'S', ~k) @ #t2 & Running('S', 'C', ~k) @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_secrecy_of_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

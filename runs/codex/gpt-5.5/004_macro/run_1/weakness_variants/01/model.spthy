@@ -1,0 +1,70 @@
+theory FixedKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Setup_Server:
+  [ Fr(~ltkS), Fr(~kfixed) ]
+  --[ Create($S, ~ltkS) ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), !KFixed(~kfixed), Out(pk(~ltkS)) ]
+
+rule Provision_Fixed_Secret:
+  [ !KFixed(k) ]
+  --[ ]->
+  [ Out(k) ]
+
+rule Reveal_Server_Ltk:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Client_Send_KeyTransport:
+  [ Fr(~cid), !Pk($S, pkS), !KFixed(k) ]
+  --[ Test1(), Create($C, ~cid), Running($C, $S, <'transported_key', k>), Secret($C, $S, k) ]->
+  [ Out(aenc(k, pkS)), St_C_1($C, $S, ~cid, k) ]
+
+rule Server_Process_KeyTransport:
+  let k = adec(m1, ltkS) in
+  [ Fr(~sid), !Ltk($S, ltkS), In(m1) ]
+  --[ Test2(), Create($S, ~sid), Running($S, $C, <'transported_key', k>) ]->
+  [ Out(h(k)) ]
+
+rule Client_Verify_KeyConfirm:
+  [ St_C_1($C, $S, cid, k), In(h(k)) ]
+  --[ Test3(), Commit($C, $S, <'transported_key', k>), Honest($C), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_transport_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,76 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Setup:
+  [ Fr(~sk_c), Fr(~sk_s) ]
+  --[ ]->
+  [ !Ltk(~sk_c), !Ltk(~sk_s), !Pk(pk(~sk_c), ~sk_c), !Pk(pk(~sk_s), ~sk_s) ]
+
+rule GetEndpointsRequest:
+  [ !Ltk(~sk_c), !Pk(pk_c, ~sk_c), Fr(~n_c) ]
+  --[ Test1(), Create(~n_c) ]->
+  [ Out(< 'GEReq', pk_c >), St_C1(~n_c, pk_c, ~sk_c) ]
+
+rule GetEndpointsResponse:
+  [ In(< 'GEReq', pk_c >), !Ltk(~sk_s), !Pk(pk_s, ~sk_s), Fr(~n_s) ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', pk_s, 'Sign' >), St_S1(~n_s, pk_s, ~sk_s, pk_c) ]
+
+rule OpenSecureChannelRequest:
+  [ St_C1(~n_c, pk_c, ~sk_c), In(< 'GERes', pk_s, 'Sign' >), Fr(~token), Fr(~ttl) ]
+  --[ Test3(), Running(pk_c, pk_s, < 'client', pk_c, pk_s, ~n_c, ~token >) ]->
+  [ Out(< pk_c, < 'OSCReq', pk_c, ~n_c >, sign(h(< 'OSCReq', pk_c, ~n_c >), ~sk_c), h(< 'OSCReq', pk_c, ~n_c >) >), St_C2(~n_c, pk_c, pk_s, ~sk_c, ~token) ]
+
+rule OpenSecureChannelResponse:
+  [ St_S1(~n_s, pk_s, ~sk_s, pk_c), In(< pk_c, < 'OSCReq', pk_c, nc >, reqsig, reqhash >), Fr(~token), Fr(~ttl) ]
+  --[ Test4(), Running(pk_s, pk_c, < 'server', pk_c, pk_s, ~n_s, ~token >) ]->
+  [ Out(< pk_s, < 'OSCRes', ~n_s, ~token, ~ttl >, sign(h(< 'OSCRes', ~n_s, ~token, ~ttl >), ~sk_s), h(< 'OSCRes', ~n_s, ~token, ~ttl >) >), St_S2(~n_s, pk_s, pk_c, ~token, nc) ]
+
+rule Client_Finalize:
+  [ St_C2(~n_c, pk_c, pk_s, ~sk_c, token), In(< pk_s, < 'OSCRes', ns, token, ttl >, ressig, reshash >) ]
+  --[ Commit(pk_c, pk_s, < 'client', pk_c, pk_s, ~n_c, token >), Honest(pk_c), Secret(pk_c, pk_s, h(<~n_c, ns>)), Secret(pk_s, pk_c, h(<~n_c, ns>)) ]->
+  [ ]
+
+rule Server_Commit:
+  [ St_S2(ns, pk_s, pk_c, token, nc) ]
+  --[ Commit(pk_s, pk_c, < 'server', pk_c, pk_s, ns, token >), Honest(pk_s) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(~sk_a) ]
+  --[ LtkReveal(pk(~sk_a)) ]->
+  [ Out(~sk_a) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma channel_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma client_nonce_agreement:
+  "All A B na tok #i.
+     Commit(A, B, < 'client', A, B, na, tok >) @ i
+   ==>
+       (Ex #j. Running(B, A, < 'client', A, B, na, tok >) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma server_nonce_agreement:
+  "All A B ns tok #i.
+     Commit(A, B, < 'server', B, A, ns, tok >) @ i
+   ==>
+       (Ex #j. Running(B, A, < 'server', B, A, ns, tok >) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

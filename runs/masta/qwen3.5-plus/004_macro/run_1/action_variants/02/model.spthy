@@ -1,0 +1,93 @@
+theory BSKTSN begin
+
+builtins: asymmetric-encryption, hashing
+
+// PKI: Server long-term key pair
+rule Generate_key_pair:
+  [ Fr(~sk) ]
+  -->
+  [ !Pk($S, pk(~sk))
+  , Out(pk(~sk))
+  , !Ltk($S, ~sk)
+  ]
+
+// RuleStep1: Client sends encrypted session key
+rule RuleStep1:
+  let
+      m1 = aenc(~k, pkS)
+  in
+  [ Fr(~k)
+  , Fr(~tid)
+  , !Pk($S, pkS)
+  ]
+  --[ Test1(), Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ Out(m1)
+  , ClientWait(~tid, ~k, $S)
+  ]
+
+// RuleStep2: Server receives m1, decrypts, generates rs, sends m2
+rule RuleStep2:
+  let
+      k = adec(m1, sk)
+      m2 = <h(k), ~rs>
+  in
+  [ In(m1)
+  , Fr(~rs)
+  , !Ltk($S, sk)
+  ]
+  --[ Test2(), Running($S, $C, k) ]->
+  [ Out(m2)
+  ]
+
+// RuleStep3: Client receives m2, verifies hash, terminates
+rule RuleStep3:
+  let
+      m2 = <h(~k), ~rs>
+  in
+  [ In(m2)
+  , ClientWait(~tid, ~k, $S)
+  ]
+  --[ Test3(), Commit($C, $S, ~k) ]->
+  [ Out('<END>')
+  ]
+
+// Reveal rule for long-term key compromise
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_secrecy_of_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_on_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_on_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

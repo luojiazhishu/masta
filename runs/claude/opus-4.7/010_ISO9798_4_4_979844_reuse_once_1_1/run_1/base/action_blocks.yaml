@@ -1,0 +1,37 @@
+- role: Resp_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+  - send:
+    - ~rb
+    - '''text1'''
+- role: Init_Send
+  operations:
+  - receive:
+    - rb
+    - text1
+  - send:
+    - ~ra
+    - '''text3'''
+    - <'sid1', ~ra, rb, $B, 'text2'>
+    - mac(<'sid1', ~ra, rb, $B>, ~k)
+- role: Resp_Verify
+  operations:
+  - receive:
+    - ra
+    - text3
+    - tagged
+    - mac1
+  - assert:
+    - mac1 = mac(<'sid1', ra, ~rb, $B>, ~k)
+  - send:
+    - '''text5'''
+    - mac(<'sid2', ~rb, ra>, ~k)
+- role: Init_Finish
+  operations:
+  - receive:
+    - text5
+    - mac2
+  - assert:
+    - mac2 = mac(<'sid2', rb, ~ra>, ~k)
+  - send: <END>

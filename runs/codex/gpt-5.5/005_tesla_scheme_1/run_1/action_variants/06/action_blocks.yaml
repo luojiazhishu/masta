@@ -1,0 +1,71 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nr
+  - send:
+    - $R
+    - $S
+    - ~nr
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - R
+    - S
+    - nr
+  - generate_nonces:
+    - ~k1
+  - compute:
+    - commitment = h(~k1)
+    - sig = sign(<h(~k1), nr>, ltkS)
+  - send:
+    - S
+    - R
+    - commitment
+    - sig
+    - '''commit_response'''
+- role: Receiver_Accepts_Setup
+  operations:
+  - receive:
+    - S
+    - R
+    - commitment
+    - sig
+    - '''commit_response'''
+  - assert:
+    - verify(sig, <commitment, nr>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_Data1
+  operations:
+  - generate_nonces:
+    - ~m1
+    - ~k2
+  - compute:
+    - d1 = <~m1, h(~k2)>
+  - send:
+    - d1
+    - mac(k1, d1)
+- role: Receiver_Stores_Data1
+  operations:
+  - receive:
+    - d1
+    - tag1
+  - send: []
+- role: Sender_Broadcast_Disclosure
+  operations:
+  - generate_nonces:
+    - ~k3
+  - compute:
+    - d2 = <'m2', h(~k3), k1>
+  - send:
+    - d2
+    - mac(k2, d2)
+    - k1
+- role: Receiver_Accepts_Payload
+  operations:
+  - receive:
+    - k1
+  - compute:
+    - d1 = <m1, next_commitment>
+  - assert:
+    - h(k1) = commitment
+  - send: <END>

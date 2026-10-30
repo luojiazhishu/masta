@@ -1,0 +1,72 @@
+theory LAK06
+begin
+
+builtins: xor, hashing
+
+// Long-term key shared between Reader and Tag
+rule Setup:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ !Ltk(~k) ]
+
+// Message 1: Reader generates r0 and sends challenge
+rule Reader_R0:
+  [ !Ltk(k), Fr(~r0) ]
+  --[ Test2(), Running(R, T, <'reader', R, T, ~r0>) ]->
+  [ St_R(R, T, k, ~r0), Out(~r0) ]
+
+// Message 2: Tag receives r0, generates r1, sends response
+rule Tag_T1:
+  [ !Ltk(k), In(r0), Fr(~r1) ]
+  --[ Test3(), Running(T, R, <'tag', T, R, r0, ~r1>) ]->
+  [ St_T(T, R, k, r0, ~r1), Out(<~r1, h(r0 XOR ~r1 XOR k)>) ]
+
+// Message 3: Reader verifies tag_mac and sends confirmation
+rule Reader_R1:
+  [ St_R(R, T, k, r0), In(<r1, h(r0 XOR r1 XOR k)>) ]
+  --[ Test4(), Commit(R, T, <'reader', R, T, r0, r1>) ]->
+  [ St_R2(R, T, k, r0, r1), Out(h(h(r0 XOR r1 XOR k) XOR r0)) ]
+
+// Message 4: Tag verifies reader_mac
+rule Tag_Verify:
+  [ St_T(T, R, k, r0, r1), In(h(h(r0 XOR r1 XOR k) XOR r0)) ]
+  --[ Test5(), Commit(T, R, <'tag', T, R, r0, r1>) ]->
+  [ ]
+
+// Adversary can reveal long-term key
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal() ]->
+  [ Out(k) ]
+
+// Secrecy of long-term key k
+// category: secrecy
+lemma secrecy_k:
+  "All k #i.
+     Ltk(k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

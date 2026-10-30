@@ -1,0 +1,46 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+  - send:
+    - '''R'''
+    - '''S'''
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''R'''
+    - '''S'''
+    - ~n_R
+  - generate_nonces:
+    - ~k_1
+    - ~stag_S
+  - compute:
+    - commitment = f(~k_1)
+    - signature = sign(<f(~k_1), ~n_R>, ~SK_S)
+  - send:
+    - '''S'''
+    - '''R'''
+    - commitment
+    - signature
+    - ~stag_S
+- role: RuleStep3
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - compute:
+    - D_1 = <~m_1, f(~k_2)>
+    - mac_1 = MAC(~k_1, <~m_1, f(~k_2)>)
+  - send:
+    - D_1
+    - mac_1
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~m_2
+    - ~k_3
+  - compute:
+    - D_2 = <~m_2, f(~k_3), ~k_1>
+    - mac_2 = MAC(~k_2, <~m_2, f(~k_3), ~k_1>)
+  - send: <END>

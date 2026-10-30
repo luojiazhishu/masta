@@ -1,0 +1,78 @@
+theory BsktStatic
+begin
+
+builtins: asymmetric-encryption, hashing
+
+/* Server long-term key registration */
+rule Register_LTK:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_LTK:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+/* Deployment-wide shared secret — same for all clients, modeled as public
+   because k_fixed is provisioned to every deployment participant */
+rule Provision_SharedSecret:
+  [ Fr(~kf) ]
+  --[ ]->
+  [ !SharedSecret(~kf), Out(~kf) ]
+
+/* Action block 1: Client encrypts k_fixed under server public key and sends */
+rule Client_Send:
+  [ !SharedSecret(kf), !Pk($S, pkS), Fr(~tid) ]
+  --[ Test1(), Running($C, $S, kf) ]->
+  [ Out(aenc(<$C, kf>, pkS)), St_C($C, $S, ~tid, kf) ]
+
+/* Action block 2: Server decrypts ciphertext, checks value matches k_fixed,
+   responds with hash */
+rule Server_Respond:
+  [ !Ltk($S, ~sk), !SharedSecret(kf), In(aenc(<cid, kf>, pk(~sk))) ]
+  --[ Test2(), Running($S, cid, kf) ]->
+  [ Out(h(kf)) ]
+
+/* Action block 3: Client verifies hash matches h(k_fixed) */
+rule Client_Verify:
+  [ St_C($C, $S, ~tid, kf), In(h(kf)) ]
+  --[ Test3(), Commit($C, $S, kf), Secret($C, $S, kf), Honest($C), Honest($S) ]->
+  [ ]
+
+/* Safety lemmas */
+
+// category: secrecy
+lemma secrecy:
+  "All a b x #i.
+     Secret(a, b, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

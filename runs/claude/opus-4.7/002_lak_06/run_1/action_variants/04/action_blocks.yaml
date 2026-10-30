@@ -1,0 +1,40 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - '''INIT'''
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - '''INIT'''
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR k)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Finish
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - compute:
+    - expected = h(~r0 XOR r1 XOR k)
+    - reader_mac = h(tag_mac XOR k XOR ~r0)
+  - assert:
+    - tag_mac = expected
+  - send:
+    - reader_mac
+- role: Tag_Finish
+  operations:
+  - receive:
+    - reader_mac
+  - compute:
+    - expected = h(tag_mac XOR k XOR r0)
+  - assert:
+    - reader_mac = expected
+  - send: <END>

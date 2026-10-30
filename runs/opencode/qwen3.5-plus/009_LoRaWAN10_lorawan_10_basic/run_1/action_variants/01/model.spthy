@@ -1,0 +1,71 @@
+theory LoRaWAN10_Join
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions: cst1/0, cst2/0
+
+rule Setup:
+  [ Fr(~AppKey) ]
+  --[ Create($D, ~AppKey), Create($S, ~AppKey) ]->
+  [ !Ltk($D, ~AppKey), !Ltk($S, ~AppKey) ]
+
+rule Device_JoinRequest:
+  [ !Ltk($D, ~AppKey), Fr(~DevNonce), Fr(~TransportId) ]
+  --[ Test1(), Running($D, $S, 'Dev') ]->
+  [ Out(<$D, $S, ~DevNonce, h(<'JoinRequest', $D, $S, ~DevNonce>, ~AppKey), ~TransportId>), St_D($D, $S, ~DevNonce, ~AppKey) ]
+
+rule Server_JoinAccept:
+  [ In(<DevEUI, JoinEUI, DevNonce, RequestMAC, TransportId>), !Ltk($S, ~AppKey), Fr(~JoinNonce) ]
+  --[ Test2(), Running($S, $D, 'Server'), Eq(RequestMAC, h(<'JoinRequest', DevEUI, JoinEUI, DevNonce>, ~AppKey)) ]->
+  [ Out(senc(<'JoinAccept', ~JoinNonce, $D, h(<'JoinAccept', ~JoinNonce, $D>, ~AppKey)>, ~AppKey)), St_S($S, $D, DevNonce, ~JoinNonce, ~AppKey) ]
+
+rule Device_Commit:
+  [ St_D($D, $S, ~DevNonce, ~AppKey), In(senc(<'JoinAccept', JoinNonce, $D, ResponseMAC>, ~AppKey)) ]
+  --[ Test3(), Commit($D, $S, 'Device'), Eq(ResponseMAC, h(<'JoinAccept', JoinNonce, $D>, ~AppKey)), Secret($D, $S, senc(<cst1, ~DevNonce, JoinNonce>, ~AppKey)), Secret($D, $S, senc(<cst2, ~DevNonce, JoinNonce>, ~AppKey)) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk($X, ~AppKey) ]
+  --[ LtkReveal($X) ]->
+  [ Out(~AppKey) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_AppSKey:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+// category: secrecy
+lemma secrecy_NwkSKey:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+// category: aliveness
+lemma aliveness_Server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+end

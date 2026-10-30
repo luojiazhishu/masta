@@ -1,0 +1,63 @@
+theory CRXORNoVfy
+begin
+
+builtins: hashing, xor
+
+// Setup of the pre-shared symmetric key between two endpoints.
+rule Setup_SharedKey:
+  [ Fr(~k) ]
+  --[ KeyGen($I, $R, ~k) ]->
+  [ !Shared($I, $R, ~k) ]
+
+// Long-term key reveal capability for the symmetric key.
+rule Reveal_Key:
+  [ !Shared(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+// Block 1: Initiator generates a fresh nonce na and transmits it.
+rule I_1:
+  [ Fr(~na), !Shared($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ Out(~na), St_I_1($I, $R, k, ~na) ]
+
+// Block 2: Responder receives na, generates fresh nb, computes the
+// tag t = h(na XOR k XOR nb), and transmits <t, nb>.
+rule R_2:
+  let
+    t = h(na XOR k XOR ~nb)
+  in
+  [ In(na), !Shared($I, $R, k), Fr(~nb) ]
+  --[ Test2(), Create($R, ~nb), Running($R, $I, <'responder', t>) ]->
+  [ Out(<t, ~nb>) ]
+
+// Block 3: Initiator receives any well-formed <t, nb> and accepts
+// without performing any cryptographic check on the tag.
+rule I_3:
+  [ St_I_1(I, R, k, na), In(<t, nb>) ]
+  --[ Test3(), Commit(I, R, <'responder', t>), Honest(R) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

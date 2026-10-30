@@ -1,0 +1,45 @@
+theory BSKTDH begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: session_label/0
+
+equations: session_label() = 'session'
+
+rule Generate_key_pair:
+  [ Fr(~sk_s) ]
+  --[ Ltk($S, ~sk_s), Pk($S, pk(~sk_s)) ]->
+  [ !Ltk($S, ~sk_s), !Pk($S, pk(~sk_s)), Out(pk(~sk_s)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, sk_s) ]
+  --[ LtkReveal($S) ]->
+  [ Out(sk_s) ]
+
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pk_s), Fr(~tid_c) ]
+  --[ Test1(), StartClient(~tid_c, $S, ~k) ]->
+  [ Out(aenc(~k, pk_s)), !StateC1(~tid_c, $S, ~k) ]
+
+rule RuleStep2:
+  [ In(aenc(k, pk_s)), !Ltk($S, sk_s), !Pk($S, pk_s), Fr(~tid_s) ]
+  let m2 = h(<k, 'session'>)
+  in
+  --[ Test2(), StartServer(~tid_s, $S, k), ServerComputed(~tid_s, $S, k, m2) ]->
+  [ Out(m2), !StateS1(~tid_s, $S, k, m2) ]
+
+rule RuleStep3:
+  [ In(m2), !StateC1(tid_c, $S, k) ]
+  let expected = h(<k, 'session'>)
+  in
+  [ m2 = expected ]
+  --[ Test3(), ClientAccepted(tid_c, $S, k, m2) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ t1 & Test2() @ t2 & Test3() @ t3
+     & t1 < t2 & t2 < t3"
+
+end

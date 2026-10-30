@@ -1,0 +1,21 @@
+- role: Client_1
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - encrypt(~k, pkS)
+- role: Serv_1
+  operations:
+  - receive:
+    - request
+  - generate_nonces:
+    - ~rs
+  - send:
+    - hashdec(request, ~ltkS)
+    - ~rs
+- role: Client_2
+  operations:
+  - receive:
+    - h(k)
+    - rs
+  - send: <END>

@@ -1,0 +1,25 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~sid
+  - send:
+    - sign(<I, R>, ltkI)
+    - '''init'''
+- role: Responder_Receive
+  operations:
+  - receive:
+    - sig
+    - '''init'''
+  - generate_nonces:
+    - ~sid
+  - assert:
+    - verify(sig, <I, R>, pkI) = true
+  - send:
+    - sign(<I, R>, ltkR)
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - sig
+  - assert:
+    - verify(sig, <I, R>, pkR) = true
+  - send: <END>

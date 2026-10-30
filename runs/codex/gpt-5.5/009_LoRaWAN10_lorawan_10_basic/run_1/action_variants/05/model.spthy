@@ -1,0 +1,123 @@
+theory LoRaWAN10_Basic begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, com/2, bar/1
+
+rule Register_Device:
+  [ Fr(~appkey), Fr(~devaddr) ]
+  --[ Honest($Device), Honest($Server), Provisioned($Device, $Server, ~appkey, $DevEUI, $JoinEUI, ~devaddr) ]->
+  [ !AppKey($Device, $Server, ~appkey),
+    !DevInfo($Device, $Server, $DevEUI, $JoinEUI, ~devaddr) ]
+
+rule Device_Send_JoinRequest:
+  let req = <'JoinRequest', deveui, joineui, ~devnonce, mac(appkey, <'JoinRequest', deveui, joineui, ~devnonce>)>
+  in
+  [ !AppKey($Device, $Server, appkey),
+    !DevInfo($Device, $Server, deveui, joineui, devaddr),
+    Fr(~devnonce) ]
+  --[ Test1(),
+      DeviceRequest($Device, $Server, appkey, deveui, joineui, ~devnonce),
+      Running($Device, $Server, <deveui, joineui, ~devnonce>) ]->
+  [ Out(req),
+    DeviceWait($Device, $Server, appkey, deveui, joineui, ~devnonce, devaddr) ]
+
+rule Server_Receive_JoinRequest_Audit:
+  [ !AppKey($Device, $Server, appkey),
+    !DevInfo($Device, $Server, deveui, joineui, devaddr),
+    In(<'JoinRequest', deveui, joineui, devnonce, mac(appkey, <'JoinRequest', deveui, joineui, devnonce>)>) ]
+  --[ Test2(),
+      ServerReceived($Server, $Device, appkey, deveui, joineui, devnonce),
+      AuditLogged($Server, com(deveui, joineui), bar(devnonce)),
+      Running($Server, $Device, <deveui, joineui, devnonce>) ]->
+  [ ServerReady($Server, $Device, appkey, deveui, joineui, devnonce, devaddr) ]
+
+rule Server_Send_JoinAccept:
+  let appskey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwkskey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+      body = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)>
+      accept = senc(body, appkey)
+  in
+  [ ServerReady($Server, $Device, appkey, deveui, joineui, devnonce, devaddr),
+    Fr(~joinnonce) ]
+  --[ Test3(),
+      ServerCommit($Server, $Device, appkey, devnonce, ~joinnonce),
+      ServerSessionKey($Server, $Device, appskey),
+      ServerSessionKey($Server, $Device, nwkskey),
+      Secret(appskey),
+      Secret(nwkskey),
+      Commit($Server, $Device, <appkey, devnonce, ~joinnonce>),
+      Running($Server, $Device, <appkey, devnonce, ~joinnonce>) ]->
+  [ Out(accept) ]
+
+rule Device_Receive_JoinAccept:
+  let appskey = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwkskey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ DeviceWait($Device, $Server, appkey, deveui, joineui, devnonce, devaddr),
+    In(senc(<'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce, devaddr>)>, appkey)) ]
+  --[ Test4(),
+      DeviceCommit($Device, $Server, appkey, devnonce, joinnonce),
+      DeviceSessionKey($Device, $Server, appskey),
+      DeviceSessionKey($Device, $Server, nwkskey),
+      Secret(appskey),
+      Secret(nwkskey),
+      Commit($Device, $Server, <appkey, devnonce, joinnonce>) ]->
+  [ DeviceJoined($Device, $Server, appskey, nwkskey) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma device_injective_agreement:
+  "All device server appkey devnonce joinnonce #i.
+     DeviceCommit(device, server, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex #j. ServerCommit(server, device, appkey, devnonce, joinnonce) @ #j & #j < #i
+          & not (Ex device2 server2 #i2.
+                   DeviceCommit(device2, server2, appkey, devnonce, joinnonce) @ #i2
+                 & not (#i2 = #i)))"
+
+// category: noninjective_agreement
+lemma device_noninjective_agreement:
+  "All device server appkey devnonce joinnonce #i.
+     DeviceCommit(device, server, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex #j. ServerCommit(server, device, appkey, devnonce, joinnonce) @ #j & #j < #i)"
+
+// category: injective_agreement
+lemma server_injective_agreement:
+  "All server device appkey devnonce joinnonce #i.
+     ServerCommit(server, device, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex deveui joineui #j. DeviceRequest(device, server, appkey, deveui, joineui, devnonce) @ #j & #j < #i
+          & not (Ex server2 device2 #i2.
+                   ServerCommit(server2, device2, appkey, devnonce, joinnonce) @ #i2
+                 & not (#i2 = #i)))"
+
+// category: noninjective_agreement
+lemma server_noninjective_agreement:
+  "All server device appkey devnonce joinnonce #i.
+     ServerCommit(server, device, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex deveui joineui #j. DeviceRequest(device, server, appkey, deveui, joineui, devnonce) @ #j & #j < #i)"
+
+// category: injective_agreement
+lemma session_keys_injective_agreement:
+  "All device server appkey devnonce joinnonce #i.
+     DeviceCommit(device, server, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex #j. ServerCommit(server, device, appkey, devnonce, joinnonce) @ #j & #j < #i
+          & not (Ex device2 server2 #i2.
+                   DeviceCommit(device2, server2, appkey, devnonce, joinnonce) @ #i2
+                 & not (#i2 = #i)))"
+
+// category: noninjective_agreement
+lemma session_keys_noninjective_agreement:
+  "All device server appkey devnonce joinnonce #i.
+     DeviceCommit(device, server, appkey, devnonce, joinnonce) @ #i
+   ==> (Ex #j. ServerCommit(server, device, appkey, devnonce, joinnonce) @ #j & #j < #i)"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All key #i. Secret(key) @ #i ==> not (Ex #j. K(key) @ #j)"
+
+end

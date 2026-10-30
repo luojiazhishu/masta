@@ -1,0 +1,74 @@
+theory LoRaWAN10_Weakness
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions: cst1/0, cst2/0
+
+rule Setup:
+  [ Fr(~AppKey) ]
+  --[ ]->
+  [ !Ltk(~AppKey), Out(~AppKey) ]
+
+rule Device_JoinRequest:
+  [ Fr(~DevNonce), !Ltk(~AppKey) ]
+  --[ Test1() ]->
+  [ Out(< 'JoinRequest', ~DevNonce, h(~AppKey, <'JoinRequest', ~DevNonce>) >),
+    St_Dev1(~DevNonce) ]
+
+rule Server_JoinAccept:
+  [ In(< 'JoinRequest', DevNonce, h(~AppKey, <'JoinRequest', DevNonce>) >),
+    !Ltk(~AppKey), Fr(~JoinNonce) ]
+  --[ Test2(), Running(~AppKey, ~AppKey, <'server', DevNonce, ~JoinNonce, ~AppKey>) ]->
+  [ Out(senc(< 'JoinAccept', ~JoinNonce, h(~AppKey, <'JoinAccept', ~JoinNonce>) >, ~AppKey)),
+    St_Serv1(DevNonce, ~JoinNonce) ]
+
+rule Device_Finish:
+  [ St_Dev1(DevNonce),
+    In(senc(< 'JoinAccept', JoinNonce, h(~AppKey, <'JoinAccept', JoinNonce>) >, ~AppKey)),
+    !Ltk(~AppKey) ]
+  --[ Test3(),
+      Commit(~AppKey, ~AppKey, <'device', DevNonce, JoinNonce, ~AppKey>),
+      Secret(~AppKey, ~AppKey, senc(<cst1, DevNonce, JoinNonce>, ~AppKey)),
+      Secret(~AppKey, ~AppKey, senc(<cst2, DevNonce, JoinNonce>, ~AppKey)) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k), Honest(k) ]->
+  [ Out(k) ]
+
+// category: secrecy
+lemma secrecy_AppSKey:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_NwkSKey:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_Device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

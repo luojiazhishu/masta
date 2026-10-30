@@ -1,0 +1,61 @@
+theory ISO979844_Mutual_CR
+begin
+
+builtins: hashing
+
+functions:
+  mac/2
+
+rule Ltk_Setup:
+  [ Fr(~kAB) ]
+  --[ CreateLtk(~kAB) ]->
+  [ !Ltk(~kAB) ]
+
+rule Responder_Challenge:
+  [ !Ltk(~kAB), Fr(~rb) ]
+  --[ Test1(), Create($B, ~rb) ]->
+  [ Out(~rb), St_B_1(~kAB, ~rb) ]
+
+rule Initiator_Response:
+  [ !Ltk(~kAB), In(rb), Fr(~ra) ]
+  --[ Test2(), Running($A, $B, ~ra, rb), Create($A, ~ra) ]->
+  [ Out(<~ra, mac(<$sid1_mut_cr, ~ra, rb, $B>, ~kAB)>), St_A_1(~kAB, ~ra, rb) ]
+
+rule Responder_Auth:
+  [ St_B_1(~kAB, ~rb), In(<ra, mac1>) ]
+  --[ Test3(), Commit($B, $A, ra, ~rb), Running($A, $B, ra, ~rb), Honest($B) ]->
+  [ Out(mac(<$sid2_mut_cr, ~rb, ra>, ~kAB)), St_B_2(~kAB, ~rb, ra) ]
+
+rule Initiator_Auth:
+  [ St_A_1(~kAB, ~ra, rb), In(mac2) ]
+  --[ Test4(), Commit($A, $B, ~ra, rb), Running($B, $A, ~ra, rb), Honest($A) ]->
+  [ ]
+
+rule Ltk_Reveal:
+  [ !Ltk(~kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(~kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+lemma noninjective_agreement_A:
+  // category: noninjective_agreement
+  "All a b x y #i.
+     Commit(a, b, x, y) @ i
+   ==>
+       (Ex #j. Running(b, a, x, y) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma noninjective_agreement_B:
+  // category: noninjective_agreement
+  "All a b x y #i.
+     Commit(a, b, x, y) @ i
+   ==>
+       (Ex #j. Running(b, a, x, y) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

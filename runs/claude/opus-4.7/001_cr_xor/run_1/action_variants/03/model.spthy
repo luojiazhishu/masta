@@ -1,0 +1,73 @@
+theory CRXORRMK
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// Out-of-band shared symmetric key setup. The fact orientation
+// !Ltk($I, $R, ~k) records that ~k is the key for an (I-initiates,
+// R-responds) instance of the protocol. Both endpoints learn ~k.
+rule Setup_SharedKey:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk($I, $R, ~k) ]
+
+// Long-term shared-key compromise: revealing !Ltk($I, $R, k)
+// exposes ~k to the adversary; both endpoints' guarantees are then
+// off the hook in the safety lemmas via the LtkReveal exemption.
+rule Reveal_SharedKey:
+  [ !Ltk(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+// Action block 1: Initiator generates and sends challenge na
+rule I_Send_Challenge:
+  [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ Out(~na), St_I_1($I, $R, k, ~na) ]
+
+// Action block 2: Responder receives na, generates nb, sends responder flight
+rule R_Send_Response:
+  let tag = h(na XOR k XOR ~nb) in
+  [ In(na), !Ltk($I, $R, k), Fr(~nb) ]
+  --[ Test2(), Create($R, ~nb),
+      Running($R, $I, tag),
+      Honest($I), Honest($R) ]->
+  [ Out(<tag, ~nb, 'Resp'>) ]
+
+// Action block 3: Initiator verifies marker and tag, then commits
+rule I_Verify:
+  let tag_expected = h(~na XOR k XOR nb) in
+  [ St_I_1($I, $R, k, ~na), In(<tag, nb, marker>) ]
+  --[ Test3(),
+      Eq(marker, 'Resp'),
+      Eq(tag, tag_expected),
+      Commit($I, $R, tag),
+      Honest($I), Honest($R) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

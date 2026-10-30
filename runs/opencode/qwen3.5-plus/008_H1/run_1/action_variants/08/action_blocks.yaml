@@ -1,0 +1,23 @@
+- role: Initiator_Start
+  operations:
+  - send:
+    - sign(<$A, $B>, ~ltkA)
+- role: Responder_Receive
+  operations:
+  - receive:
+    - sig
+  - assert:
+    - verify(sig, <$A, $B>, pkA) = true
+  - send:
+    - sign(<$A, $B>, ~ltkB)
+- role: Responder_Resend
+  operations:
+  - send:
+    - sign(<$A, $B>, ~ltkB)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - respSig
+  - assert:
+    - verify(respSig, <$A, $B>, pkB) = true
+  - send: <END>

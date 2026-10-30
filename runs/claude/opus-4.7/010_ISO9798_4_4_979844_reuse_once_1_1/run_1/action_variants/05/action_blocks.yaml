@@ -1,0 +1,34 @@
+- role: B_Challenge
+  operations:
+  - generate_nonces:
+    - ~RB
+  - send:
+    - ~RB
+- role: A_Respond
+  operations:
+  - receive:
+    - RB
+    - RA
+  - send:
+    - '''token_ab'''
+    - RA
+    - <'sid1_mut_cr', RA, RB, $B>
+    - mac(<'sid1_mut_cr', RA, RB, $B>, ~kAB)
+- role: B_Verify_Respond
+  operations:
+  - receive:
+    - '''token_ab'''
+    - RA
+    - <'sid1_mut_cr', RA, ~RB, $B>
+    - mac1
+  - assert:
+    - mac1 = mac(<'sid1_mut_cr', RA, ~RB, $B>, ~kAB)
+  - send:
+    - mac(<'sid2_mut_cr', ~RB, RA>, ~kAB)
+- role: A_Complete
+  operations:
+  - receive:
+    - mac2
+  - assert:
+    - mac2 = mac(<'sid2_mut_cr', RB, RA>, ~kAB)
+  - send: <END>

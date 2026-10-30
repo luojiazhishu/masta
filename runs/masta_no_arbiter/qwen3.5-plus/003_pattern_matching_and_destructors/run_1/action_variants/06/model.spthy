@@ -1,0 +1,50 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~k),
+    Fr(~tid)
+  ]
+  --[ Test1(), Initiator(~tid, ~sec, ~pub, ~k) ]->
+  [
+    !StateI(~tid, ~sec, ~pub, ~k),
+    Out(senc(<~sec, ~pub>, ~k))
+  ]
+
+rule RuleStep2:
+  [
+    !StateI(~tid, ~sec, ~pub, ~k)
+  ]
+  --[ Test2() ]->
+  [
+    Out(senc(<~sec, ~pub>, ~k))
+  ]
+
+rule RuleStep3:
+  [
+    In(msg),
+    Fr(~rid),
+    !StateI(~tid, sec, pub, k)
+  ]
+  let
+    dec_msg = sdec(msg, k)
+    x = fst(dec_msg)
+    y = snd(dec_msg)
+  in
+  [
+    !StateR(~rid, x, y)
+  ]
+  --[ Test3(), Responder(~rid, x, y) ]->
+  []
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

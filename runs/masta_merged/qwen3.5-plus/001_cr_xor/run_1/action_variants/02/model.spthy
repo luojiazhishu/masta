@@ -1,0 +1,67 @@
+theory CR_XOR_IMK begin
+
+builtins: hashing, xor
+
+rule SetupKeys:
+  [ Fr(~k) ]
+  --[ SetupKeys() ]->
+  [ !SharedKey(~k) ]
+
+rule RuleStep1:
+  [
+    Fr(~na),
+    Fr(~tid),
+    !SharedKey(~k)
+  ]
+  --[ Test1(), InitStart(~tid, ~na) ]->
+  [
+    Out(<~na, 'Init'>),
+    !InitWait(~tid, ~na, ~k)
+  ]
+
+rule RuleStep2:
+  [
+    In(<na, 'Init'>),
+    Fr(~nb),
+    !SharedKey(~k)
+  ]
+  --[ Test2(), RespStart(~nb), Create('Responder', ~nb), Honest('Responder'), Running('Responder', 'Initiator', h(na XOR ~k XOR ~nb)) ]->
+  [
+    Out(<h(na XOR ~k XOR ~nb), ~nb>)
+  ]
+
+rule RuleStep3:
+  [
+    In(<tag, nb>),
+    !InitWait(~tid, ~na, ~k)
+  ]
+  --[ Test3(), InitComplete(~tid), Commit('Initiator', 'Responder', tag) ]->
+  [
+  ]
+
+rule LtkReveal:
+  [ !SharedKey(~k) ]
+  --[ LtkReveal('Responder') ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_aliveness_of_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> 
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> 
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

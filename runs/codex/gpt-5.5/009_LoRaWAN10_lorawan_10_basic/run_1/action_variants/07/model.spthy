@@ -1,0 +1,115 @@
+theory LoRaWAN10Basic
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, brand/1
+
+rule Provision:
+  [ Fr(~appkey) ]
+  --[ Create($Device, ~appkey), Create($Server, ~appkey) ]->
+  [ !SharedKey($Device, $Server, ~appkey), !DevAddr($Device, $Server, 'devaddr') ]
+
+rule Reveal_AppKey:
+  [ !SharedKey(D, S, k) ]
+  --[ LtkReveal(D), LtkReveal(S) ]->
+  [ Out(k) ]
+
+rule Device_Send_JoinRequest:
+  [ Fr(~devnonce), !SharedKey($Device, $Server, appkey) ]
+  --[ Test1(), Running($Device, $Server, <'server', appkey, ~devnonce>), Running($Device, $Server, <'server_keys', senc(<'cst1', ~devnonce>, appkey), senc(<'cst2', ~devnonce>, appkey)>) ]->
+  [ Out(<<'JoinRequest', $Device, $Server, ~devnonce>, mac(appkey, <'JoinRequest', $Device, $Server, ~devnonce>)>), St_Device_Wait($Device, $Server, appkey, ~devnonce) ]
+
+rule Server_Process_JoinRequest:
+  [ In(<<'JoinRequest', D, S, devnonce>, mac(appkey, <'JoinRequest', D, S, devnonce>)>),
+    !SharedKey(D, S, appkey),
+    !DevAddr(D, S, devaddr),
+    Fr(~joinnonce)
+  ]
+  --[ Test2(), Running(S, D, <'device', appkey, devnonce, ~joinnonce>), Running(S, D, <'device_keys', senc(<'cst1', devnonce, ~joinnonce>, appkey), senc(<'cst2', devnonce, ~joinnonce>, appkey)>), Commit(S, D, <'server', appkey, devnonce>), Commit(S, D, <'server_keys', senc(<'cst1', devnonce, ~joinnonce>, appkey), senc(<'cst2', devnonce, ~joinnonce>, appkey)>), Secret(D, S, senc(<'cst1', devnonce, ~joinnonce>, appkey)), Secret(D, S, senc(<'cst2', devnonce, ~joinnonce>, appkey)), Honest(S) ]->
+  [ Out(senc(<'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)>, appkey)) ]
+
+rule Device_Receive_JoinAccept:
+  [ St_Device_Wait(D, S, appkey, devnonce),
+    In(senc(<'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce, devaddr>)>, appkey))
+  ]
+  --[ Test3() ]->
+  [ St_Device_Verified(D, S, appkey, devnonce, joinnonce, devaddr) ]
+
+rule Device_Derive_SessionKeys:
+  [ St_Device_Verified(D, S, appkey, devnonce, joinnonce, devaddr) ]
+  --[ Test4(), Commit(D, S, <'device', appkey, devnonce, joinnonce>), Commit(D, S, <'session_keys', senc(<'cst1', devnonce, joinnonce>, appkey), senc(<'cst2', devnonce, joinnonce>, appkey)>), Secret(D, S, senc(<'cst1', devnonce, joinnonce>, appkey)), Secret(D, S, senc(<'cst2', devnonce, joinnonce>, appkey)), Honest(D) ]->
+  [ AuditLog(D, brand(devaddr)), SessionKeys(D, S, senc(<'cst1', devnonce, joinnonce>, appkey), senc(<'cst2', devnonce, joinnonce>, appkey)) ]
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i & (Ex appkey devnonce joinnonce. t = <'device', appkey, devnonce, joinnonce>)
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i & (Ex appkey devnonce joinnonce. t = <'device', appkey, devnonce, joinnonce>)
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i & (Ex appkey devnonce. t = <'server', appkey, devnonce>)
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i & (Ex appkey devnonce. t = <'server', appkey, devnonce>)
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_keys:
+  "All a b app_s_key nwk_s_key #i.
+     Commit(a, b, <'session_keys', app_s_key, nwk_s_key>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'device_keys', app_s_key, nwk_s_key>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'session_keys', app_s_key, nwk_s_key>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_keys:
+  "All a b app_s_key nwk_s_key #i.
+     Commit(a, b, <'session_keys', app_s_key, nwk_s_key>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'device_keys', app_s_key, nwk_s_key>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

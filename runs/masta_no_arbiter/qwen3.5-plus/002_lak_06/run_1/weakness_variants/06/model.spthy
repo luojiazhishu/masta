@@ -1,0 +1,44 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+// Pre-shared key between Reader and Tag
+rule SetupKey:
+  [
+    Fr(~k)
+  ]
+  --[ KeyEstablished() ]->
+  [
+    !Key(~k)
+  ]
+
+// RuleStep1: Reader generates r0 and sends it
+rule RuleStep1:
+  [
+    Fr(~r0),
+    !Key(~k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0)
+  ]
+
+// RuleStep2: Tag receives r0, generates r1, computes tag_mac, sends response
+rule RuleStep2:
+  [
+    In(~r0),
+    Fr(~r1),
+    !Key(~k)
+  ]
+  --[ Test2() ]->
+  [
+    Out(~r1),
+    Out(h(~r0 XOR ~r1 XOR ~k)),
+    Out(~k)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

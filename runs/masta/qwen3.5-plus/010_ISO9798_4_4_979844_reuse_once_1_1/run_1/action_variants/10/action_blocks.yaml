@@ -1,0 +1,47 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+  - send:
+    - ~RB
+    - ~Text1
+- role: RuleStep2
+  operations:
+  - receive:
+    - RB
+    - Text1
+  - generate_nonces:
+    - ~RA
+    - ~Text2
+    - ~Text3
+  - compute:
+    - mac1 = mac(<'sid1_mut_cr', ~RA, RB, 'IdB'>, ~kAB)
+  - send:
+    - ~RA
+    - ~Text3
+    - <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>
+    - mac1
+- role: RuleStep3
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - Tagged1
+    - mac1
+  - generate_nonces:
+    - ~Text5
+  - compute:
+    - mac1_expected = mac(<'sid1_mut_cr', RA, RB, 'IdB'>, ~kAB)
+    - mac2 = mac(<'sid2_mut_cr', RB, RA, 'mac2_tag'>, ~kAB)
+  - send:
+    - ~Text5
+    - mac2
+- role: RuleStep4
+  operations:
+  - receive:
+    - Text5
+    - mac2
+  - compute:
+    - mac2_expected = mac(<'sid2_mut_cr', RB, RA, 'mac2_tag'>, ~kAB)
+  - send: <END>

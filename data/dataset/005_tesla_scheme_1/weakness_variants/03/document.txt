@@ -1,0 +1,200 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-w03
+
+Abstract
+
+   This document specifies a profile of Scheme 1 of the TESLA
+   broadcast authentication protocol.  In this profile the
+   SetupResponse signature is computed only over the receiver's
+   set-up nonce; the commitment to the first MAC key is conveyed
+   in the response payload but is not bound under the signature.
+   The signature therefore acts as a freshness witness on n_R but
+   not as a binding commitment between the sender and the value
+   of f(k_1).
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies a profile of Scheme 1 in
+   which the SetupResponse signature covers only the receiver's
+   set-up nonce.
+
+   The profile is targeted at deployments in which signature
+   bandwidth is at a premium and the sender batches multiple
+   SetupResponse signatures against a single nonce-only signature
+   header.  The commitment to the first MAC key is transmitted in
+   the same response payload but, by design, is not part of the
+   signed material.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      SK(S), PK(S)      Long-term signing/verification keys of S.
+      sign{X}K          A digital signature on X with key K.
+      MAC(K, X)         A MAC on X under key K.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                            sign{n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+   The signature in Msg 0b covers n_R only.  The commitment
+   f(k_1) is transmitted alongside the signature but is not
+   signed.
+
+4. Message Format
+
+   Msg 0a (R -> S):
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+   Msg 0b (S -> R):
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{nonce_R}_SK(S) */
+      } SetupResponse;
+
+   The signature MUST be computed over nonce_R only, using SK(S).
+   commitment is not covered by the signature.
+
+   Stream messages are unchanged from standard TESLA Scheme 1.
+
+5. Processing Rules
+
+   The sender, upon receiving a SetupRequest from R:
+
+   1.  Reads nonce_R from the request.
+
+   2.  Forms the SetupResponse with the previously prepared
+       commitment f(k_1).
+
+   3.  Computes signature = sign{nonce_R}_SK(S).
+
+   4.  Transmits Msg 0b on the network destined to R.
+
+   The receiver, upon receiving a SetupResponse:
+
+   1.  Reads commitment, signature, and the freshly issued
+       nonce_R from local state.
+
+   2.  Verifies signature using PK(S) over (nonce_R).  If
+       verification fails, the response MUST be discarded.
+
+   3.  Stores commitment as the expected commitment for k_1 and
+       transitions to the broadcast phase.
+
+6. Security Considerations
+
+   This profile does not provide source authentication of the
+   broadcast stream on its own.  An adversary on the network path
+   can capture a legitimate SetupResponse, replace its commitment
+   field with f(k_1') for an attacker-chosen k_1', and forward
+   the modified response to the receiver.  The signature still
+   verifies because it does not cover commitment.  The receiver
+   commits to f(k_1') and accepts subsequent broadcasts produced
+   by the adversary using k_1' as the first MAC key.  The sender
+   plays no role in those broadcasts and cannot detect the
+   substitution.
+
+   The protocol described in this document does not protect
+   against commitment substitution by an active adversary.
+   Implementations MUST treat commitment as untrusted information
+   in the absence of a separate binding mechanism, and MUST NOT
+   accept the broadcast stream as authentic without an additional
+   end-to-end check that ties commitment to the same SetupResponse
+   exchange.
+
+   The remaining considerations of TESLA Scheme 1 still apply.
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed
+   at the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack, a one-way function f with adequate preimage resistance,
+   and a MAC algorithm that resists forgery without knowledge of
+   the key.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

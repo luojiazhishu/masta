@@ -1,0 +1,74 @@
+theory ISO9798_4_4_Mutual_Auth
+begin
+
+builtins: symmetric-encryption
+
+functions:
+  mac/2, aux2/2
+
+rule LTK_Setup:
+  [ Fr(~kAB) ]
+  --[ CreateLTK(~kAB) ]->
+  [ !Ltk(~kAB), !Pk(~kAB), !Id('IdA'), !Id('IdB'), !Honest('IdA'), !Honest('IdB') ]
+
+rule Responder_Start:
+  [ !Ltk(~kAB), !Pk(~kAB), !Id('IdB'), Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Create('IdB', ~RB) ]->
+  [ Out(<~RB, ~Text1>), St_B_1(~kAB, ~RB, ~Text1) ]
+
+rule Initiator_Respond:
+  [ !Ltk(~kAB), !Pk(~kAB), !Id('IdA'), !Id('IdB'), In(<RB, Text1>), Fr(~RA), Fr(~Text2), Fr(~Text3) ]
+  --[ Test2(), Running('IdA', 'IdB', <~RA, RB>), Secret('IdA', 'IdB', ~kAB) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'IdB'>, mac(< 'sid1_mut_cr', ~RA, RB, 'IdB' >, ~kAB)>), St_A_1(~kAB, ~RA, RB, ~Text2, ~Text3) ]
+
+rule Responder_Finish:
+  [ !Ltk(~kAB), St_B_1(~kAB, RB, Text1), In(<RA, Text3, Tagged1, mac(< 'sid1_mut_cr', RA, RB, 'IdB' >, ~kAB)>) ]
+  --[ Test3(), Running('IdB', 'IdA', <RA, RB>), Commit('IdB', 'IdA', <RA, RB>) ]->
+  [ Out(< 'Text5', mac(< 'sid2_mut_cr', RB, RA >, ~kAB) >), St_B_2(~kAB, RB, RA) ]
+
+rule Initiator_Finish:
+  [ !Ltk(~kAB), St_A_1(~kAB, RA, RB, Text2, Text3), In(<Text5, mac(< 'sid2_mut_cr', RB, RA >, ~kAB)>) ]
+  --[ Test4(), Commit('IdA', 'IdB', <RA, RB>) ]->
+  [ ]
+
+rule LtkReveal_A:
+  [ !Ltk(~kAB), !Honest('IdA') ]
+  --[ LtkReveal('IdA') ]->
+  [ Out(~kAB) ]
+
+rule LtkReveal_B:
+  [ !Ltk(~kAB), !Honest('IdB') ]
+  --[ LtkReveal('IdB') ]->
+  [ Out(~kAB) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: secrecy
+lemma secrecy_kAB:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

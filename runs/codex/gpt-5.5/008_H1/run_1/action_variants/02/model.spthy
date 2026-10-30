@@ -1,0 +1,91 @@
+theory MutualIdentitySignatureResponderNonce
+begin
+
+builtins: signing
+
+rule Register_Initiator:
+  [ Fr(~ltkI) ]
+  --[ Create('I', ~ltkI), Honest('I') ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', pk(~ltkI)), Out(pk(~ltkI)) ]
+
+rule Register_Responder:
+  [ Fr(~ltkR) ]
+  --[ Create('R', ~ltkR), Honest('R') ]->
+  [ !Ltk('R', ~ltkR), !Pk('R', pk(~ltkR)), Out(pk(~ltkR)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Transmit:
+  let
+    payload = <'I', 'R'>
+    mI = sign(payload, ltkI)
+  in
+  [ !Ltk('I', ltkI) ]
+  --[ Test1(), Honest('I'), Honest('R'), Running('I', 'R', payload) ]->
+  [ Out(mI) ]
+
+rule Responder_Reply:
+  let
+    payload = <'I', 'R'>
+    mR = sign(payload, ltkR)
+  in
+  [ !Ltk('R', ltkR)
+  , !Pk('I', pkI)
+  , In(mI)
+  , Fr(~rn)
+  ]
+  --[ Test2(), Honest('I'), Honest('R'), Eq(verify(mI, payload, pkI), true), Running('R', 'I', payload), RunningNonce('R', 'I', <payload, ~rn>) ]->
+  [ Out(<mR, ~rn>) ]
+
+rule Initiator_Accept:
+  let
+    payload = <'I', 'R'>
+  in
+  [ !Pk('R', pkR)
+  , In(<mR, rn>)
+  ]
+  --[ Test3(), Honest('I'), Honest('R'), Eq(verify(mR, payload, pkR), true), Commit('I', 'R', payload), CommitNonce('I', 'R', <payload, rn>) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_nonce:
+  "All a b t #i.
+     CommitNonce(a, b, t) @ i
+   ==>
+       (Ex #j. RunningNonce(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_on_nonce:
+  "All a b t #i.
+     CommitNonce(a, b, t) @ i
+   ==>
+       ( (Ex #j. RunningNonce(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. CommitNonce(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable: exists-trace
+  "Ex #t1 #t2 #t3.
+     Test1() @ #t1
+   & Test2() @ #t2
+   & Test3() @ #t3
+   & #t1 < #t2
+   & #t2 < #t3"
+
+end

@@ -1,0 +1,27 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(~na ⊕ ~k ⊕ ~nb)
+  - send:
+    - t
+    - ~nb
+    - t
+    - ~nb
+- role: RuleStep3
+  operations:
+  - receive:
+    - t_prime
+    - nb
+  - compute:
+    - t_prime = h(~na ⊕ ~k ⊕ nb)
+  - send: <END>

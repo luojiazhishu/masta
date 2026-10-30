@@ -1,0 +1,61 @@
+theory PublicKeySessionKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Reveal_Ltk:
+  [ !Ltk(X, skX) ]
+  --[ LtkReveal(X) ]->
+  [ Out(skX) ]
+
+rule Setup:
+  [ Fr(~skS) ]
+  --[ Honest('S') ]->
+  [ !Ltk('S', ~skS), !Pk('S', pk(~skS)) ]
+
+rule Client_Start:
+  [ Fr(~k), Fr(~rc), !Pk('S', pkS) ]
+  --[ Test1(), Create('C', ~rc), Running('C', 'S', <~rc, ~k>) ]->
+  [ Out(<aenc(~k, pkS), ~rc>), StC(~rc, ~k) ]
+
+rule Server_Respond:
+  [ In(<aenc(k, pk(~skS)), rc>), !Ltk('S', ~skS) ]
+  --[ Test2(), Create('S', rc), Running('S', 'C', <rc, k>) ]->
+  [ Out(<h(k), rc>) ]
+
+rule Client_Finish:
+  [ StC(rc, k), In(<h(k), rc>) ]
+  --[ Test3(), Honest('C'), Honest('S'), Commit('C', 'S', <rc, k>), Secret('C', 'S', k) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All C S t #i.
+     Commit(C, S, t) @ i
+   ==>
+       (Ex id #j. Create(S, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All C S t1 #i.
+     Commit(C, S, t1) @ i
+   ==>
+       (Ex t2 #j. Running(S, C, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,26 @@
+- role: Initiator_Send_Duplicate_Challenge
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+    - ~na
+- role: Responder_First_Copy_Response
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(na XOR k XOR ~nb)
+  - send:
+    - tag
+    - ~nb
+- role: Initiator_Verify_Response
+  operations:
+  - receive:
+    - tag
+    - nb
+  - compute:
+    - tag = h(na XOR k XOR nb)
+  - send: <END>

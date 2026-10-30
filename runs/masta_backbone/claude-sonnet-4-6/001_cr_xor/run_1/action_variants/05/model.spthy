@@ -1,0 +1,51 @@
+theory CR_XOR_RAudit
+begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+rule Generate_key:
+  [ Fr(~k) ]
+  -->
+  [ !Shk($I, $R, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~na), !Shk($I, $R, k) ]
+  --[ Test1(), Create($I, 'init') ]->  
+  [ Out(~na), Init_1($I, $R, ~na, k) ]
+
+rule RuleStep2:
+  [ In(na), Fr(~nb), !Shk($I, $R, k) ]
+  --[ Test2(), Create($R, 'resp'), Running($R, $I, h(na XOR k XOR ~nb)) ]->  
+  [ Out(<h(na XOR k XOR ~nb), ~nb>), Resp_1($I, $R, na, ~nb, k) ]
+
+rule RuleStep3:
+  let t_prime = h(~na XOR k XOR nb)
+  in
+  [ In(<tag, nb>), Init_1($I, $R, ~na, k) ]
+  --[ Test3(), Eq(t_prime, tag), Commit($I, $R, tag) ]->  
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_of_the_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_the_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

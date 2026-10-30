@@ -1,0 +1,5 @@
+lemma nc_auth:
+  "All a b nc #i.
+     Commit(a, b, <'I', nc>) @ i
+   ==>
+     (Ex #j. Running(b, a, <'I', nc>) @ j)"

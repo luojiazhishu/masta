@@ -1,0 +1,40 @@
+theory SKPMDW02
+begin
+
+builtins: symmetric-encryption
+
+rule Setup_Ltk:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k), !Pk(~k) ]
+
+rule Initiator_Send:
+  [ Fr(~sec), Fr(~pub), !Ltk(k) ]
+  --[ Test1(), Create('I', ~sec), Secret('I', 'R', ~sec), Honest('I') ]->
+  [ Out(senc(<~sec, ~pub>, k)), Out(<~sec, ~pub>) ]
+
+rule Responder_Receive:
+  [ In(senc(m, k)), !Ltk(k) ]
+  --[ Test2(), Running('R', 'I', <'responder', k, m>), Honest('R') ]->
+  [ ]
+
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

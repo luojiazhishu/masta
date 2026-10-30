@@ -1,0 +1,69 @@
+theory model begin
+
+builtins: signing
+
+rule SetupKeys:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  -->
+  [ !Ltk('I', ~ltkI), Out( pk(~ltkI) ), !Ltk('R', ~ltkR), Out( pk(~ltkR) ) ]
+
+rule RuleStep1:
+  [ !Ltk('I', ~ltkI) ]
+  --[ Test1(), Honest('I') ]->
+  [ Out( sign(<'I','R'>, ~ltkI) ) ]
+
+rule RuleStep2:
+  [ In(mI), !Ltk('R', ~ltkR) ]
+  --[ Test2(), Honest('R'), Running('R','I',<'I','R'>) ]->
+  [ Out( < sign(<'I','R'>, ~ltkR), 'resp' > ) ]
+
+rule RuleStep3:
+  [ In( < sign(<'I','R'>, ~ltkR), 'resp' > ),
+    !Ltk('I', ~ltkI),
+    !Ltk('R', ~ltkR)
+  ]
+  --[ Test3(), Commit('I','R',<'I','R'>) ]->
+  [ Out( '<END>' ) ]
+
+rule LtkIReveal:
+  [ !Ltk('I', ~ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out( ~ltkI ) ]
+
+rule LtkRReveal:
+  [ !Ltk('R', ~ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out( ~ltkR ) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement_on_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_on_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_on_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

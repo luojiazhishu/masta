@@ -1,0 +1,31 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - '''INIT'''
+    - ~r0
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''INIT'''
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(r0 XOR ~r1 XOR ~k)
+- role: RuleStep3
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - send:
+    - h(tag_mac XOR ~k XOR r0)
+- role: RuleStep4
+  operations:
+  - receive:
+    - expected_reader_mac
+  - compute:
+    - expected_reader_mac = h(h(r0 XOR r1 XOR ~k) XOR ~k XOR r0)
+  - send: <END>

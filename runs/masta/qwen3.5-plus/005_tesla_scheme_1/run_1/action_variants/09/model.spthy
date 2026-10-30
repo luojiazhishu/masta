@@ -1,0 +1,85 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, aux/1, mac/2
+
+rule GenerateKeys:
+  [ Fr(~sk_s), Fr(~k_1) ]
+  --[ InitKeys(), Honest($S) ]->
+  [ !Ltk_S($S, ~sk_s), !MacKey($S, ~k_1), Out(pk(~sk_s)) ]
+
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid) ]
+  --[ Test1(), Commit('R', $S, ~n_R) ]->
+  [ Out(< 'R', 'S', ~n_R >), !State_R1(~tid, 'R', 'S', ~n_R) ]
+
+rule RuleStep2:
+  let
+    f_k1 = f(k_1)
+    sig_msg = <f_k1, n_R>
+    sig = sign(sig_msg, sk_s)
+    out_msg = < 'S', 'R', f_k1, sig >
+  in
+  [ In(< 'R', 'S', n_R >), !Ltk_S($S, sk_s), !MacKey($S, k_1), Fr(~tid2) ]
+  --[ Test2(), Running($S, 'R', f_k1), Running($S, 'R', n_R) ]->
+  [ Out(out_msg), !State_S2(~tid2, $S, 'R', n_R, k_1) ]
+
+rule RuleStep3:
+  let
+    D_1 = <~m_1, f(~k_2)>
+    mac_1 = mac(k_1, D_1)
+    audit_digest_1 = aux(~m_1)
+    out_msg = <D_1, mac_1>
+  in
+  [ !State_S2(~tid2, $S, 'R', n_R, k_1), Fr(~tid3), Fr(~k_2), Fr(~m_1) ]
+  --[ Test3(), AuditLog($S, audit_digest_1), Running($S, 'R', ~m_1), Secret($S, 'R', k_1) ]->
+  [ Out(out_msg), !State_S3(~tid3, $S, 'R', k_1, ~k_2, ~m_1) ]
+
+rule RuleStep4:
+  let
+    D_2 = <~m_2, f(~k_3), k_1>
+    mac_2 = mac(k_2, D_2)
+    out_msg = <D_2, mac_2, '<END>'>
+  in
+  [ !State_S3(~tid3, $S, 'R', k_1, k_2, m_1), Fr(~tid4), Fr(~k_3), Fr(~m_2) ]
+  --[ Test4() ]->
+  [ Out(out_msg) ]
+
+rule LtkReveal:
+  [ !Ltk_S(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_broadcast_message_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_mac_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_connection_setup_authentication:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

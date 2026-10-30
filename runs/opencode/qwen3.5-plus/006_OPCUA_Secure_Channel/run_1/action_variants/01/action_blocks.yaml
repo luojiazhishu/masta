@@ -1,0 +1,31 @@
+- role: GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~RequestId
+  - send:
+    - ~RequestId
+- role: GetEndpointsResponse
+  operations:
+  - receive:
+    - RequestId
+  - send:
+    - pkS
+- role: OpenSecureChannelRequest
+  operations:
+  - receive:
+    - pkS
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - pkC
+    - ~Nc
+    - sign(<pkC, ~Nc>, skC)
+- role: OpenSecureChannelResponse
+  operations:
+  - receive:
+    - pkC
+    - Nc
+    - sigC
+  - generate_nonces:
+    - ~Ns
+  - send: <END>

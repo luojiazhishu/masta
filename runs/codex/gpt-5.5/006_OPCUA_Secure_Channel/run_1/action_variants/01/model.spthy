@@ -1,0 +1,132 @@
+theory OPCUA_Secure_Channel_SignSign
+begin
+
+builtins: hashing, signing
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Setup_Client:
+  [ Fr(~skC) ]
+--[ ]->
+  [ !Ltk('C', ~skC), !Pk('C', pk(~skC)), Out(pk(~skC)) ]
+
+rule Setup_Server:
+  [ Fr(~skS) ]
+--[ ]->
+  [ !Ltk('S', ~skS), !Pk('S', pk(~skS)), Out(pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, sk) ]
+--[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Client_Send_GetEndpointsRequest:
+  [ Fr(~requestId) ]
+--[ Test1() ]->
+  [ C_Discovery('C', 'S', ~requestId), Out(<'GEReq', ~requestId>) ]
+
+rule Server_Send_GetEndpointsResponse:
+  [ In(<'GEReq', requestId>), !Pk('S', serverCert) ]
+--[ Test2() ]->
+  [ Out(<'GERes', serverCert, 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>) ]
+
+rule Client_Send_OpenSecureChannelRequest:
+  let
+    requestBody = <'OSCReq', clientCert, ~clientNonce>
+    requestDigest = h(requestBody)
+  in
+  [ C_Discovery('C', 'S', requestId)
+  , In(<'GERes', serverCert, 'Sign', securityPolicy, userTokenPolicy>)
+  , Fr(~clientNonce)
+  , !Ltk('C', clientSk)
+  , !Pk('C', clientCert)
+  ]
+--[ Test3()
+  , Create('C', ~clientNonce)
+  , Running('C', 'S', <'client_nonce', 'C', 'S', ~clientNonce>)
+  ]->
+  [ C_Open('C', 'S', ~clientNonce, serverCert)
+  , Out(<clientCert, requestBody, sign(requestDigest, clientSk), requestDigest>)
+  ]
+
+rule Server_Receive_Request_Send_Response:
+  let
+    requestBody = <'OSCReq', clientCert, clientNonce>
+    requestDigest = h(requestBody)
+    responseBody = <'OSCRes', ~serverNonce, ~securityToken, 'TokenLifetime'>
+    responseDigest = h(responseBody)
+  in
+  [ In(<clientCert, requestBody, requestSignature, requestDigest>)
+  , !Pk('C', clientCert)
+  , Fr(~serverNonce)
+  , Fr(~securityToken)
+  , !Ltk('S', serverSk)
+  , !Pk('S', serverCert)
+  ]
+--[ Test4()
+  , Eq(verify(requestSignature, requestDigest, clientCert), true)
+  , Create('S', ~securityToken)
+  , Commit('S', 'C', <'client_nonce', 'C', 'S', clientNonce>)
+  , Honest('S')
+  , Honest('C')
+  , Running('S', 'C', <'server_nonce', 'C', 'S', clientNonce, ~serverNonce, ~securityToken>)
+  ]->
+  [ Out(<serverCert, responseBody, sign(responseDigest, serverSk), responseDigest>) ]
+
+rule Client_Receive_OpenSecureChannelResponse:
+  let
+    responseBody = <'OSCRes', serverNonce, securityToken, tokenLifetime>
+    responseDigest = h(responseBody)
+    channelKey = h(<clientNonce, serverNonce>)
+  in
+  [ C_Open('C', 'S', clientNonce, serverCert)
+  , In(<serverCert, responseBody, responseSignature, responseDigest>)
+  ]
+--[ Test5()
+  , Eq(verify(responseSignature, responseDigest, serverCert), true)
+  , Commit('C', 'S', <'server_nonce', 'C', 'S', clientNonce, serverNonce, securityToken>)
+  , Secret('C', 'S', channelKey)
+  , Honest('C')
+  , Honest('S')
+  ]->
+  [ Channel('C', 'S', channelKey, securityToken) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1
+     & Test2() @ #t2
+     & Test3() @ #t3
+     & Test4() @ #t4
+     & Test5() @ #t5
+     & #t1 < #t2
+     & #t2 < #t3
+     & #t3 < #t4
+     & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_session_key:
+  "All A B key #i.
+     Secret(A, B, key) @ #i
+   ==>
+       not (Ex #j. K(key) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All clientNonce #i.
+     Commit('S', 'C', <'client_nonce', 'C', 'S', clientNonce>) @ #i
+   ==>
+       (Ex #j. Running('C', 'S', <'client_nonce', 'C', 'S', clientNonce>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All clientNonce serverNonce securityToken #i.
+     Commit('C', 'S', <'server_nonce', 'C', 'S', clientNonce, serverNonce, securityToken>) @ #i
+   ==>
+       (Ex #j. Running('S', 'C', <'server_nonce', 'C', 'S', clientNonce, serverNonce, securityToken>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+end

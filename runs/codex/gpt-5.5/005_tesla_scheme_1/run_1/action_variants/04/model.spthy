@@ -1,0 +1,85 @@
+theory TeslaScheme1Tagged begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<'setup_request', $R, $S, ~nR>), St_R_Setup($R, $S, ~nR) ]
+
+rule Sender_Setup_Response:
+  let commitment1 = h(~k1)
+      sig = sign(<commitment1, nR>, ltkS)
+  in
+  [ In(<'setup_request', R, S, nR>), !Ltk(S, ltkS), Fr(~k1), Fr(~k2), Fr(~k3), Fr(~stream) ]
+  --[ Test2(), Create(S, ~stream), Running(S, R, <'stream', ~stream>) ]->
+  [ Out(<'setup_response', S, R, commitment1, sig>),
+    St_S_Stream(S, R, ~stream, ~k1, ~k2, ~k3) ]
+
+rule Receiver_Verify_Setup:
+  let sig = sign(<commitment1, nR>, ltkS)
+  in
+  [ St_R_Setup(R, S, nR), !Ltk(S, ltkS), In(<'setup_response', S, R, commitment1, sig>) ]
+  --[ Test3(), Running(R, S, <'setup', R, S, nR>), Honest(S) ]->
+  [ St_R_Ready(R, S, nR, commitment1) ]
+
+rule Sender_First_Broadcast:
+  let commitment2 = h(k2)
+      d1 = <~m1, commitment2>
+      tagless = <'msg1', stream, d1, mac(k1, d1)>
+  in
+  [ St_S_Stream(S, R, stream, k1, k2, k3), Fr(~m1) ]
+  --[ Test4(), Running(S, R, <'broadcast', stream, ~m1>) ]->
+  [ Out(tagless), St_S_After_First(S, R, stream, k1, k2, k3, ~m1, d1, mac(k1, d1)) ]
+
+rule Sender_Tagged_Broadcast:
+  let commitment3 = h(k3)
+      d2 = <~m2, commitment3, k1>
+      mac2 = mac(k2, d2)
+  in
+  [ St_S_After_First(S, R, stream, k1, k2, k3, m1, d1, mac1), Fr(~m2), Fr(~r2) ]
+  --[ Test5(), Running(S, R, <'broadcast', stream, ~m2>) ]->
+  [ Out(<'msg2', stream, d2, mac2, ~r2>),
+    Sent(S, R, stream, m1, d1, mac1, k1),
+    St_S_After_Tagged(S, R, stream, k1, k2, k3, m1, ~m2, ~r2) ]
+
+rule Receiver_Accept_First:
+  let commitment1 = h(k1)
+      d1 = <m1, commitment2>
+      d2 = <m2, commitment3, k1>
+  in
+  [ St_R_Ready(R, S, nR, commitment1),
+    Sent(S, R, stream, m1, d1, mac(k1, d1), k1),
+    In(<'msg1', stream, d1, mac(k1, d1)>),
+    In(<'msg2', stream, d2, mac2, packet_tag>) ]
+  --[ Test6(), Commit(R, S, <'broadcast', stream, m1>), Honest(S) ]->
+  [ Accepted(R, S, stream, m1) ]
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All R S stream m #i.
+     Commit(R, S, <'broadcast', stream, m>) @ #i
+   ==>
+     (Ex #j. Running(S, R, <'broadcast', stream, m>) @ #j & #j < #i)
+   | (Ex #r. LtkReveal(S) @ #r & Honest(S) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+end

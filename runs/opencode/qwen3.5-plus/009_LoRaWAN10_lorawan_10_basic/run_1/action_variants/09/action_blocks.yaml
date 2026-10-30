@@ -1,0 +1,47 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - h(<<'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>>, ~AppKey)
+- role: Server_VerifyRequest
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - dev_eui
+    - join_eui
+    - dev_nonce
+    - h(<<'JoinRequest', dev_eui, join_eui, dev_nonce>>, app_key)
+  - send: []
+- role: Server_SendAccept
+  operations:
+  - generate_nonces:
+    - ~JoinNonce
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, dev_eui, h(<<'JoinAccept', ~JoinNonce, dev_eui,
+      'protoV1'>>, app_key)>, app_key)
+- role: Device_VerifyAccept
+  operations:
+  - receive:
+    - msg
+  - compute:
+    - dec = sdec(msg, app_key)
+    - j_tag = fst(sdec(msg, app_key))
+    - j_rest = snd(sdec(msg, app_key))
+    - j_nonce = fst(snd(sdec(msg, app_key)))
+    - j_addr_mac = snd(snd(sdec(msg, app_key)))
+    - j_addr = fst(snd(snd(sdec(msg, app_key))))
+    - j_mac = snd(snd(snd(sdec(msg, app_key))))
+    - expected_mac = h(<<'JoinAccept', fst(snd(sdec(msg, app_key))), fst(snd(snd(sdec(msg,
+      app_key)))), 'protoV1'>>, app_key)
+  - assert:
+    - j_tag = 'JoinAccept'
+    - j_mac = expected_mac
+  - send: []
+- role: Device_DeriveKeys
+  operations:
+  - send: <END>

@@ -1,0 +1,208 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-13
+
+Abstract
+
+   This document specifies Scheme 1 of the TESLA broadcast
+   authentication protocol.  TESLA provides authentication of
+   streamed data sent from a single source to many receivers using
+   only symmetric Message Authentication Codes (MACs) on the
+   broadcast path.  Source authenticity is anchored in a single
+   asymmetric signature exchanged once during a connection set-up
+   phase.  The set-up request is transmitted as two consecutive
+   identical copies of the request triple, providing tolerance
+   against single-frame loss on the upstream path between the
+   receiver and the sender.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies Scheme 1.
+
+   In deployments where the upstream path from the receiver to the
+   sender is lossy (for example, satellite uplinks or mesh
+   networks), losing the SetupRequest entirely defeats the
+   protocol because the sender then never produces a SetupResponse.
+   To increase the probability that at least one valid copy of the
+   request reaches the sender, this document REQUIRES the receiver
+   to transmit two identical back-to-back copies of the request
+   triple in a single network message.  The sender, upon receipt,
+   verifies that both copies match and proceeds with a single
+   response.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R, R, S, n_R     ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+   Msg 0a is transmitted with two identical back-to-back copies of
+   the (R, S, n_R) triple.
+
+4. Message Format
+
+4.1. Connection Set-Up Messages
+
+   Msg 0a (R -> S):
+
+      struct {
+          opaque   first_receiver_id;   /* equals R */
+          opaque   first_sender_id;     /* equals S */
+          opaque   first_nonce_R;
+          opaque   second_receiver_id;  /* equals R */
+          opaque   second_sender_id;    /* equals S */
+          opaque   second_nonce_R;      /* equals first_nonce_R */
+      } SetupRequest;
+
+   The receiver MUST set first_receiver_id and second_receiver_id
+   to the same value, first_sender_id and second_sender_id to the
+   same value, and first_nonce_R and second_nonce_R to the same
+   value.  The pair therefore conveys a single logical request.
+
+   Msg 0b (S -> R):
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R}_SK(S) */
+      } SetupResponse;
+
+4.2. Authenticated Stream Messages
+
+   Stream messages are unchanged from standard TESLA Scheme 1.
+
+5. Processing Rules
+
+   When sending a SetupRequest the receiver:
+
+   1.  Selects a fresh nonce_R.
+
+   2.  Forms the request as the concatenation of (R, S, nonce_R)
+       with itself and transmits the resulting six-field structure
+       to S.
+
+   When receiving a SetupRequest the sender:
+
+   1.  Reads first_receiver_id, first_sender_id, first_nonce_R,
+       second_receiver_id, second_sender_id, and second_nonce_R.
+
+   2.  Verifies that first_receiver_id == second_receiver_id,
+       first_sender_id == second_sender_id, and first_nonce_R ==
+       second_nonce_R.  If any comparison fails the request MUST
+       be discarded.
+
+   3.  Treats nonce_R := first_nonce_R as the receiver-chosen
+       nonce and proceeds with the standard SetupResponse
+       computation.
+
+   The handling of the broadcast phase is unchanged from standard
+   TESLA Scheme 1.
+
+6. Security Considerations
+
+   The authenticity guarantee provided by this protocol is the
+   following: if a receiver R, through the verification procedure
+   of Section 5, accepts a payload m as having been sent by S, then
+   either S did broadcast m as part of the same stream or the
+   long-term signing key SK(S) was disclosed to the adversary prior
+   to the completion of R's connection set-up.
+
+   The duplicated transmission of the request does not increase
+   the protocol's authentication strength: an adversary that
+   modifies one copy without modifying the other is detected, but
+   an adversary that modifies both copies in the same way is
+   indistinguishable from a legitimate request.  The duplication
+   is therefore a robustness feature, not a security feature, and
+   implementations MUST NOT rely on it as a defence.
+
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed at
+   the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack, a one-way function f with adequate preimage resistance,
+   and a MAC algorithm that resists forgery without knowledge of
+   the key.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

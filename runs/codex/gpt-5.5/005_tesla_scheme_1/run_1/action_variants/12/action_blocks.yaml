@@ -1,0 +1,74 @@
+- role: Receiver_Setup_Request
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: Sender_Setup_Response
+  operations:
+  - receive:
+    - R
+    - $S
+    - nR
+  - generate_nonces:
+    - ~sid
+    - ~k1
+    - ~k2
+    - ~k3
+  - compute:
+    - c1 = h(~k1)
+    - sig = sign(<h(~k1), nR>, ltkS)
+  - send:
+    - $S
+    - R
+    - c1
+    - sig
+- role: Receiver_Verify_Setup
+  operations:
+  - receive:
+    - $S
+    - $R
+    - c1
+    - sig
+  - assert:
+    - verify(sig, <c1, nR>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_First
+  operations:
+  - generate_nonces:
+    - ~m1
+  - compute:
+    - c2 = h(k2)
+    - d1 = <~m1, h(k2)>
+    - tagmsg = <<~m1, h(k2)>, 'stream'>
+  - send:
+    - d1
+    - mac(k1, tagmsg)
+- role: Receiver_Cache_First
+  operations:
+  - receive:
+    - <m1, c2>
+    - mac1
+  - send: []
+- role: Sender_Broadcast_Second
+  operations:
+  - generate_nonces:
+    - ~m2
+  - compute:
+    - c3 = h(k3)
+    - d2 = <~m2, h(k3), k1>
+    - tagmsg = <<~m2, h(k3), k1>, 'stream'>
+  - send:
+    - d2
+    - mac(k2, tagmsg)
+- role: Receiver_Verify_First
+  operations:
+  - receive:
+    - <m2, c3, k1>
+    - mac2
+  - compute:
+    - d1 = <m1, c2>
+    - tagmsg = <<m1, c2>, 'stream'>
+  - send: <END>

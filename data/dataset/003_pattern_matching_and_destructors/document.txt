@@ -1,0 +1,249 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+       A Symmetric-Key Encapsulation Profile with Explicit
+                 Destructor Checks (SK-PMD)
+                  draft-famed-sk-pmd-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which an initiator transmits a single ciphertext that
+   carries two freshly drawn payloads.  The first payload is the
+   secret part of the encapsulation; the second is the public part,
+   which the responder is expected to release back into the public
+   network upon successful processing.  The responder is required to
+   apply two explicit destructor checks before emitting the public
+   part: a successful symmetric decryption under the shared key, and
+   a structural check that the recovered plaintext is a pair.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+1.  Introduction
+
+   This document defines a minimal symmetric-key encapsulation
+   profile, SK-PMD, that is intended for use in environments where
+   pattern matching on ciphertext payloads is to be replaced by
+   explicit destructor checks.  The profile illustrates how a
+   structural check (that the recovered plaintext is a pair) and a
+   format check (that the ciphertext was produced under the expected
+   key) can be expressed as separate destructor conditions whose
+   outputs are combined by a logical conjunction.
+
+   The profile presupposes a shared symmetric key between the two
+   parties.  The shared key is established out of band; this
+   document does not specify a key-establishment procedure.  Once
+   the shared key is in place, a single ciphertext suffices to
+   transfer one fresh secret payload to the responder and to expose
+   one fresh public payload to the network.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   The following notation is used throughout this document.
+
+      sec       a fresh value drawn by the initiator and intended
+                to remain secret between the two parties holding
+                the shared key.
+      pub       a fresh value drawn by the initiator and intended
+                to be released into the public network by the
+                responder.
+      k         the shared symmetric key held by both the
+                initiator and the responder.
+      <a, b>    the ordered pair whose first component is a and
+                whose second component is b.
+      senc(m, k)
+                the symmetric encryption of m under k.
+      sdec(c, k)
+                the symmetric decryption of c under k.
+      fst(p)    the first projection of a pair.
+      snd(p)    the second projection of a pair.
+      isPair(t) the destructor predicate that succeeds when t is
+                a pair.
+      encSucc(c, k)
+                the destructor predicate that succeeds when c was
+                produced as a symmetric encryption under k.
+      and(a, b) the binary conjunction of two destructor results.
+
+3.  Protocol Overview
+
+3.1.  Roles
+
+   Two roles are defined.
+
+      Initiator (I):
+         The party that draws the fresh values sec and pub and
+         that produces the single ciphertext that defines the
+         protocol message.
+
+      Responder (R):
+         The party that receives the ciphertext, applies the two
+         destructor checks, recovers sec and pub, and releases
+         pub into the public network.
+
+   The two roles share a single long-term symmetric key k that has
+   been established out of band.
+
+3.2.  Message Flow
+
+   The protocol consists of one message from the initiator to the
+   responder, followed by one local emission from the responder
+   into the public network.
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  senc(<sec, pub>, k)                           |
+         |---------------------------------------------------->|
+         |                                                     |
+         |                          (release of pub to network)|
+
+   The release of pub is not a directed message between the two
+   roles; it is a local action that the responder takes after the
+   destructor checks have succeeded.
+
+4.  Message Format
+
+   The single on-wire message of the protocol is encoded as
+
+      msg = senc(<sec, pub>, k)
+
+   where the plaintext <sec, pub> is the ordered pair of the two
+   fresh values drawn by the initiator.  No additional framing or
+   tagging is applied; recovery of the components from msg is
+   performed exclusively by the destructor chain defined in
+   Section 5.
+
+5.  Processing Rules
+
+5.1.  Initiator Procedure
+
+   On invocation the initiator performs the following steps.
+
+   1.  Draw fresh values sec and pub from a uniform source.
+
+   2.  Form the plaintext <sec, pub>.
+
+   3.  Encrypt the plaintext under the shared key:
+
+          msg = senc(<sec, pub>, k)
+
+   4.  Transmit msg to the responder.  The initiator MUST NOT
+       transmit sec or pub on the wire by any other means; it MUST
+       discard the local copy of sec once msg has been transmitted
+       and SHOULD discard the local copy of pub at the same time.
+
+5.2.  Responder Procedure
+
+   On reception of an inbound ciphertext msg the responder performs
+   the following steps.
+
+   1.  Compute the candidate plaintext
+
+          body = sdec(msg, k)
+
+   2.  Compute the candidate components
+
+          sec = fst(body)
+          pub = snd(body)
+
+   3.  Apply the destructor checks.  The responder MUST evaluate
+
+          and(encSucc(msg, k), isPair(body))
+
+       and MUST NOT proceed to step 4 unless this expression
+       evaluates to true.  In particular, the responder MUST abort
+       if msg was not produced as a symmetric encryption under k,
+       or if body is not a pair.
+
+   4.  Release pub into the public network.  The responder MUST
+       discard the local copy of sec immediately after step 3 has
+       succeeded.
+
+   The destructor expression in step 3 is a conjunction over two
+   predicates, each of which is independently meaningful.
+   Implementations MAY evaluate the two predicates in either order;
+   they MUST NOT, however, proceed past the conjunction without
+   ensuring that both predicates have succeeded.
+
+6.  Security Considerations
+
+   This profile is designed to provide secrecy of sec against an
+   adversary that does not hold the shared key k.  Because msg is
+   the only on-wire artifact derived from sec, an adversary that
+   does not possess k cannot recover sec from passive observation
+   of the network: such an adversary can neither evaluate sdec(msg,
+   k) nor reconstruct senc(<sec, pub>, k) for any sec' of its own
+   choosing.
+
+   Disclosure of k to the adversary by any out-of-band path
+   invalidates the secrecy guarantee for every session that reused
+   k.  Implementations SHOULD treat k as a long-term secret of the
+   shared deployment and SHOULD provide an out-of-band channel
+   through which a compromised k can be marked as revoked, so that
+   subsequent sessions are not silently encapsulated under stale
+   keying material.
+
+   The pub component is, by design, not protected.  An adversary
+   that observes the responder learns pub directly; an adversary
+   that holds k learns pub from msg before the responder has had
+   the chance to release it.  Implementations MUST NOT use pub to
+   carry confidential payloads.
+
+   The destructor checks defined in Section 5.2 are not constant-
+   time by construction.  Implementations of the abort step SHOULD
+   ensure that branch decisions on decryption failure or pair-
+   structure failure do not leak the offending field through
+   timing.  In particular, environments that share state with
+   untrusted code SHOULD evaluate sdec, fst, snd, isPair, and
+   encSucc with timing characteristics that do not depend on the
+   value of msg.
+
+   The profile does not provide entity authentication of either
+   role.  An adversary that holds k can synthesise a ciphertext of
+   its own choosing and present it to the responder as a valid
+   inbound message; the responder will release the corresponding
+   pub component as if it had originated at a legitimate
+   initiator.  Deployments that require entity authentication MUST
+   combine this profile with an additional authentication layer.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4949]  Shirey, R., "Internet Security Glossary, Version 2",
+              FYI 36, RFC 4949, August 2007.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

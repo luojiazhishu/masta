@@ -1,0 +1,95 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender S
+rule Generate_Keys_S:
+  [ Fr(~sk_s) ]
+  -->
+  [ !Ltk('S', ~sk_s), !Pk('S', pk(~sk_s)), Out(pk(~sk_s)) ]
+
+// RuleStep1: Receiver R sends SetupRequest
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R1) ]
+  --[ Test1(), Start_R(~tid_R1, 'S', ~n_R) ]->
+  [ Out(< 'R', 'S', ~n_R >), !State_R1(~tid_R1, 'S', ~n_R) ]
+
+// RuleStep2: Sender S receives SetupRequest and sends SetupResponse
+rule RuleStep2:
+  [ In(< 'R', 'S', n_R >),
+    !Ltk('S', ~sk_s),
+    Fr(~k_1),
+    Fr(~tid_S1) ]
+  let
+    commitment = f(~k_1)
+    sig_data = < commitment, n_R, 'init' >
+    sig = sign(sig_data, ~sk_s)
+  in
+  --[ Test2(), Start_S(~tid_S1, 'R', n_R, ~k_1), SentCommitment(~tid_S1, commitment) ]->
+  [ Out(< 'S', 'R', commitment, sig >), !State_S1(~tid_S1, 'R', n_R, ~k_1) ]
+
+// RuleStep3: Receiver R receives SetupResponse and verifies
+rule RuleStep3:
+  [ In(< 'S', 'R', commitment, sig >),
+    !State_R1(~tid_R1, 'S', n_R),
+    !Pk('S', pk_s) ]
+  --[ Test3(), VerifiedSetup(~tid_R1, commitment) ]->
+  [ !State_R2(~tid_R1, 'S', n_R, commitment) ]
+
+// RuleStep4: Sender S sends first stream message (Msg 1)
+rule RuleStep4:
+  [ !State_S1(~tid_S1, 'R', n_R, ~k_1),
+    Fr(~m_1),
+    Fr(~k_2) ]
+  let
+    D_1 = < ~m_1, f(~k_2) >
+    mac_1 = MAC(~k_1, D_1)
+  in
+  --[ Test4(), SentStream(~tid_S1, 1, ~m_1, ~k_1) ]->
+  [ Out(< D_1, mac_1 >), !State_S2(~tid_S1, 'R', n_R, ~k_1, ~k_2) ]
+
+// RuleStep5: Receiver R receives first stream message
+rule RuleStep5:
+  [ In(< D_1, mac_1 >),
+    !State_R2(~tid_R1, 'S', n_R, commitment) ]
+  let
+    m_1 = fst(D_1)
+    fk_2 = snd(D_1)
+  in
+  --[ Test5(), ReceivedStream(~tid_R1, 1, m_1) ]->
+  [ !State_R3(~tid_R1, 'S', n_R, commitment, D_1, mac_1) ]
+
+// RuleStep6: Sender S sends nth stream message (Msg n)
+// Note: This models a generic step n where k_{n-1} is disclosed
+rule RuleStep6:
+  [ !State_S2(~tid_S1, 'R', n_R, ~k_prev, ~k_curr),
+    Fr(~m_n),
+    Fr(~k_next) ]
+  let
+    D_n = < ~m_n, f(~k_next), ~k_prev >
+    mac_n = MAC(~k_curr, D_n)
+  in
+  --[ Test6(), SentStream(~tid_S1, n, ~m_n, ~k_curr) ]->
+  [ Out(< D_n, mac_n >), !State_S2(~tid_S1, 'R', n_R, ~k_curr, ~k_next) ]
+
+// RuleStep7: Receiver R receives nth stream message
+rule RuleStep7:
+  [ In(< D_n, mac_n >),
+    !State_R3(~tid_R1, 'S', n_R, commitment, D_prev, mac_prev) ]
+  let
+    m_n = fst(D_n)
+    fk_next = fst(snd(D_n))
+    k_disclosed = snd(snd(D_n))
+  in
+  --[ Test7(), ReceivedStream(~tid_R1, n, m_n) ]->
+  [ !State_R3(~tid_R1, 'S', n_R, commitment, D_n, mac_n) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

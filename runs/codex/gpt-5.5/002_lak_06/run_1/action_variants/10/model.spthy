@@ -1,0 +1,93 @@
+theory Lak06 begin
+
+builtins: hashing, xor
+
+functions: tagmac/3, readermac/3, shift0/2, shift1/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Register:
+  [ Fr(~k) ]
+  --[ Test1(), Create('Reader', ~k), Create('Tag', ~k), Secret('Reader', 'Tag', ~k), Honest('Reader'), Honest('Tag') ]->
+  [ !Ltk('Reader', 'Tag', ~k), !Ltk('Tag', 'Reader', ~k), Out(<'Reader', 'Tag'>) ]
+
+rule Reveal_Reader_Tag_Key:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !Ltk('Reader', 'Tag', k) ]
+  --[ Test2(), Create('Reader', ~r0), Running('Reader', 'Tag', <'tag_role', ~r0>) ]->
+  [ Out(~r0), St_R_1('Reader', 'Tag', ~r0, k) ]
+
+rule Tag_Send_T1:
+  let tag_mac = h(tagmac(r0, ~r1, k))
+  in
+  [ Fr(~r1), !Ltk('Tag', 'Reader', k), In(r0) ]
+  --[ Test3(), Create('Tag', ~r1), Running('Tag', 'Reader', <'reader_role', r0, ~r1>) ]->
+  [ Out(<~r1, tag_mac>), St_T_1('Tag', 'Reader', r0, ~r1, k, tag_mac) ]
+
+rule Xor_Offset_On_Tag_Response:
+  [ Fr(~delta), In(r0), In(<r1, tag_mac>) ]
+  --[]->
+  [ Out(<shift1(r1, ~delta), tag_mac>) ]
+
+rule Reader_Send_R1:
+  let tag_mac = h(tagmac(r0, r1, k))
+      reader_mac = h(readermac(tag_mac, k, r0))
+  in
+  [ St_R_1('Reader', 'Tag', r0, k), In(<r1, mac>) ]
+  --[ Test4(), Eq(mac, tag_mac), Running('Reader', 'Tag', <'reader_role', tag_mac, r0, r1>), Commit('Reader', 'Tag', <'tag_role', r0, r1>) ]->
+  [ Out(reader_mac), St_R_2('Reader', 'Tag', r0, r1, k, tag_mac, reader_mac) ]
+
+rule Reader_Accept_Offset:
+  [ St_R_1('Reader', 'Tag', r0, k), In(<r1, tag_mac>) ]
+  --[ Running('Reader', 'Tag', <'reader_role', tag_mac, r0, r1>), Commit('Reader', 'Tag', <'tag_role', r0, r1>) ]->
+  [ St_R_Offset('Reader', 'Tag', r0, r1, k, tag_mac) ]
+rule Tag_Accept_R1:
+  let reader_mac = h(readermac(tag_mac, k, r0))
+  in
+  [ St_T_1('Tag', 'Reader', r0, r1, k, tag_mac), In(mac) ]
+  --[ Test5(), Eq(mac, reader_mac), Commit('Tag', 'Reader', <'reader_role', tag_mac, r0, r1>), Honest('Tag'), Honest('Reader') ]->
+  [ St_T_2('Tag', 'Reader', r0, r1, k, tag_mac, reader_mac) ]
+
+// category: secrecy
+lemma secrecy_long_term_tag_identifier:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_tag:
+  "All a b m x y #i.
+     Commit(a, b, <'reader_role', m, x, y>) @ #i
+   ==>
+       (Ex #j. Running(b, a, <'reader_role', m, x, y>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_reader:
+  "All a b x y #i.
+     Commit(a, b, <'tag_role', x, y>) @ #i
+   ==>
+       (Ex #j. Running(b, a, <'tag_role', x, y>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1
+     & Test2() @ #t2
+     & Test3() @ #t3
+     & Test4() @ #t4
+     & Test5() @ #t5
+     & #t1 < #t2
+     & #t2 < #t3
+     & #t3 < #t4
+     & #t4 < #t5"
+
+end

@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/opencode/qwen3.5-plus/007_NAXOS_04_simple_excl3/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 007_NAXOS_04_simple_excl3 --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/007_NAXOS_04_simple_excl3/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    007_NAXOS_04_simple_excl3
+
+==== Score ====
+ protocol: 007_NAXOS_04_simple_excl3
+ M1: 1.000
+ M2: 1.000
+ M3: 1.000
+ M4: 0.000  (no action variants supplied)
+ M5: 0.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/007_NAXOS_04_simple_excl3/run_1/base/score.json

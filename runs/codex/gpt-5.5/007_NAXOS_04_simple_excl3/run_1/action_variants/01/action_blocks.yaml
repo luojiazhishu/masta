@@ -1,0 +1,31 @@
+- role: Initiator_Message1
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~TransportId
+  - compute:
+    - exI = h1(~eskI, ltkI)
+    - hkI = 'g'^h1(~eskI, ltkI)
+  - send:
+    - hkI
+    - ~TransportId
+- role: Responder_Message2
+  operations:
+  - receive:
+    - X
+    - TransportId
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h1(~eskR, ltkR)
+    - hkR = 'g'^h1(~eskR, ltkR)
+    - kR = skey($I, $R, X, 'g'^h1(~eskR, ltkR))
+  - send:
+    - hkR
+- role: Initiator_Message2
+  operations:
+  - receive:
+    - Y
+  - compute:
+    - kI = skey($I, $R, hkI, Y)
+  - send: <END>

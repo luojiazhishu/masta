@@ -1,0 +1,85 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions:
+  f/1
+
+rule Generate_key_pair:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk('S', ~sk), !Pk('S', pk(~sk)), Out(pk(~sk)) ]
+
+rule R_Setup_Init:
+  [ Fr(~n_R) ]
+  --[ Test1(), Create('R', ~n_R) ]->
+  [ Out(<'R', 'S', ~n_R>), St_R_Init('R', 'S', ~n_R) ]
+
+rule S_Setup_Respond:
+  [ In(<'R', 'S', n_R>), !Ltk('S', sk), !Pk('S', pk), Fr(~k_1) ]
+  --[ Test2(), Running('S', 'R', <'setup', f(~k_1), n_R>) ]->
+  [ Out(<'S', 'R', f(~k_1), sign(<'setup', f(~k_1), n_R, 'S'>, sk)>), St_S_Setup('S', 'R', f(~k_1), ~k_1, n_R) ]
+
+rule R_Setup_Complete:
+  [ St_R_Init('R', 'S', n_R), In(<'S', 'R', f_k1, sig>) ]
+  --[ Test3(), Commit('R', 'S', <'setup', f_k1, n_R>), Honest('R') ]->
+  [ St_R_Complete('R', 'S', f_k1, n_R) ]
+
+rule S_Broadcast_Msg1:
+  [ St_S_Setup('S', 'R', f_k1, ~k_1, n_R), Fr(~k_2), Fr(~m_1) ]
+  --[ Test4(), Running('S', 'R', <'msg1', ~m_1, f(~k_2)>) ]->
+  [ Out(<~m_1, f(~k_2), h(<~k_1, ~m_1, f(~k_2)>)>), St_S_Broadcast('S', 'R', ~k_1, ~k_2) ]
+
+rule R_Receive_Msg1:
+  [ St_R_Complete('R', 'S', f_k1, n_R), In(<m_1, f_k2, mac_1>) ]
+  --[ Test5(), Running('R', 'S', <'msg1', m_1, f_k2>) ]->
+  [ St_R_Msg1('R', 'S', f_k1, m_1, f_k2, mac_1) ]
+
+rule S_Broadcast_MsgN:
+  [ St_S_Broadcast('S', 'R', k_prev, k_curr), Fr(~k_next), Fr(~m_n) ]
+  --[ Test6(), Running('S', 'R', <'msgN', ~m_n, f(~k_next), k_prev>) ]->
+  [ Out(<~m_n, f(~k_next), k_prev, h(<k_curr, ~m_n, f(~k_next), k_prev>), 'channel_tag'>), St_S_Broadcast('S', 'R', ~k_next, ~k_next) ]
+
+rule R_Receive_MsgN:
+  [ St_R_Msg1('R', 'S', f_k1, m_1, f_k2, mac_1), In(<m_n, f_k_next, k_prev, mac_n, channel_tag>) ]
+  --[ Test7(), Commit('R', 'S', <'msgN', m_n, f_k_next, k_prev, mac_n, channel_tag>), Honest('R') ]->
+  [ St_R_MsgN('R', 'S', m_n, f_k_next, k_prev, mac_1, mac_n) ]
+
+rule LtkReveal:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+lemma secrecy_setup:
+  // category: secrecy
+  "All R S f_k1 n_R #i.
+     Commit(R, S, <'setup', f_k1, n_R>) @ i
+   ==>
+       not (Ex #j. K(f_k1) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma aliveness_setup:
+  // category: aliveness
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex id #j. Create(s, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma weak_agreement_setup:
+  // category: weak_agreement
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex t2 #j. Running(s, r, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

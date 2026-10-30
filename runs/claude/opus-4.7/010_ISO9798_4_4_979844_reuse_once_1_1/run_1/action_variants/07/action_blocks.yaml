@@ -1,0 +1,41 @@
+- role: B_1
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - send:
+    - ~rb
+    - ~text1
+- role: A_1
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - send:
+    - ra
+    - ~text3
+    - <'sid1_mut_cr', ra, rb, $B, ~text2>
+    - mac(<'sid1_mut_cr', ra, rb, $B>, ~kAB)
+- role: B_2
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, ~rb, $B, text2>
+    - mac(<'sid1_mut_cr', ra, ~rb, $B>, ~kAB)
+  - generate_nonces:
+    - ~text5
+  - send:
+    - ~text5
+    - mac(<'sid2_mut_cr', ~rb, ra>, ~kAB)
+- role: A_2
+  operations:
+  - receive:
+    - text5
+    - mac2
+  - compute:
+    - mac2 = mac(<'sid2_mut_cr', rb, ra>, ~kAB)
+  - send: <END>

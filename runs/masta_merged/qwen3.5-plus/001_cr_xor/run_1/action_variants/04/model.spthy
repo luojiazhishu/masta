@@ -1,0 +1,72 @@
+theory CR_XOR_IAudit begin
+
+builtins: hashing, xor
+
+functions: com/2
+
+// Pre-shared symmetric key established out of band
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ SetupKey() ]->
+  [ !SharedKey('k', ~k) ]
+
+// Key reveal rule for long-term key compromise
+rule KeyReveal:
+  [ !SharedKey('k', k) ]
+  --[ LtkReveal('k') ]->
+  [ Out(k) ]
+
+// RuleStep1: Initiator generates nonce na, computes local audit tag, sends na
+rule RuleStep1:
+  [ Fr(~na),
+    !SharedKey('k', ~k) ]
+  --[ Test1(),
+      AuditTag('I', com(~na, ~na)),
+      Honest('I') ]->
+  [ Out(~na),
+    !InitState('I', ~na, ~k) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag, sends response
+rule RuleStep2:
+  [ In(na),
+    Fr(~nb),
+    !SharedKey('k', ~k) ]
+  --[ Test2(),
+      Create('R', ~nb),
+      Running('R', 'I', <h(na ⊕ ~k ⊕ ~nb), ~nb>),
+      Honest('R') ]->
+  [ Out(<h(na ⊕ ~k ⊕ ~nb), ~nb>) ]
+
+// RuleStep3: Initiator receives response, verifies tag, terminates
+rule RuleStep3:
+  let
+      expected = h(~na ⊕ ~k ⊕ nb)
+  in
+  [ In(<expected, nb>),
+    !InitState('I', ~na, ~k) ]
+  --[ Test3(),
+      VerifySuccess('I', nb),
+      Commit('I', 'R', <expected, nb>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_of_the_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

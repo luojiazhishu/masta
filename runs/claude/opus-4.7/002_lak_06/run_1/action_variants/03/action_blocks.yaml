@@ -1,0 +1,35 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Response
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(r0 XOR ~r1 XOR ~k)
+- role: Reader_Finish
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - generate_nonces:
+    - ~conf_aux
+  - assert:
+    - tag_mac = h(~r0 XOR r1 XOR ~k)
+  - send:
+    - h(tag_mac XOR ~k XOR ~r0)
+    - ~conf_aux
+- role: Tag_Finish
+  operations:
+  - receive:
+    - reader_mac
+    - conf_aux
+  - assert:
+    - reader_mac = h(h(r0 XOR ~r1 XOR ~k) XOR ~k XOR r0)
+  - send: <END>

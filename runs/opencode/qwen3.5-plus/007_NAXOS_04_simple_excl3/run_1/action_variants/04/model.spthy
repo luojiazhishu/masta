@@ -1,0 +1,97 @@
+theory NaxosSimple
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: com/2, h1/2, h2/1, lk/1
+
+rule Setup_Keys:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ Create($I, ~ltkI), Create($R, ~ltkR) ]->
+  [ !Ltk($I, ~ltkI), !Ltk($R, ~ltkR), !Pk($I, 'g'^~ltkI), !Pk($R, 'g'^~ltkR) ]
+
+rule Initiator_Start:
+  [ !Ltk($I, ~ltkI), !Pk($R, pkR), Fr(~eskI) ]
+  --[ Test1(), Running($I, $R, <'initiator', $I, $R, ~eskI>) ]->
+  [ St_I1($I, $R, ~ltkI, ~eskI, pkR), Out('g'^h1(~eskI, ~ltkI)) ]
+
+rule Responder_Receive:
+  [ !Ltk($R, ~ltkR), !Pk($I, pkI), In(hkI), Fr(~eskR) ]
+  --[ Test2(), Running($R, $I, <'responder', $R, $I, ~eskR, hkI>) ]->
+  [ St_R1($R, $I, ~ltkR, ~eskR, pkI, hkI), Out('g'^h1(~eskR, ~ltkR)) ]
+
+rule Initiator_Finish:
+  [ St_I1($I, $R, ~ltkI, ~eskI, pkR), In(hkR) ]
+  --[ Test3(), Commit($I, $R, <'initiator', $I, $R, hkR>), Honest($I), Honest($R), Secret($I, $R, h2(<hkR^~ltkI, pkR^~eskI, $I, $R>)) ]->
+  [ ]
+
+rule Responder_Commit:
+  [ St_R1($R, $I, ~ltkR, ~eskR, pkI, hkI) ]
+  --[ Commit($R, $I, <'responder', $R, $I, hkI>), Honest($R), Honest($I), Secret($R, $I, h2(<pkI^~eskR, hkI^~ltkR, $I, $R>)) ]->
+  [ ]
+
+rule Ltk_Reveal_I:
+  [ !Ltk($I, ~ltkI) ]
+  --[ LtkReveal($I) ]->
+  [ Out(~ltkI) ]
+
+rule Ltk_Reveal_R:
+  [ !Ltk($R, ~ltkR) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~ltkR) ]
+
+// category: secrecy
+lemma secrecy_initiator:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_responder:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

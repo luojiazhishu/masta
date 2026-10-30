@@ -1,0 +1,34 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(xorF(r0, xorF(~r1, ~k)))
+- role: Reader_Confirm
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - assert:
+    - tag_mac = h(xorF(~r0, xorF(r1, ~k)))
+  - send:
+    - h(xorF(tag_mac, xorF(~k, ~r0)))
+    - h(xorF(tag_mac, xorF(~k, ~r0)))
+- role: Tag_Finish
+  operations:
+  - receive:
+    - reader_mac_a
+    - reader_mac_b
+  - assert:
+    - reader_mac_a = reader_mac_b
+    - reader_mac_a = h(xorF(h(xorF(r0, xorF(~r1, ~k))), xorF(~k, r0)))
+  - send: <END>

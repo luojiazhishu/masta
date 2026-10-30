@@ -1,0 +1,102 @@
+theory famed_bsktsb begin
+
+builtins: asymmetric-encryption, hashing
+
+// PKI setup: generate server's long-term key pair
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Pk($S, pk(~ltk))
+  , Out(pk(~ltk))
+  , !Ltk($S, ~ltk)
+  ]
+
+// RuleStep1: Client generates session key and sends encrypted key to Server
+// Include client identity in encrypted payload for agreement tracking
+rule RuleStep1:
+  let
+      m1 = aenc(<~C, ~k>, pkS)
+  in
+  [ Fr(~k)
+  , Fr(~C)
+  , !Pk($S, pkS)
+  ]
+  --[ Test1()
+    , Secret(~C, $S, ~k)
+    , Honest(~C)
+    , Honest($S)
+    ]->
+  [ Out(m1)
+  , !ClientState(~C, $S, ~k)
+  ]
+
+// RuleStep2: Server receives m1, decrypts to get <C, k>, computes confirmation hash, sends m2
+rule RuleStep2:
+  let
+      payload = adec(m1, ltk)
+      C = fst(payload)
+      k = snd(payload)
+      m2 = h(<k, $S>)
+  in
+  [ In(m1)
+  , !Ltk($S, ltk)
+  ]
+  --[ Test2()
+    , Running($S, C, k)
+    ]->
+  [ Out(m2)
+  , !ServerState($S, k)
+  ]
+
+// RuleStep3: Client receives m2, verifies confirmation hash, completes protocol
+rule RuleStep3:
+  let
+      expected = h(<k, $S>)
+  in
+  [ In(m2)
+  , !ClientState(C, S, k)
+  ]
+  --[ Test3()
+    , Commit(C, S, k)
+    ]->
+  [ Out('<END>')
+  ]
+
+// Reveal rule for server's long-term key (required by threat model)
+rule LtkReveal:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       (Ex #j. Running(S, C, k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement:
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       ( (Ex #j. Running(S, C, k) @ j
+             & j < i
+             & not (Ex C2 S2 #i2. Commit(C2, S2, k) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

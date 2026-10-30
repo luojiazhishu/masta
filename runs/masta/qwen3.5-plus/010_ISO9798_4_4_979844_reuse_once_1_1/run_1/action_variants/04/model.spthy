@@ -1,0 +1,121 @@
+theory MutualChallengeResponse begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule SetupKeys:
+  [
+    Fr(~kAB)
+  ]
+  --[ Secret($A, $B, ~kAB), Honest($A), Honest($B) ]->
+  [
+    !SymKey($A, $B, ~kAB)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~RB),
+    Fr(~Text1),
+    !SymKey($A, $B, ~kAB)
+  ]
+  --[ Test1(), Create($B, ~RB), Running($B, $A, <~RB, 'init_b'>), Honest($B) ]->
+  [
+    Out(<~RB, ~Text1, 'init_b'>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<RB, Text1, 'init_b'>),
+    Fr(~RA),
+    Fr(~Text2),
+    Fr(~Text3),
+    Fr(~tidA),
+    !SymKey($A, $B, ~kAB)
+  ]
+  --[ Test2(), Create($A, ~tidA), Running($A, $B, <~RA, RB, 'sid1_mut_cr'>), Honest($A) ]->
+  [
+    Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, $B, ~Text2>, mac(<'sid1_mut_cr', ~RA, RB, $B>, ~kAB)>),
+    !StateA(~tidA, $A, $B, ~kAB, ~RA, RB, ~Text2)
+  ]
+
+rule RuleStep3:
+  [
+    In(<RA, Text3, <'sid1_mut_cr', RA, RB, $B, Text2>, MAC1>),
+    Fr(~Text4),
+    Fr(~Text5),
+    Fr(~tidB),
+    !SymKey($A, $B, ~kAB)
+  ]
+  --[ Test3(), Commit($B, $A, <RA, RB, 'sid1_mut_cr'>), Honest($B) ]->
+  [
+    Out(<~Text5, mac(<'sid2_mut_cr', RB, RA>, ~kAB)>),
+    !StateB(~tidB, $A, $B, ~kAB, RA, RB)
+  ]
+
+rule RuleStep4:
+  [
+    In(<Text5, MAC2>),
+    !StateA(~tidA, $A, $B, ~kAB, ~RA, RB, ~Text2)
+  ]
+  --[ Test4(), Commit($A, $B, <~RA, RB, 'sid2_mut_cr'>), Honest($A) ]->
+  [
+  ]
+
+rule LtkReveal:
+  [
+    !SymKey($A, $B, ~kAB)
+  ]
+  --[ LtkReveal($A) ]->
+  [
+    Out(~kAB)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_long_term_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,45 @@
+- role: B_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+  - send:
+    - ~rb
+    - '''Text1'''
+- role: A_Respond
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~ra
+    - ~tid
+  - compute:
+    - tagged1 = <'sid1_mut_cr', ~ra, rb, 'IdB', 'Text2'>
+    - mac1 = mac(<'sid1_mut_cr', ~ra, rb, 'IdB', 'Text2'>, ~kAB)
+  - send:
+    - ~ra
+    - '''Text3'''
+    - tagged1
+    - mac1
+- role: B_Verify
+  operations:
+  - receive:
+    - ra
+    - text3
+    - ra_tagged
+    - mac(ra_tagged, ~kAB)
+  - compute:
+    - tagged2 = <'sid2_mut_cr', ~rb, ra>
+    - mac2 = mac(<'sid2_mut_cr', ~rb, ra>, ~kAB)
+    - ra_tagged = <'sid1_mut_cr', ra, ~rb, 'IdB', 'Text2'>
+  - send:
+    - '''Text5'''
+    - mac2
+- role: A_Verify
+  operations:
+  - receive:
+    - text5
+    - mac(tagged2, ~kAB)
+  - compute:
+    - tagged2 = <'sid2_mut_cr', rb, ~ra>
+  - send: <END>

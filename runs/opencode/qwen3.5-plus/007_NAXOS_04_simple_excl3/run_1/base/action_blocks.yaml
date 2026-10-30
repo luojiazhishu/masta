@@ -1,0 +1,26 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h(~eskI, ~ltkI)
+  - send:
+    - dh(g(), exI)
+- role: Responder_Recv
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h(~eskR, ~ltkR)
+    - kR = h(<dh(pkI, h(~eskR, ~ltkR)), dh(X, ~ltkR), I, R>)
+  - send:
+    - dh(g(), exR)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - Y
+  - compute:
+    - kI = h(<dh(Y, ~ltkI), dh(pkR, exI), I, R>)
+  - send: <END>

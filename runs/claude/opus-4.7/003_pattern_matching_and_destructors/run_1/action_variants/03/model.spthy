@@ -1,0 +1,60 @@
+theory FAMED_SK_PMD_AUX
+begin
+
+builtins: symmetric-encryption
+
+functions: aux/1
+
+// Establish a long-term shared symmetric key between an Initiator and a Responder.
+rule Setup_Key:
+  [ Fr(~k) ]
+  -->
+  [ !SharedKey($I, $R, ~k) ]
+
+// Adversary may compromise the shared key, exposing both endpoints' long-term secret.
+rule Reveal_Key:
+  [ !SharedKey($I, $R, ~k) ]
+  --[ LtkReveal($I), LtkReveal($R) ]->
+  [ Out(~k) ]
+
+// Action block 1: Initiator draws sec and pub, evaluates auxv = aux(sec) locally,
+// and transmits msg = senc(<sec, pub>, k). auxv stays initiator-local (not on wire).
+rule Initiator_Send:
+  let
+    auxv = aux(~sec)
+    msg  = senc(<~sec, ~pub>, ~k)
+  in
+  [ Fr(~sec), Fr(~pub), !SharedKey($I, $R, ~k) ]
+  --[ Test1()
+    , Secret($I, $R, ~sec)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(msg) ]
+
+// Action block 2: Responder receives the ciphertext and releases pub onto the network.
+// pub is public by design (released to the network), hence the In(pub) hint;
+// it removes the partial deconstruction on the inner pair without weakening sec.
+rule Responder_Recv:
+  [ !SharedKey($I, $R, ~k), In(senc(<sec, pub>, ~k)), In(pub) ]
+  --[ Test2()
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(pub) ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

@@ -1,0 +1,33 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - ~TransportId
+  - send:
+    - $D
+    - $S
+    - ~DevNonce
+    - h(<'JoinRequest', $D, $S, ~DevNonce>, ~AppKey)
+    - ~TransportId
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - DevEUI
+    - JoinEUI
+    - DevNonce
+    - RequestMAC
+    - TransportId
+  - generate_nonces:
+    - ~JoinNonce
+  - assert:
+    - RequestMAC = h(<'JoinRequest', DevEUI, JoinEUI, DevNonce>, ~AppKey)
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, $D, h(<'JoinAccept', ~JoinNonce, $D>, ~AppKey)>,
+      ~AppKey)
+- role: Device_Commit
+  operations:
+  - receive:
+    - senc(<'JoinAccept', JoinNonce, $D, ResponseMAC>, ~AppKey)
+  - assert:
+    - ResponseMAC = h(<'JoinAccept', JoinNonce, $D>, ~AppKey)
+  - send: <END>

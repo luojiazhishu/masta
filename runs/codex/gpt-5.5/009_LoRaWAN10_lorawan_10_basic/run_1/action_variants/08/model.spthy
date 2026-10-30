@@ -1,0 +1,99 @@
+theory LoRaWAN10Join begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, verif_mac/3, true/0
+
+equations: verif_mac(k, m, mac(k, m)) = true
+
+rule Provision:
+  [ Fr(~appkey) ]
+--[ Create('Device', 'dev1'), Create('Server', 'server1'), Honest('Device'), Honest('Server') ]->
+  [ !AppKey('Device', 'Server', ~appkey),
+    !Provisioned('Device', 'Server', 'DevEUI', 'JoinEUI', 'DevAddr') ]
+
+rule Device_Send_JoinRequest:
+  let reqbody = <'JoinRequest', 'DevEUI', 'JoinEUI', ~devnonce, 'protoV1'>
+      reqmac = mac(appkey, reqbody)
+      req = <'JoinRequest', 'DevEUI', 'JoinEUI', ~devnonce, reqmac>
+  in
+  [ Fr(~devnonce),
+    !AppKey(device, server, appkey),
+    !Provisioned(device, server, 'DevEUI', 'JoinEUI', 'DevAddr') ]
+--[ Test1(),
+    Running(device, server, <appkey, ~devnonce>),
+    DeviceRequest(device, server, appkey, ~devnonce),
+    Honest(device),
+    Honest(server) ]->
+  [ Out(req),
+    DeviceAwaiting(device, server, appkey, ~devnonce) ]
+
+rule Server_Receive_JoinRequest:
+  let reqbody = <'JoinRequest', 'DevEUI', 'JoinEUI', devnonce, 'protoV1'>
+      reqmac = mac(appkey, reqbody)
+      req = <'JoinRequest', 'DevEUI', 'JoinEUI', devnonce, reqmac>
+  in
+  [ In(req),
+    !AppKey(device, server, appkey),
+    !Provisioned(device, server, 'DevEUI', 'JoinEUI', 'DevAddr') ]
+--[ Test2(),
+    Running(server, device, <appkey, devnonce>),
+    ServerVerified(server, device, appkey, devnonce),
+    Honest(device),
+    Honest(server) ]->
+  [ ServerReady(server, device, appkey, devnonce) ]
+
+rule Server_Send_JoinAccept:
+  let body = <'JoinAccept', ~joinnonce, 'DevAddr', mac(appkey, <'JoinAccept', ~joinnonce, 'DevAddr'>)>
+      accept = senc(body, appkey)
+      appskey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwkskey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  in
+  [ Fr(~joinnonce),
+    ServerReady(server, device, appkey, devnonce) ]
+--[ Test3(),
+    Running(server, device, <appkey, devnonce, ~joinnonce>),
+    Secret(device, server, appskey),
+    Secret(device, server, nwkskey),
+    Honest(device),
+    Honest(server) ]->
+  [ Out(accept),
+    ServerAccepted(server, device, appkey, devnonce, ~joinnonce) ]
+
+rule Device_Receive_JoinAccept:
+  let body = <'JoinAccept', joinnonce, 'DevAddr', mac(appkey, <'JoinAccept', joinnonce, 'DevAddr'>)>
+      accept = senc(body, appkey)
+      appskey = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwkskey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ In(accept),
+    DeviceAwaiting(device, server, appkey, devnonce) ]
+--[ Test4(),
+    Commit(device, server, <appkey, devnonce, joinnonce>),
+    Secret(device, server, appskey),
+    Secret(device, server, nwkskey),
+    Honest(device),
+    Honest(server) ]->
+  [ DeviceJoined(device, server, appkey, devnonce, joinnonce) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+     not (Ex #j. K(k) @ #j)"
+
+// category: noninjective_agreement
+lemma device_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+     (Ex #j. Running(b, a, t) @ #j & #j < #i)"
+
+end

@@ -1,0 +1,33 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tidI
+  - compute:
+    - exI = h1(<~eskI, ~ltkI>)
+    - hkI = 'g'^h1(<~eskI, ~ltkI>)
+  - send:
+    - hkI
+- role: RuleStep2
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+    - ~tidR
+  - compute:
+    - exR = h1(<~eskR, ~ltkR>)
+    - hkR = 'g'^h1(<~eskR, ~ltkR>)
+    - kR = h2(<pkI^h1(<~eskR, ~ltkR>), hkI^~ltkR, $I, $R>)
+    - auditCommit = com($I, $R)
+    - keyFingerprint = bar(pkI)
+  - send:
+    - hkR
+- role: RuleStep3
+  operations:
+  - receive:
+    - hkR
+  - compute:
+    - exI = h1(<~eskI, ~ltkI>)
+    - kI = h2(<hkR^~ltkI, pkR^h1(<~eskI, ~ltkI>), $I, $R>)
+  - send: <END>

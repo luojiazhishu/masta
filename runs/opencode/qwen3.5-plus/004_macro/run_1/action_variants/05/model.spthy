@@ -1,0 +1,72 @@
+theory BSKT_D
+begin
+
+builtins: hashing, asymmetric-encryption
+
+rule Setup_Ltk:
+  [ Fr(~skS) ]
+  --[ LtkReveal($S) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)) ]
+
+rule Client_Send:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, 'c1'), Running($C, $S, <'client', ~k>) ]->
+  [ Out(<$C, aenc(~k, pkS)>), St_C1($C, $S, ~k) ]
+
+rule Server_Respond:
+  [ In(<cid, c>), !Ltk($S, skS), !Pk($S, pkS) ]
+  --[ Test2(), Create($S, 's1'), Running($S, cid, <'server', adec(c, skS)>) ]->
+  [ Out(<h(adec(c, skS)), 'done'>), St_S1($S, cid, adec(c, skS)) ]
+
+rule Client_Verify:
+  [ St_C1($C, $S, ~k), In(<h(~k), 'done'>) ]
+  --[ Test3(), Commit($C, $S, <'client', ~k>), Secret($C, $S, ~k), Honest($C) ]->
+  [ ]
+
+rule Server_Commit:
+  [ St_S1($S, cid, k) ]
+  --[ Commit($S, cid, <'server', k>), Honest($S) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All a b k #i.
+     Commit(a, b, <'client', k>) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b k #i.
+     Commit(a, b, <'client', k>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b k #i.
+     Commit(a, b, <'client', k>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'server', k>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'client', k>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

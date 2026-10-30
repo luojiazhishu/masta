@@ -1,0 +1,5 @@
+// ---------- 1. Secrecy ----------
+lemma helpingSecrecy[reuse]:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==> not (Ex #j. K(x) @ j)"

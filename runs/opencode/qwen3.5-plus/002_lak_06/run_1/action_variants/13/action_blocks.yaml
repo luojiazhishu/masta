@@ -1,0 +1,33 @@
+- role: Reader_Challenge
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Response
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(r0 ⊕ ~r1 ⊕ ~k)
+- role: Reader_Confirm
+  operations:
+  - receive:
+    - r1
+    - h(r0 ⊕ r1 ⊕ k)
+  - compute:
+    - reader_mac = h(h(r0 ⊕ r1 ⊕ k) ⊕ k ⊕ r0)
+  - send:
+    - reader_mac
+    - reader_mac
+- role: Tag_Verify
+  operations:
+  - receive:
+    - expected
+    - expected
+  - compute:
+    - expected = h(tag_mac ⊕ k ⊕ r0)
+  - send: <END>

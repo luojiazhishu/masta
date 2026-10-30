@@ -1,0 +1,25 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~rn
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+    - ~rn
+- role: RuleStep2
+  operations:
+  - receive:
+    - s
+    - rn_received
+  - compute:
+    - mI = sign(<$I, $R>, ~ltkI)
+  - assert:
+    - verify(s, <$I, $R>, pkI) = true
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: RuleStep3
+  operations:
+  - receive:
+    - mR
+  - assert:
+    - verify(mR, <$I, $R>, pkR) = true
+  - send: <END>

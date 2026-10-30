@@ -1,0 +1,98 @@
+# Unified experiment configuration consumed by:
+#   - experiments/run_masta.py
+#   - experiments/run_oneshot.py
+#   - experiments/run_coding_agent.py
+#   - experiments/run_all.py
+#
+# Copy this file to experiments/experiment.yaml and edit the fields below.
+# experiments/experiment.yaml is git-ignored because it carries API keys;
+# this template stays in version control.
+
+# Where the dataset lives (relative to the project root or absolute).
+dataset_dir: data/dataset
+
+# Where every experiment writes its artifacts. Per-protocol layout:
+#   <runs_dir>/<system>/<safe_label>/<protocol>/run_<i>/
+#       base/model.spthy + base/score.json + base/.work/
+#       action_variants/<NN>/model.spthy + .work/
+#       weakness_variants/<NN>/model.spthy + .work/
+runs_dir: runs
+
+# How many independent runs each protocol gets. Each run uses
+# seed = llm_seed + run_idx - 1 and lands under .../run_<i>/.
+runs_per_protocol: 3
+
+# Worker process pool size for one run_*.py invocation.
+parallel: 8
+
+# Per-Tamarin-invocation timeout in seconds (Tamarin's own subprocess
+# timeout, independent of task_timeout_seconds below).
+tamarin_timeout_seconds: 300
+
+# Wall-clock ceiling for one generation+score job, in seconds.
+# Applies uniformly to every system worker; if the generation subprocess
+# does not return within this budget the worker kills it and reports a
+# timeout.
+task_timeout_seconds: 1800
+
+# Default subset that run_all.py will execute when --experiments is not
+# given. The order here is the order in which run_all dispatches them.
+experiments: [masta, oneshot, codex, claude, opencode]
+
+# Per-system model lists. Each entry is one of:
+#
+#   <provider_id>     a key from the "providers" mapping below. The runner
+#                     pushes that provider's credentials and real model
+#                     name into the system; the entry's <provider_id> is
+#                     also used as the artifact subdir name.
+#
+#   default(<tag>)    coding-agent only (codex / claude / opencode). The
+#                     host CLI uses its own globally-configured account
+#                     and default model; <tag> (allowed chars: A-Z a-z
+#                     0-9 . _ -) only labels the artifact subdir as
+#                     "default_<tag>".
+#
+# masta and oneshot drive an LLM provider directly, so they MUST use the
+# <provider_id> form; default(...) is rejected for them.
+systems:
+  masta:
+    models:
+      - qwen-fast
+  oneshot:
+    models:
+      - qwen-fast
+  codex:
+    models:
+      - default(gpt-5)            # codex CLI's globally-configured account
+      - qwen-fast                 # also bind codex to a registered provider
+  claude:
+    models:
+      - default(claude-sonnet-4-6)
+  opencode:
+    models:
+      - default(gpt-5)
+
+# Common LLM parameters consumed by masta / oneshot only. They flow into
+# scripts.<sys>_model via command-line flags and into masta_model's
+# --reasoning toggle. Coding-agent systems do not read these.
+llm_temperature: 0.0
+llm_seed: 42
+llm_max_tokens: null
+llm_reasoning: false
+llm_reasoning_budget: null
+
+# Provider catalog. Each key is a local provider id (also used as the
+# artifact subdir name when referenced by a system). The "model" field
+# is the real model name pushed to the API; "provider" picks between
+# OpenAI-compatible and Anthropic Messages.
+providers:
+  qwen-fast:
+    provider: openai
+    model: qwen3.5-plus           # real model id sent to the API
+    base_url: https://api.gpt.ge/v1
+    api_key: sk-REPLACE-ME
+  claude-anthropic:
+    provider: anthropic
+    model: claude-opus-4-5
+    api_key: sk-ant-REPLACE-ME
+    # base_url is optional for anthropic

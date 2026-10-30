@@ -1,0 +1,29 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - xor_input = ~na XOR ~k XOR ~nb
+    - t = h(~na XOR ~k XOR ~nb)
+  - send:
+    - t
+    - ~nb
+    - '''Resp'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - t_prime
+    - ~nb
+    - '''Resp'''
+  - compute:
+    - xor_input = ~na XOR ~k XOR ~nb
+    - t_prime = h(~na XOR ~k XOR ~nb)
+  - send: <END>

@@ -1,0 +1,20 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~k
+  - send:
+    - ~na
+- role: Responder_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - send:
+    - ~nb
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - nb
+  - send: <END>

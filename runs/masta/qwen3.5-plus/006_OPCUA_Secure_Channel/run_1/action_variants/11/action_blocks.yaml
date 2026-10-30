@@ -1,0 +1,51 @@
+- role: RuleStep1
+  operations:
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(~ltkS)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - S_pk
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - pk(~ltkC)
+    - <'OSCReq', pk(~ltkC), ~Nc>
+    - sign(h(<'OSCReq', pk(~ltkC), ~Nc>), ~ltkC)
+    - h(<'OSCReq', pk(~ltkC), ~Nc>)
+- role: RuleStep4
+  operations:
+  - receive:
+    - C_pk
+    - <'OSCReq', C_pk, Nc_in>
+    - ReqSig
+    - ReqDigest
+  - generate_nonces:
+    - ~Ns
+  - send:
+    - pk(~ltkS)
+    - <'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1'>
+    - sign(h(<'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1'>), ~ltkS)
+    - h(<'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1'>)
+- role: RuleStep5
+  operations:
+  - receive:
+    - S_pk
+    - <'OSCRes', Ns_in, ST, TTL, 'channelV1'>
+    - RespSig
+    - RespDigest
+  - send: <END>

@@ -1,0 +1,6 @@
+// ---------- 4. Non-injective agreement ----------
+lemma noninjectiveagreementREADER[use_induction]:
+  "All t #i.
+     Commit('R', 'T', t) @ i
+   ==>
+       (Ex #j. Running('T', 'R', t) @ j)"

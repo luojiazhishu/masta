@@ -1,0 +1,60 @@
+theory CrXorRmk
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Establish_Shared_Key:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !SharedKey(I, R, k) ]
+  --[ Test1(), Create(I, ~na) ]->
+  [ Out(~na), St_I_1(I, R, ~na, k) ]
+
+rule Responder_Respond:
+  let tag = h(na XOR k XOR ~nb)
+  in
+  [ In(na), Fr(~nb), !SharedKey(I, R, k) ]
+  --[ Test2(), Create(R, ~nb), Running(R, I, <'responder', tag>) ]->
+  [ Out(<tag, ~nb, 'Resp'>) ]
+
+rule Initiator_Verify:
+  let expected = h(na XOR k XOR nb)
+  in
+  [ St_I_1(I, R, na, k), In(<tag, nb, 'Resp'>) ]
+  --[ Test3(), Eq(tag, expected), Commit(I, R, <'responder', tag>), Honest(I), Honest(R) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness_responder:
+  "All i r t #a.
+     Commit(i, r, t) @ #a
+   ==>
+       (Ex id #c. Create(r, id) @ #c)
+     | (Ex X #rv. LtkReveal(X) @ #rv & Honest(X) @ #a)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All i r t #a.
+     Commit(i, r, t) @ #a
+   ==>
+       (Ex #run. Running(r, i, t) @ #run)
+     | (Ex X #rv. LtkReveal(X) @ #rv & Honest(X) @ #a)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

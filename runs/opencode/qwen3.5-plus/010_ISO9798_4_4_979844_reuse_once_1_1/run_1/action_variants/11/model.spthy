@@ -1,0 +1,81 @@
+theory ISO9798_4_4_MutualAuth
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Setup:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk(~kAB) ]
+
+rule Responder_Start:
+  [ !Ltk(~kAB), Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Create('IdB', ~RB) ]->
+  [ St_B_1('IdB', ~kAB, ~RB, ~Text1), Out(<~RB, ~Text1>) ]
+
+rule Responder_Duplicate:
+  [ St_B_1('IdB', ~kAB, ~RB, text1) ]
+  --[ Test2() ]->
+  [ St_B_2('IdB', ~kAB, ~RB, text1), Out(<~RB, text1>) ]
+
+rule Initiator_Respond:
+  [ !Ltk(~kAB), In(<rb, text1>), Fr(~RA), Fr(~Text3) ]
+  --[ Test3(), Create('IdA', ~RA), Running('IdA', 'IdB', <'initiator', ~RA, rb>) ]->
+  [ St_A_1('IdA', ~kAB, ~RA, rb), 
+    Out(<~RA, ~Text3, mac(< 'sid1_mut_cr', ~RA, rb, 'IdB' >, ~kAB)>) ]
+
+rule Responder_Verify:
+  [ !Ltk(~kAB), St_B_2('IdB', ~kAB, ~RB, text1), 
+    In(<ra, text3, mac(< 'sid1_mut_cr', ra, ~RB, 'IdB' >, ~kAB)>) ]
+  --[ Test4(), Running('IdB', 'IdA', <'responder', ra, ~RB>) ]->
+  [ St_B_3('IdB', ~kAB, ~RB, ra) ]
+
+rule Responder_Finalize:
+  [ !Ltk(~kAB), St_B_3('IdB', ~kAB, ~RB, ra), Fr(~Text5) ]
+  --[ Test5(), Commit('IdB', 'IdA', <'responder', ra, ~RB>), Honest('IdB'), Secret('IdB', 'IdA', ~kAB) ]->
+  [ Out(<~Text5, mac(< 'sid2_mut_cr', ~RB, ra >, ~kAB)>) ]
+
+rule Initiator_Verify:
+  [ !Ltk(~kAB), St_A_1('IdA', ~kAB, ~RA, rb), 
+    In(<text5, mac(< 'sid2_mut_cr', rb, ~RA >, ~kAB)>) ]
+  --[ Test6(), Commit('IdA', 'IdB', <'initiator', ~RA, rb>), Honest('IdA'), Secret('IdA', 'IdB', ~kAB) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(~kAB) ]
+  --[ LtkReveal('IdA'), LtkReveal('IdB') ]->
+  [ Out(~kAB) ]
+
+// category: secrecy
+lemma secrecy_kAB:
+  "All A B #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+end

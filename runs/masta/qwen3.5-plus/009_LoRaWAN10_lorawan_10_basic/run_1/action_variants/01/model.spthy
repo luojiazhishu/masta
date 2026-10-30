@@ -1,0 +1,140 @@
+theory LoRaWAN10Join begin
+
+builtins: symmetric-encryption, hashing
+
+functions: mac/2, cst1/0, cst2/0
+
+rule Provision_Keys:
+  [
+    Fr(~AppKey),
+    Fr(~DevEUI),
+    Fr(~JoinEUI),
+    Fr(~DevAddr)
+  ]
+  --[ Honest($D), Honest($S) ]->
+  [
+    !Ltk($D, ~AppKey),
+    !Pk($D, ~DevEUI),
+    !Pk($S, ~JoinEUI),
+    !DevAddr($D, ~DevAddr)
+  ]
+
+rule AppKeyReveal_D:
+  [ !Ltk($D, AppKey) ]
+  --[ LtkReveal($D) ]->
+  [ Out(AppKey) ]
+
+rule AppKeyReveal_S:
+  [ !Ltk($S, AppKey) ]
+  --[ LtkReveal($S) ]->
+  [ Out(AppKey) ]
+
+rule RuleStep1:
+  [
+    Fr(~DevNonce),
+    Fr(~TransportId),
+    !Ltk($D, AppKey),
+    !Pk($D, DevEUI),
+    !Pk($S, JoinEUI)
+  ]
+  --[ Test1(), Running($D, $S, ~DevNonce) ]->
+  [
+    Out(< 'JoinRequest', DevEUI, JoinEUI, ~DevNonce, mac(AppKey, <'JoinRequest', DevEUI, JoinEUI, ~DevNonce>), ~TransportId >),
+    !State_Dev_1($D, AppKey, DevEUI, JoinEUI, ~DevNonce, ~TransportId)
+  ]
+
+rule RuleStep2:
+  [
+    Fr(~JoinNonce),
+    In(< 'JoinRequest', DevEUI, JoinEUI, ~DevNonce, RequestMAC, ~TransportId >),
+    !Ltk($S, AppKey),
+    !DevAddr($D, DevAddr)
+  ]
+  --[ Test2(), Running($S, $D, <~DevNonce, ~JoinNonce>) ]->
+  [
+    Out(senc(< 'JoinAccept', ~JoinNonce, DevAddr, mac(AppKey, <'JoinAccept', ~JoinNonce, DevAddr>) >, AppKey)),
+    !State_Serv_1($S, AppKey, DevEUI, JoinEUI, ~DevNonce, ~JoinNonce, DevAddr)
+  ]
+
+rule RuleStep2_Commit:
+  [
+    !State_Serv_1($S, AppKey, DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr)
+  ]
+  --[ Test2b(), Commit($S, $D, <DevNonce, JoinNonce>) ]->
+  [
+    !State_Serv_2($S, AppKey, DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr)
+  ]
+
+rule RuleStep3:
+  [
+    In(senc(< 'JoinAccept', JoinNonce, DevAddr, ResponseMAC >, AppKey)),
+    !State_Dev_1($D, AppKey, DevEUI, JoinEUI, DevNonce, TransportId),
+    !Ltk($D, AppKey)
+  ]
+  --[ Test3(), Commit($D, $S, <DevNonce, JoinNonce>), Secret($D, $S, senc(<cst1, DevNonce, JoinNonce>, AppKey)), Secret($D, $S, senc(<cst2, DevNonce, JoinNonce>, AppKey)) ]->
+  [
+    !State_Dev_2($D, AppKey, DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t2b #t3. Test1() @ #t1 & Test2() @ #t2 & Test2b() @ #t2b & Test3() @ #t3 & #t1 < #t2 & #t2 < #t2b & #t2b < #t3"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_keys:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_session_keys:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,54 @@
+- role: GetEndpoints
+  operations:
+  - generate_nonces:
+    - ~serverKey
+    - ~sid
+  - send:
+    - '''GEReq'''
+- role: GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(sk)
+    - '''Sign'''
+    - '''policy'''
+- role: OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverPk
+    - '''Sign'''
+    - '''policy'''
+  - generate_nonces:
+    - ~clientKey
+    - ~Nc
+    - ~cid
+  - send:
+    - pk(~clientKey)
+    - <'OSCReq', pk(~clientKey), ~Nc>
+    - sign(h(<'OSCReq', pk(~clientKey), ~Nc>), ~clientKey)
+    - h(<'OSCReq', pk(~clientKey), ~Nc>)
+- role: OpenSecureChannelResponse
+  operations:
+  - receive:
+    - clientKey
+    - <'OSCReq', clientKey, Nc>
+    - sign(h(<'OSCReq', clientKey, Nc>), clientKey)
+    - h(<'OSCReq', clientKey, Nc>)
+  - generate_nonces:
+    - ~Ns
+  - send:
+    - pk(sk)
+    - <'OSCRes', ~Ns, 'ST', 'TTL'>
+    - sign(h(<'OSCRes', ~Ns, 'ST', 'TTL'>), sk)
+    - h(<'OSCRes', ~Ns, 'ST', 'TTL'>)
+- role: ClientVerify
+  operations:
+  - receive:
+    - serverCert
+    - <'OSCRes', Ns, ST, TTL>
+    - sign(h(<'OSCRes', Ns, ST, TTL>), serverPk)
+    - h(<'OSCRes', Ns, ST, TTL>)
+  - send: <END>

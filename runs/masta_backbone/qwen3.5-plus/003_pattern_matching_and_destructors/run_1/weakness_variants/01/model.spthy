@@ -1,0 +1,79 @@
+theory SK_PMD_W01 begin
+
+builtins: symmetric-encryption
+
+// Pre-distributed symmetric key between Initiator and Responder
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ Secret($I, $R, ~k) ]->
+  [ !Sk($I, $R, ~k) ]
+
+// RuleStep1: Initiator sends encrypted message and plaintext secret
+rule RuleStep1:
+  let
+    msg = senc(<~sec, ~pub>, ~k)
+  in
+  [ Fr(~sec), Fr(~pub), !Sk($I, $R, ~k) ]
+  --[ Test1(), Honest($I), Commit($I, $R, <~sec, ~pub>) ]->
+  [ Out(msg), Out(~sec) ]
+
+// RuleStep2: Responder receives encrypted message
+rule RuleStep2:
+  let
+    msg = senc(<sec, pub>, ~k)
+  in
+  [ In(msg), !Sk($I, $R, ~k) ]
+  --[ Test2(), Honest($R), Running($R, $I, <sec, pub>), Create($R, sec) ]->
+  [ ]
+
+// Long-term key reveal rule for symmetric key compromise
+rule SkReveal:
+  [ !Sk(A, B, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_shared_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_public_value:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_protocol_execution:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_payload:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

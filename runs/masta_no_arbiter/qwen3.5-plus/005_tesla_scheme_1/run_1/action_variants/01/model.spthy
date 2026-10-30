@@ -1,0 +1,84 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// RuleStep1: Receiver R initiates with nonce and tag
+rule RuleStep1:
+  [
+    Fr(~n_R),
+    Fr(~tag_R)
+  ]
+  --[ Test1() ]->
+  [
+    Out(< 'R', 'S', ~n_R, ~tag_R >)
+  ]
+
+// RuleStep2: Sender S receives request, generates k1, signs commitment
+rule RuleStep2:
+  [
+    In(< 'R', 'S', n_R, tag_R >),
+    Fr(~k_1),
+    !Ltk('S', ~sk_S)
+  ]
+  --[ Test2() ]->
+  [
+    Out(< 'S', 'R', f(~k_1), sign(< f(~k_1), n_R, tag_R >, ~sk_S) >),
+    !KeyChain('S', ~k_1)
+  ]
+
+// Key generation rule for Sender S (produces persistent Ltk)
+rule GenerateKey_S:
+  [
+    Fr(~sk_S)
+  ]
+  --[ ]->
+  [
+    !Ltk('S', ~sk_S),
+    Out(pk(~sk_S))
+  ]
+
+// RuleStep3: Receiver R verifies signature and commits
+rule RuleStep3:
+  [
+    In(< 'S', 'R', f_k1, sig >),
+    !Ltk('S', ~sk_S)
+  ]
+  --[ Test3() ]->
+  [
+    !Commit('R', f_k1)
+  ]
+
+// RuleStep4: Sender S broadcasts Msg 1 (D_1, MAC)
+// D_1 = <m_1, f(k_2)>
+// MAC = MAC(k_1, <m_1, f(k_2), 'null'>)
+// Uses KeyChain to retrieve k_1
+rule RuleStep4:
+  [
+    Fr(~k_2),
+    !KeyChain('S', ~k_1),
+    !Commit('R', f(~k_1))
+  ]
+  --[ Test4() ]->
+  [
+    Out(< <'m_1', f(~k_2)>, MAC(~k_1, <'m_1', f(~k_2), 'null'>) >),
+    !State_S(~k_1, ~k_2)
+  ]
+
+// RuleStep5: Receiver R receives Msg 1 and caches it
+rule RuleStep5:
+  [
+    In(< D_1, mac_1 >),
+    !Commit('R', f_k1)
+  ]
+  --[ Test5() ]->
+  [
+    !Cached('R', D_1, mac_1)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

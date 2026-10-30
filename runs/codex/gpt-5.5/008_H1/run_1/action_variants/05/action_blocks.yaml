@@ -1,0 +1,20 @@
+- role: Initiator_Send
+  operations:
+  - send:
+    - sign(<I, R>, ltkI)
+    - h(I)
+- role: Responder_Process
+  operations:
+  - receive:
+    - mI
+  - assert:
+    - verify(mI, <I, R>, pkI) = true
+  - send:
+    - sign(<I, R>, ltkR)
+- role: Initiator_Accept
+  operations:
+  - receive:
+    - mR
+  - assert:
+    - verify(mR, <I, R>, pkR) = true
+  - send: <END>

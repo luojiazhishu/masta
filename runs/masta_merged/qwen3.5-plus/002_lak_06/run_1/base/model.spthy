@@ -1,0 +1,68 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule SetupKeys:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk('Reader', ~k), !Ltk('Tag', ~k) ]
+
+rule LtkReveal:
+  [ !Ltk(A, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+rule RuleStep1:
+  [ Fr(~r0), !Ltk('Reader', k) ]
+  --[ Test1(), Create('Reader', ~r0), Role('Reader'), Honest('Reader') ]->
+  [ Out(~r0), !ReaderState(~r0, k), !HonestPersistent('Reader') ]
+
+rule RuleStep2:
+  [ Fr(~r1), In(~r0), !Ltk('Tag', k) ]
+  --[ Test2(), Running('Tag', 'Reader', <~r0, ~r1>), Honest('Tag') ]->
+  [ Out(<~r1, h(~r0 ⊕ ~r1 ⊕ k)>), !TagState(~r0, ~r1, k), !HonestPersistent('Tag') ]
+
+rule RuleStep3:
+  [ In(<~r1, tag_mac>), !ReaderState(~r0, k) ]
+  --[ Test3(), Running('Reader', 'Tag', <~r0, ~r1>) ]->
+  [ Out(h(tag_mac ⊕ k ⊕ ~r0)), !ReaderCommit(~r0, ~r1, k) ]
+
+rule RuleStep4:
+  [ In(reader_mac), !TagState(~r0, ~r1, k) ]
+  --[ Test4(), Commit('Tag', 'Reader', <~r0, ~r1>) ]->
+  [ ]
+
+rule RuleStep5:
+  [ !ReaderCommit(~r0, ~r1, k), !HonestPersistent('Reader') ]
+  --[ Test5(), Commit('Reader', 'Tag', <~r0, ~r1>), Secret(k), Honest('Reader') ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_long_term_key:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

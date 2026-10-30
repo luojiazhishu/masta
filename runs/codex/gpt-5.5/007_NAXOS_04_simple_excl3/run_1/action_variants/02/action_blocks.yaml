@@ -1,0 +1,26 @@
+- role: Initiator_Send_Message1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(~eskI, lkI)
+    - hkI = ge(h1(~eskI, lkI))
+  - send:
+    - hkI
+- role: Responder_Send_Message2
+  operations:
+  - generate_nonces:
+    - ~eskR
+    - ~SessionCorrelator
+  - compute:
+    - exR = h1(~eskR, lkR)
+    - hkR = ge(h1(~eskR, lkR))
+    - kR = h2(<dh(pkI, h1(~eskR, lkR)), dh(X, lkR), I, R>)
+  - send:
+    - hkR
+    - ~SessionCorrelator
+- role: Initiator_Receive_Message2
+  operations:
+  - compute:
+    - kI = h2(<dh(Y, lkI), dh(pkR, exI), I, R>)
+  - send: <END>

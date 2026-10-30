@@ -1,0 +1,47 @@
+theory SkPmdW01
+begin
+
+builtins: symmetric-encryption
+
+rule SetupKey:
+    [ Fr(~k) ]
+  -->
+    [ !Sk($A, $B, ~k) ]
+
+rule RevealKey:
+    [ !Sk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+    [ Out(k) ]
+
+rule Init_Send:
+    let msg = senc(<~sec, ~pub>, k)
+    in
+    [ !Sk($A, $B, k), Fr(~sec), Fr(~pub) ]
+  --[ Test1()
+    , Create($A, ~sec)
+    , Secret($A, $B, ~sec)
+    , Honest($A)
+    , Honest($B)
+    ]->
+    [ Out(<msg, ~sec>) ]
+
+rule Resp_Recv:
+    [ !Sk($A, $B, k), In(<senc(<sec, pub>, k), sec_clear>) ]
+  --[ Test2() ]->
+    [ Out(pub) ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

@@ -1,0 +1,68 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pkS
+    - '''Sign'''
+    - '''policy'''
+    - '''userToken'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - pkS
+    - '''Sign'''
+    - policy
+    - userToken
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - req_body = <'OSCReq', pkC, ~Nc>
+    - req_digest = h(<'OSCReq', pkC, ~Nc>)
+    - req_sig = sign(h(<'OSCReq', pkC, ~Nc>), ltkC)
+  - send:
+    - pkC
+    - req_body
+    - req_sig
+    - req_digest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - pkC
+    - req_body
+    - sign(req_digest, ltkC)
+    - req_digest
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - compute:
+    - req_body = <'OSCReq', pkC, Nc>
+    - req_digest = h(<'OSCReq', pkC, Nc>)
+    - res_body = <'OSCRes', ~Ns, ~ST, ~TTL, 'channelV1'>
+    - res_digest = h(<'OSCRes', ~Ns, ~ST, ~TTL, 'channelV1'>)
+    - res_sig = sign(h(<'OSCRes', ~Ns, ~ST, ~TTL, 'channelV1'>), ltkS)
+    - channel_key = h(<Nc, ~Ns>)
+  - send:
+    - pkS
+    - res_body
+    - res_sig
+    - res_digest
+- role: Client_AcceptOpenSecureChannelResponse
+  operations:
+  - receive:
+    - pkS
+    - res_body
+    - sign(res_digest, ltkS)
+    - res_digest
+  - compute:
+    - res_body = <'OSCRes', Ns, ST, TTL, 'channelV1'>
+    - res_digest = h(<'OSCRes', Ns, ST, TTL, 'channelV1'>)
+    - channel_key = h(<Nc, Ns>)
+  - send: <END>

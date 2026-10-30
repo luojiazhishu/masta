@@ -1,0 +1,19 @@
+- role: Initiator_Send
+  operations:
+  - send:
+    - sign(<pkI, pkR>, ~ltkI)
+- role: Responder_Reply
+  operations:
+  - receive:
+    - sigI
+  - assert:
+    - verify(sigI, <pkI, pkR>, pkI) = true
+  - send:
+    - sign(<pkI, pkR>, ~ltkR)
+- role: Initiator_Complete
+  operations:
+  - receive:
+    - sigR
+  - assert:
+    - verify(sigR, <pkI, pkR>, pkR) = true
+  - send: <END>

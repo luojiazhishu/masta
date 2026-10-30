@@ -1,0 +1,45 @@
+theory SkPmdW01
+begin
+
+builtins: symmetric-encryption
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+  --[ Create($I, ~k), Create($R, ~k) ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Initiator_Send_Ciphertext:
+  [ Fr(~sec), Fr(~pub), !SharedKey($I, $R, k) ]
+  --[ Test1(), Running($I, $R, <'sk-pmd-w01', ~sec, ~pub>), Secret($I, $R, ~sec), Honest($I), Honest($R) ]->
+  [ Out(senc(<~sec, ~pub>, k)), St_Clear($I, $R, ~sec, ~pub) ]
+
+rule Initiator_Send_Clear_Secret:
+  [ St_Clear($I, $R, sec, pub) ]
+  --[ Test2() ]->
+  [ Out(sec) ]
+
+rule Responder_Release_Public:
+  [ In(senc(<sec, pub>, k)), !SharedKey($I, $R, k) ]
+  --[ Test3(), Commit($R, $I, <'sk-pmd-w01', sec, pub>), Honest($I), Honest($R) ]->
+  [ Out(pub) ]
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

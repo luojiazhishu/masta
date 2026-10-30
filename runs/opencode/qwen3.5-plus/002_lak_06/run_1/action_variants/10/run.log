@@ -1,0 +1,9 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.coding_agent_model --document data/dataset/002_lak_06/action_variants/10/document.txt --output-dir runs/opencode/qwen3.5-plus/002_lak_06/run_1/action_variants/10 --tool opencode --model qwen3.5-plus --skills-source /root/project/llm-tamarin/masta/experiments/coding_agent/skills --agent-timeout 3600 --label 002_lak_06 run_1 action_variants/10 --provider openai --api-model qwen3.5-plus --api-key <REDACTED> --base-url https://api.gpt.ge/v1
+
+==== MASTA coding_agent_model ====
+ document:   /root/project/llm-tamarin/masta/data/dataset/002_lak_06/action_variants/10/document.txt
+ output_dir: /root/project/llm-tamarin/masta/runs/opencode/qwen3.5-plus/002_lak_06/run_1/action_variants/10
+ tool:       opencode
+ provider:   openai / qwen3.5-plus @ https://api.gpt.ge/v1
+ label:      002_lak_06 run_1 action_variants/10
+[coding_agent] model written to: /root/project/llm-tamarin/masta/runs/opencode/qwen3.5-plus/002_lak_06/run_1/action_variants/10/model.spthy

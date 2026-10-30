@@ -1,0 +1,25 @@
+- role: I_Send
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: R_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(na XOR k XOR ~nb)
+  - send:
+    - t
+    - ~nb
+- role: I_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+  - assert:
+    - tag = h(~na XOR k XOR nb)
+  - send: <END>

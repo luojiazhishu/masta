@@ -1,0 +1,83 @@
+theory MutualChallengeResponse
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Register_Pair:
+  [ Fr(~k), Fr(~ra_seed) ]
+  --[ Create($A, $B), Honest($A), Honest($B) ]->
+  [ !Pair($A, $B, ~k), !Ltk($A, ~k), !Ltk($B, ~k), !RaSource($A, h(~ra_seed)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($X, k) ]
+  --[ LtkReveal($X) ]->
+  [ Out(k) ]
+
+rule Responder_Challenge:
+  [ !Pair($A, $B, k), Fr(~rb), Fr(~text1) ]
+  --[ Test1() ]->
+  [ Out(<~rb, ~text1>), St_B_1($A, $B, k, ~rb) ]
+
+rule Initiator_TokenAB:
+  [ !Pair($A, $B, k), !RaSource($A, ra), In(<rb, text1>), Fr(~text2), Fr(~text3) ]
+  --[ Test2(), Running($A, $B, <'B_accepts_A', $A, $B, rb>) ]->
+  [ Out(<ra, ~text3, <'sid1_mut_cr', ra, rb, $B, ~text2>, mac(<'sid1_mut_cr', ra, rb, $B>, k)>),
+    St_A_1($A, $B, k, ra, rb) ]
+
+rule Responder_TokenBA:
+  [ St_B_1($A, $B, k, rb), In(<ra, text3, <'sid1_mut_cr', ra, rb, $B, text2>, mac(<'sid1_mut_cr', ra, rb, $B>, k)>), Fr(~text4), Fr(~text5) ]
+  --[ Test3(), Commit($B, $A, <'B_accepts_A', $A, $B, rb>), Running($B, $A, <'A_accepts_B', $A, $B, ra, rb>) ]->
+  [ Out(<~text5, mac(<'sid2_mut_cr', rb, ra>, k)>) ]
+
+rule Initiator_Verify:
+  [ St_A_1($A, $B, k, ra, rb), In(<text5, mac(<'sid2_mut_cr', rb, ra>, k)>) ]
+  --[ Test4(), Commit($A, $B, <'A_accepts_B', $A, $B, ra, rb>) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All A B ra rb #i.
+     Commit(A, B, <'A_accepts_B', A, B, ra, rb>) @ #i
+   ==>
+     (Ex #j. Running(B, A, <'A_accepts_B', A, B, ra, rb>) @ #j)
+   | (Ex X #r. LtkReveal(X) @ #r & (X = A | X = B))"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All A B rb #i.
+     Commit(B, A, <'B_accepts_A', A, B, rb>) @ #i
+   ==>
+     (Ex #j. Running(A, B, <'B_accepts_A', A, B, rb>) @ #j)
+   | (Ex X #r. LtkReveal(X) @ #r & (X = A | X = B))"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All A B ra rb #i.
+     Commit(A, B, <'A_accepts_B', A, B, ra, rb>) @ #i
+   ==>
+     ((Ex #j. Running(B, A, <'A_accepts_B', A, B, ra, rb>) @ #j
+          & #j < #i
+          & not (Ex A2 B2 #i2. Commit(A2, B2, <'A_accepts_B', A, B, ra, rb>) @ #i2
+                            & not (#i2 = #i))))
+   | (Ex X #r. LtkReveal(X) @ #r & (X = A | X = B))"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All A B rb #i.
+     Commit(B, A, <'B_accepts_A', A, B, rb>) @ #i
+   ==>
+     ((Ex #j. Running(A, B, <'B_accepts_A', A, B, rb>) @ #j
+          & #j < #i
+          & not (Ex A2 B2 #i2. Commit(B2, A2, <'B_accepts_A', A, B, rb>) @ #i2
+                            & not (#i2 = #i))))
+   | (Ex X #r. LtkReveal(X) @ #r & (X = A | X = B))"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

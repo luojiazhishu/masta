@@ -1,0 +1,177 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 27, 2026                                         FAMED
+                                                         April 25, 2026
+
+
+    Public-Key Session Key Transport without Confirmation Check
+                       draft-famed-bsktopen-00
+
+Abstract
+
+   This document specifies a public-key session key transport
+   protocol in which the client conveys a freshly generated session
+   key to a server using the server's long-term public key, and
+   accepts the run as soon as any reply is received from the
+   network.  The reply is consumed by the client at the dispatch
+   layer; the client does not perform a cryptographic check on the
+   contents of the reply.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 27, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ................................................. 2
+   2. Conventions and Definitions .................................. 2
+   3. Protocol Overview ............................................ 3
+   4. Message Format ............................................... 4
+   5. Processing Rules ............................................. 4
+   6. Security Considerations ...................................... 5
+   7. References ................................................... 6
+
+1. Introduction
+
+   This document defines a minimal public-key session key transport
+   exchange in which the client unilaterally selects a fresh session
+   key, transmits it under the server's public key, and treats any
+   subsequent message from the network as the indication that the
+   server has received the key.
+
+   The protocol is intentionally lightweight.  No cryptographic
+   binding is established between the message that arrives back at
+   the client and the session key that the client has transmitted.
+   Implementations rely on the calling application to detect
+   misbehavior of the run by means external to this specification.
+
+2. Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   The following notation is used throughout this document.
+
+      C, S         The client and the server.
+      sk(S), pk(S) The long-term private and public key of S.
+      k            A fresh, uniformly random session key drawn by C.
+      aenc, adec   Asymmetric encryption and decryption.
+      h(x)         A one-way hash function applied to x.
+
+3. Protocol Overview
+
+   The protocol consists of two messages exchanged between C and S.
+
+         Client                                       Server
+         ------                                       ------
+         k  = fresh random
+         m1 = aenc(k, pk(S))
+                          ----- m1 ----->
+                                                k = adec(.,sk(S))
+                                                m2 = h(k)
+                          <---- m2 ------
+         consume m2 (no check)
+         accept k
+
+   The arrival of any message m2 at C following the transmission
+   of m1 is taken as the signal that the run has completed.  C
+   does not compare m2 with any locally derived value.
+
+4. Message Format
+
+   The KeyTransport message m1 carries the asymmetric encryption of
+   the session key.
+
+      struct {
+          opaque ciphertext<1..2^16-1>;
+      } KeyTransport;
+
+   The reply message that follows m1 is treated by C as an opaque
+   octet string and is not interpreted further.
+
+5. Processing Rules
+
+   On initiation, C generates k uniformly at random, computes
+   ciphertext = aenc(k, pk(S)), constructs m1, and transmits m1 to
+   S.  C retains k locally as the session key and waits for the
+   first inbound message that follows m1 within an
+   implementation-defined window.
+
+   On receipt of m1, S computes k' = adec(ciphertext, sk(S)) and
+   transmits m2 = h(k') to C.
+
+   On receipt of any inbound message m2 within the response
+   window, C consumes m2 and accepts k as the session key
+   without further inspection of m2.  If no message arrives
+   within the window, C MUST abort the run.
+
+6. Security Considerations
+
+   This protocol omits the cryptographic check that would otherwise
+   bind the inbound reply to the session key transmitted by C.
+   Implementations should be aware that this omission has
+   consequences for the cryptographic properties that the protocol
+   can provide.
+
+   The protocol does not authenticate the server.  Acceptance of
+   the session key at C is conditioned only on the arrival of any
+   message after m1 has been transmitted; no party is required to
+   demonstrate possession of sk(S) in order to cause C to accept k.
+   An adversary that injects an arbitrary octet string in the
+   place of m2 causes C to accept the run with no further test.
+   In particular, the protocol does not protect against an
+   adversary that drops the genuine m2 and replaces it with
+   fabricated content.  C may complete the run and begin using k
+   without the holder of sk(S) ever having processed the
+   corresponding KeyTransport.
+
+   Confidentiality of k against a network adversary that does not
+   hold sk(S) follows from the IND-CCA security of the underlying
+   asymmetric scheme; the absence of a confirmation check at C
+   does not, by itself, expose k to such an adversary.  Operators
+   that rely on the protocol for key transport SHOULD therefore
+   not assume any guarantee beyond the secrecy of k against
+   passive observation.
+
+   The protocol does not provide forward secrecy with respect to
+   compromise of sk(S).  Implementations that require forward
+   secrecy SHOULD compose this protocol with an ephemeral key
+   agreement step.
+
+   Implementations that require evidence that S has processed the
+   transmitted KeyTransport before using k MUST add a separate
+   confirmation step to the design defined here; this document
+   does not specify such a step.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2. Informative References
+
+   [RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
+              Protocol Version 1.3", RFC 8446, August 2018.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Transported Session Key
+8.2 Non-injective Agreement on the Transported Key
+8.3 Injective Agreement on the Transported Key

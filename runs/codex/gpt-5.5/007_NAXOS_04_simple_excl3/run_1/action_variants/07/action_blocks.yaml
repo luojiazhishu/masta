@@ -1,0 +1,40 @@
+- role: Initiator_Send_Message1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(<~eskI, ltkI, 'protoV1'>)
+    - hkI = 'g'^h1(<~eskI, ltkI, 'protoV1'>)
+  - send:
+    - I
+    - R
+    - '''msg1'''
+    - hkI
+- role: Responder_Send_Message2
+  operations:
+  - receive:
+    - I
+    - R
+    - '''msg1'''
+    - X
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h1(<~eskR, ltkR, 'protoV1'>)
+    - hkR = 'g'^h1(<~eskR, ltkR, 'protoV1'>)
+    - kR = h2(<dh_exp(pkI, h1(<~eskR, ltkR, 'protoV1'>)), dh_recv(X, ltkR), I, R>)
+  - send:
+    - R
+    - I
+    - '''msg2'''
+    - hkR
+- role: Initiator_Receive_Message2
+  operations:
+  - receive:
+    - R
+    - I
+    - '''msg2'''
+    - Y
+  - compute:
+    - kI = h2(<dh_recv(Y, ltkI), dh_exp(pkR, exI), I, R>)
+  - send: <END>

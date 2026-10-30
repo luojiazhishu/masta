@@ -1,0 +1,67 @@
+theory SimplifiedNAXOS
+begin
+
+builtins: diffie-hellman
+functions: h1/2, h2/1
+
+/* Key registration publishes both public key and long-term secret (directory weakness). */
+rule Register_LTK:
+  [ Fr(~lk) ]
+  -->
+  [ !Ltk($A, ~lk), !Pk($A, 'g'^~lk), Out(~lk) ]
+
+rule LtkReveal:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+/* Action Block 1: Initiator generates hkI = g^h1(~eskI, lk(I)) and sends it. */
+rule Initiator_1:
+  let exI = h1(~eskI, ~lkI)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ Out(hkI), St_I_1($I, $R, ~eskI, ~lkI, pkR) ]
+
+/* Action Block 2: Responder receives hkI, generates hkR = g^h1(~eskR, lk(R)),
+   computes kR = h2(<pk(I)^exR, hkI^lk(R), I, R>), and sends hkR. */
+rule Responder_1:
+  let exR = h1(~eskR, ~lkR)
+      hkR = 'g'^exR
+      kR  = h2(<pkI^exR, hkI^~lkR, $I, $R>)
+  in
+  [ In(hkI), Fr(~eskR), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Create($R, ~eskR),
+      Running($R, $I, <'init', hkI, hkR>),
+      Secret($R, $I, kR),
+      Honest($I), Honest($R) ]->
+  [ Out(hkR) ]
+
+/* Action Block 3: Initiator receives hkR, computes kI = h2(<hkR^lk(I), pk(R)^exI, I, R>). */
+rule Initiator_2:
+  let exI = h1(~eskI, ~lkI)
+      kI  = h2(<hkR^~lkI, pkR^exI, $I, $R>)
+  in
+  [ In(hkR), St_I_1($I, $R, ~eskI, ~lkI, pkR) ]
+  --[ Test3(),
+      Commit($I, $R, <'init', 'g'^exI, hkR>),
+      Secret($I, $R, kI),
+      Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

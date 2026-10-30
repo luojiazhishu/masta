@@ -1,0 +1,65 @@
+theory CrXorNoVfy
+begin
+
+builtins: hashing, xor
+
+restriction NonZero:
+  "All x #i. Neq(x, x) @ #i ==> F"
+
+rule Establish_Key:
+  [ Fr(~k) ]
+  --[ Honest('I'), Honest('R'), Secret('I', 'R', ~k) ]->
+  [ !Ltk('I', 'R', ~k), !Ltk('R', 'I', ~k) ]
+
+rule Reveal_Key:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+rule Initiator_Send:
+  [ Fr(~na) ]
+  --[ Test1(), Neq(~na, zero) ]->
+  [ Out(~na), St_I_1('I', 'R', ~na) ]
+
+rule Responder_Respond:
+  let tag = h(na ⊕ k ⊕ ~nb) in
+  [ In(na), Fr(~nb), !Ltk('R', 'I', k) ]
+  --[ Test2(), Neq(na, zero), Neq(~nb, zero), Create('R', ~nb), Running('R', 'I', tag) ]->
+  [ Out(<tag, ~nb>) ]
+
+rule Initiator_Accept:
+  [ St_I_1('I', 'R', na), In(<tag, nb>) ]
+  --[ Test3(), Neq(nb, zero), Commit('I', 'R', tag) ]->
+  [ ]
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex id #j. Create(b, id) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

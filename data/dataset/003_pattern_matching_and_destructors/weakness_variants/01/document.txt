@@ -1,0 +1,129 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+   A Symmetric-Key Encapsulation Profile with Plaintext Secret
+                          Disclosure (SK-PMD-W01)
+                  draft-famed-sk-pmd-w01-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the initiator transmits the encapsulated
+   ciphertext together with the freshly drawn secret payload sec in
+   the clear.  The plaintext disclosure is appended to the on-wire
+   transmission as a separate value alongside the ciphertext.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+1.  Introduction
+
+   This document defines a one-message symmetric-key encapsulation
+   profile in which the initiator's outbound traffic comprises two
+   payloads on the wire: the symmetric ciphertext that carries the
+   encapsulated pair <sec, pub> under the shared key k, and a
+   plaintext copy of the secret payload sec.  The plaintext copy
+   is intended for deployments that operate session-recording
+   middleboxes which require visibility into sec without holding k.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   The notation in this document follows the base symmetric-key
+   encapsulation profile.
+
+      sec       a fresh value drawn by the initiator.
+      pub       a fresh value drawn by the initiator and intended
+                to be released into the public network by the
+                responder.
+      k         the shared symmetric key held by both parties.
+      senc(m, k)
+                the symmetric encryption of m under k.
+      sdec(c, k)
+                the symmetric decryption of c under k.
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  senc(<sec, pub>, k)                           |
+         |---------------------------------------------------->|
+         |   2.  sec                                           |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+   Both transmissions are emitted by the initiator at the same
+   moment.  The responder accepts the ciphertext and ignores the
+   plaintext sec field; the responder's behaviour is otherwise
+   identical to that of the base profile.
+
+4.  Message Format
+
+   The on-wire artifact comprises two independent payloads.
+
+      msg = senc(<sec, pub>, k)
+      sec_clear = sec
+
+   No outer framing is applied; both payloads are transmitted as
+   separate values on the underlying network.
+
+5.  Processing Rules
+
+   On invocation the initiator draws fresh values sec and pub,
+   forms msg = senc(<sec, pub>, k), and transmits msg followed by
+   the bare value of sec.  The responder receives msg and applies
+   the destructor checks of the base profile against msg under k;
+   the plaintext sec field on the wire is not read by the
+   responder.
+
+6.  Security Considerations
+
+   This profile does not provide secrecy of sec.  Any adversary
+   that observes the path between the initiator and the responder
+   learns sec in the clear from the second on-wire payload.  No
+   key compromise is required for this exposure: an adversary that
+   does not hold k still recovers sec by direct observation.
+
+   Implementations of this profile MUST NOT be used to carry
+   confidential payloads.  Deployments that require secrecy of sec
+   MUST select a profile in which sec is delivered exclusively
+   under symmetric encryption.
+
+   The pub component remains, by design, public, as in the base
+   profile.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

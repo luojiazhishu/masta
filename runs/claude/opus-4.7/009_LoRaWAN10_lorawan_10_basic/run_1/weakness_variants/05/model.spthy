@@ -1,0 +1,153 @@
+theory LoRaWAN10Weakness05
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+// Pre-provisioned long-term state shared between Device and Server
+rule Setup:
+  [ Fr(~AppKey), Fr(~DevAddr) ]
+  --[]->
+  [ !DevKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr)
+  , !SrvKey($Server, $Device, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr) ]
+
+// Action Block 1: Device generates DevNonce and sends JoinRequest
+rule Device_JoinRequest:
+  let req_mac = mac(~AppKey, <'JoinRequest', $DevEUI, $JoinEUI, ~DevNonce>)
+  in
+  [ !DevKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr)
+  , Fr(~DevNonce) ]
+  --[ Test1()
+    , Create($Device, ~DevNonce)
+    , Running($Device, $Server, <'server', $DevEUI, $JoinEUI, ~DevNonce>) ]->
+  [ Out(<'JoinRequest', $DevEUI, $JoinEUI, ~DevNonce, req_mac>)
+  , St_Device_1($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr, ~DevNonce) ]
+
+// Action Block 2: Server validates JoinRequest, derives session keys,
+// sends JoinAccept, and publishes session keys on the public channel (WEAKNESS)
+rule Server_ProcessJoin:
+  let app_skey = senc(<'cst1', DevNonce, ~JoinNonce>, ~AppKey)
+      nwk_skey = senc(<'cst2', DevNonce, ~JoinNonce>, ~AppKey)
+      resp_mac  = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+  in
+  [ !SrvKey($Server, $Device, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr)
+  , In(<'JoinRequest', $DevEUI, $JoinEUI, DevNonce,
+        mac(~AppKey, <'JoinRequest', $DevEUI, $JoinEUI, DevNonce>)>)
+  , Fr(~JoinNonce) ]
+  --[ Test2()
+    , Create($Server, ~JoinNonce)
+    , Commit($Server, $Device, <'server', $DevEUI, $JoinEUI, DevNonce>)
+    , Running($Server, $Device, <'device', $DevEUI, $JoinEUI, DevNonce, ~JoinNonce, ~DevAddr, app_skey, nwk_skey>)
+    , Running($Server, $Device, <'session', app_skey, nwk_skey>)
+    , Honest($Server)
+    , Honest($Device) ]->
+  [ Out(senc(<'JoinAccept', ~JoinNonce, ~DevAddr, resp_mac>, ~AppKey))
+  , Out(<app_skey, nwk_skey>) ]
+
+// Action Block 3: Device receives JoinAccept, validates ResponseMAC, derives session keys
+rule Device_Complete:
+  let app_skey = senc(<'cst1', ~DevNonce, JoinNonce>, ~AppKey)
+      nwk_skey = senc(<'cst2', ~DevNonce, JoinNonce>, ~AppKey)
+  in
+  [ St_Device_1($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr, ~DevNonce)
+  , In(senc(<'JoinAccept', JoinNonce, ~DevAddr,
+             mac(~AppKey, <'JoinAccept', JoinNonce, ~DevAddr>)>, ~AppKey)) ]
+  --[ Test3()
+    , Commit($Device, $Server, <'device', $DevEUI, $JoinEUI, ~DevNonce, JoinNonce, ~DevAddr, app_skey, nwk_skey>)
+    , Commit($Device, $Server, <'session', app_skey, nwk_skey>)
+    , Secret($Device, $Server, app_skey)
+    , Secret($Device, $Server, nwk_skey)
+    , Honest($Device)
+    , Honest($Server) ]->
+  [ ]
+
+// Adversary can reveal the shared long-term key AppKey
+rule LtkReveal_Device:
+  [ !DevKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr) ]
+  --[ LtkReveal($Device) ]->
+  [ Out(~AppKey) ]
+
+rule LtkReveal_Server:
+  [ !SrvKey($Server, $Device, ~AppKey, $DevEUI, $JoinEUI, ~DevAddr) ]
+  --[ LtkReveal($Server) ]->
+  [ Out(~AppKey) ]
+
+// --- Safety-property lemmas ---
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All a b devEUI joinEUI devNonce joinNonce devAddr appSKey nwkSKey #i.
+     Commit(a, b, <'device', devEUI, joinEUI, devNonce, joinNonce, devAddr, appSKey, nwkSKey>) @ i
+   ==>
+       ( (Ex #j.
+              Running(b, a, <'device', devEUI, joinEUI, devNonce, joinNonce, devAddr, appSKey, nwkSKey>) @ j
+            & j < i
+            & not (Ex a2 b2 #i2.
+                     Commit(a2, b2, <'device', devEUI, joinEUI, devNonce, joinNonce, devAddr, appSKey, nwkSKey>) @ i2
+                   & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b devEUI joinEUI devNonce joinNonce devAddr appSKey nwkSKey #i.
+     Commit(a, b, <'device', devEUI, joinEUI, devNonce, joinNonce, devAddr, appSKey, nwkSKey>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'device', devEUI, joinEUI, devNonce, joinNonce, devAddr, appSKey, nwkSKey>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All a b devEUI joinEUI devNonce #i.
+     Commit(a, b, <'server', devEUI, joinEUI, devNonce>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'server', devEUI, joinEUI, devNonce>) @ j
+               & j < i
+               & not (Ex a2 b2 #i2.
+                        Commit(a2, b2, <'server', devEUI, joinEUI, devNonce>) @ i2
+                      & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b devEUI joinEUI devNonce #i.
+     Commit(a, b, <'server', devEUI, joinEUI, devNonce>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server', devEUI, joinEUI, devNonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_keys:
+  "All a b appSKey nwkSKey #i.
+     Commit(a, b, <'session', appSKey, nwkSKey>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'session', appSKey, nwkSKey>) @ j
+               & j < i
+               & not (Ex a2 b2 #i2.
+                        Commit(a2, b2, <'session', appSKey, nwkSKey>) @ i2
+                      & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_keys:
+  "All a b appSKey nwkSKey #i.
+     Commit(a, b, <'session', appSKey, nwkSKey>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'session', appSKey, nwkSKey>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All a b x #i.
+     Secret(a, b, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

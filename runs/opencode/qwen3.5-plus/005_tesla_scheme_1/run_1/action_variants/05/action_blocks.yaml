@@ -1,0 +1,47 @@
+- role: Receiver_SetupRequest
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid_R
+  - send:
+    - '''R'''
+    - '''S'''
+    - ~n_R
+    - '''init_request'''
+- role: Sender_SetupResponse
+  operations:
+  - receive:
+    - '''R'''
+    - '''S'''
+    - n_R
+    - '''init_request'''
+  - generate_nonces:
+    - ~k_1
+    - ~tid_S
+  - send:
+    - '''S'''
+    - '''R'''
+    - f(~k_1)
+    - sign(<f(~k_1), n_R, 'init_request'>, ~sk_S)
+- role: Receiver_VerifySetup
+  operations:
+  - receive:
+    - '''S'''
+    - '''R'''
+    - commitment
+    - sign(<commitment, n_R, 'init_request'>, ~sk_S)
+  - send: []
+- role: Sender_Stream1
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - <~m_1, f(~k_2)>
+    - MAC(k_1, <~m_1, f(~k_2)>)
+- role: Receiver_VerifyStream1
+  operations:
+  - receive:
+    - D_1
+    - mac_1
+  - send: <END>

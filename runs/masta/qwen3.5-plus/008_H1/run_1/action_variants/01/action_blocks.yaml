@@ -1,0 +1,23 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~rn
+  - compute:
+    - mI = sign(<'I', 'R'>, ~ltkI)
+  - send:
+    - mI
+    - ~rn
+- role: RuleStep2
+  operations:
+  - receive:
+    - s
+    - rn
+  - compute:
+    - mR = sign(<'I', 'R'>, ~ltkR)
+  - send:
+    - mR
+- role: RuleStep3
+  operations:
+  - receive:
+    - mR
+  - send: <END>

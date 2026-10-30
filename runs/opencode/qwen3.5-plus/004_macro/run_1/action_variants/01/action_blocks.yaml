@@ -1,0 +1,22 @@
+- role: Client_Start
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~rc
+  - send:
+    - aenc(~k, pkS)
+    - ~rc
+- role: Server_Respond
+  operations:
+  - receive:
+    - aenc(k, pk(~skS))
+    - rc
+  - send:
+    - h(k)
+    - rc
+- role: Client_Finish
+  operations:
+  - receive:
+    - h(k)
+    - rc
+  - send: <END>

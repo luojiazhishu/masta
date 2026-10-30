@@ -1,0 +1,72 @@
+- role: R_Send_0a
+  operations:
+  - generate_nonces:
+    - ~n_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+- role: S_Send_0b
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R>, ~ltkS)
+- role: R_Recv_0b
+  operations:
+  - receive:
+    - $S
+    - $R
+    - fk1
+    - sig
+  - assert:
+    - verify(sig, <fk1, ~n_R>, pkS) = true
+  - send: []
+- role: S_Send_Msg1
+  operations:
+  - generate_nonces:
+    - ~k_2
+    - ~m_1
+  - send:
+    - ~m_1
+    - f(~k_2)
+    - mac(~k_1, <~m_1, f(~k_2)>)
+    - '''data1_marker'''
+- role: R_Recv_Msg1
+  operations:
+  - receive:
+    - m_1
+    - fk2
+    - mac1
+    - marker
+  - assert:
+    - marker = 'data1_marker'
+  - send: []
+- role: S_Send_Msg2
+  operations:
+  - generate_nonces:
+    - ~k_3
+    - ~m_2
+  - send:
+    - ~m_2
+    - f(~k_3)
+    - ~k_1
+    - mac(~k_2, <~m_2, f(~k_3), ~k_1>)
+- role: R_Recv_Msg2
+  operations:
+  - receive:
+    - m_2
+    - fk3
+    - k1_disc
+    - mac2
+  - assert:
+    - f(k1_disc) = fk1
+    - mac(k1_disc, <m_1, fk2>) = mac1
+  - send: <END>

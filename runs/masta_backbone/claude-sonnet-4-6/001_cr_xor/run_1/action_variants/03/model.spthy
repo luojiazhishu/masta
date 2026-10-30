@@ -1,0 +1,78 @@
+theory CRXORRMK
+begin
+
+builtins: hashing
+
+functions: k/0 [private]
+
+rule RuleStep1:
+  [ Fr(~na) ]
+  --[ Test1()
+    , Create($I, ~na)
+    , Honest($I)
+  ]->  
+  [ Out(~na)
+  , InitState(~na)
+  ]
+
+rule RuleStep2:
+  let
+    tag = h(<~na, k, ~nb>)
+  in
+  [ In(~na)
+  , Fr(~nb)
+  ]
+  --[ Test2()
+    , Create($R, ~nb)
+    , Running($R, $I, <'I', 'R', tag>)
+    , Honest($R)
+  ]->
+  [ Out(<tag, ~nb, 'Resp'>)
+  ]
+
+rule RuleStep3:
+  let
+    tag = h(<~na, k, ~nb>)
+  in
+  [ In(<tag, ~nb, 'Resp'>)
+  , InitState(~na)
+  ]
+  --[ Test3()
+    , Eq(tag, h(<~na, k, ~nb>))
+    , Commit($I, $R, <'I', 'R', tag>)
+    , Honest($I)
+    , Honest($R)
+  ]->
+  [ ]
+
+rule LtkReveal:
+  [ ]
+  --[ LtkReveal($A) ]-> 
+  [ Out(k) ]
+
+restriction equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

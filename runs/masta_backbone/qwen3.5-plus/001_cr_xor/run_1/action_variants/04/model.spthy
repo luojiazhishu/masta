@@ -1,0 +1,66 @@
+theory CR_XOR_IAudit begin
+
+builtins: hashing, xor
+
+functions: com/2
+
+// Shared key established out of band
+rule SetupKey:
+  [ Fr(~k) ]
+  -->
+  [ !Key(~k) ]
+
+// Long-term key reveal rule (for compromised key scenarios)
+rule KeyReveal:
+  [ !Key(~k) ]
+  --[ KeyReveal(~k) ]->
+  [ Out(~k) ]
+
+// RuleStep1: Initiator generates nonce na, computes audit tag, sends na
+rule RuleStep1:
+  let
+      tag_audit_I = com(~na, ~na)
+  in
+  [ Fr(~na), !Key(~k) ]
+  --[ Test1(), Create('R','rid'), Honest('R') ]->
+  [ Out(~na), !InitState1(~na, ~k) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag, sends <tag, nb>
+rule RuleStep2:
+  let
+      t = h(~na XOR ~k XOR ~nb)
+  in
+  [ In(~na), Fr(~nb), !Key(~k) ]
+  --[ Test2(), Running('R','I',t) ]->
+  [ Out(<t, ~nb>) ]
+
+// RuleStep3: Initiator receives <tag, nb>, verifies tag, completes
+rule RuleStep3:
+  let
+      t_prime = h(~na XOR ~k XOR ~nb)
+  in
+  [ In(<t_prime, ~nb>), !InitState1(~na, ~k) ]
+  --[ Test3(), Commit('I','R',t_prime) ]->
+  [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_aliveness_of_the_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. KeyReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_on_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. KeyReveal(X) @ r & Honest(X) @ i)"
+
+end

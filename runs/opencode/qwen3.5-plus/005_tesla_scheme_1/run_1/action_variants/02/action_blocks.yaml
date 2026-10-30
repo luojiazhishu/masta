@@ -1,0 +1,46 @@
+- role: Receiver_Start
+  operations:
+  - generate_nonces:
+    - ~n_R
+  - send:
+    - $R
+    - S
+    - ~n_R
+- role: Sender_Respond
+  operations:
+  - receive:
+    - $R
+    - S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+    - ~stag_S
+  - send:
+    - S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R>, skS)
+    - ~stag_S
+- role: Receiver_Verify
+  operations:
+  - receive:
+    - S
+    - $R
+    - commitment
+    - sign(<commitment, n_R>, skS)
+    - stag_S
+  - send: []
+- role: Sender_Broadcast_1
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - <~m_1, f(~k_2)>
+    - mac(<<~m_1, f(~k_2)>>, k_1)
+- role: Receiver_Verify_Broadcast_1
+  operations:
+  - receive:
+    - D_1
+    - mac_1
+  - send: <END>

@@ -1,0 +1,70 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+// ============================================================
+// Rules
+// ============================================================
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk(k) ]
+  --[ Test1(), Create('Reader', ~r0) ]->
+  [ Out(<~r0, k>), St_R_1(~r0, k) ]
+
+rule Tag_Respond:
+  [ In(<r0, k>), !Ltk(k), Fr(~r1) ]
+  --[ Test2(), Running('Tag', 'Reader', <'Tag', r0, ~r1, k>) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR k)>), St_T_1(r0, ~r1, k) ]
+
+rule Reader_Finish:
+  [ St_R_1(r0, k), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit('Reader', 'Tag', <'Reader', r0, r1, k>) ]->
+  [ Out(h(tag_mac XOR k XOR r0)) ]
+
+rule Tag_Verify:
+  [ St_T_1(r0, r1, k), In(reader_mac) ]
+  --[ Test4(), Commit('Tag', 'Reader', <'Tag', r0, r1, k>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// ============================================================
+// Safety Properties
+// ============================================================
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All r0 r1 k #i.
+     Commit('Reader', 'Tag', <'Reader', r0, r1, k>) @ i
+   ==>
+       (Ex #j. Running('Tag', 'Reader', <'Tag', r0, r1, k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All r0 r1 k #i.
+     Commit('Tag', 'Reader', <'Tag', r0, r1, k>) @ i
+   ==>
+       (Ex #j. Running('Reader', 'Tag', <'Tag', r0, r1, k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// ============================================================
+// Executable Lemma
+// ============================================================
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

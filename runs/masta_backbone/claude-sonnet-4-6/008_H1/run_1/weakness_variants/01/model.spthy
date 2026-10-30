@@ -1,0 +1,87 @@
+theory MutualIdentitySignatureAuthUnverifiedReply
+begin
+
+builtins: signing
+
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  --[
+  ]->
+  [ !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  , !Ltk($A, ~ltk)
+  ]
+
+rule RuleStep1:
+  let mI = sign(<$I, $R>, ~ltkI)
+  in
+  [ !Ltk($I, ~ltkI)
+  , Fr(~id)
+  ]
+  --[ Test1(), Create($I, ~id), Honest($I), Running($I, $R, <$I, $R>) ]->
+  [ Out(mI), St_I_1($I, $R, ~id) ]
+
+rule RuleStep2:
+  let mR = sign(<$I, $R>, ~ltkR)
+  in
+  [ In(mI)
+  , !Ltk($R, ~ltkR)
+  , Fr(~id)
+  ]
+  --[ Test2(), Create($R, ~id), Honest($R), Running($R, $I, <$I, $R>), Commit($R, $I, <$I, $R>) ]->
+  [ Out(mR) ]
+
+rule RuleStep3:
+  [ In(m)
+  , St_I_1($I, $R, ~id)
+  ]
+  --[ Test3(), Commit($I, $R, <$I, $R>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_initiator_authentication_to_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_responder_weak_agreement_with_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_on_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

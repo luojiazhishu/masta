@@ -1,0 +1,5 @@
+lemma ns_auth:
+  "All a b ns #i.
+     Commit(a, b, <'R', ns>) @ i
+   ==>
+     (Ex #j. Running(b, a, <'R', ns>) @ j)"

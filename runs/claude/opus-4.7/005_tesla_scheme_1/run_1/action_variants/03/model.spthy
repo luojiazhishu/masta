@@ -1,0 +1,149 @@
+theory TESLA_Scheme1_Variant03
+begin
+
+builtins: signing
+
+functions: MAC/2, f/1
+
+// PKI
+
+rule Generate_Keypair:
+    [ Fr(~ltk) ]
+  -->
+    [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Ltk:
+    [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+    [ Out(ltk) ]
+
+
+// Setup phase
+
+// Action block 1: Sender generates first MAC key
+rule Sender_Setup:
+    [ Fr(~k1) ]
+  --[ Test1() ]->
+    [ Sender1($S, ~k1), !Sender0a($S, ~k1) ]
+
+// Action block 2: Receiver sends setup request
+rule Receiver0a:
+    [ Fr(~nR) ]
+  --[ Test2() ]->
+    [ Out(<$R, $S, ~nR>)
+    , Receiver0b(~nR, $R, $S) ]
+
+// Action block 3: Sender responds with commitment and signature
+rule Sender0a:
+    [ !Sender0a(S, k1)
+    , In(<R, S, nR>)
+    , !Ltk(S, ltkS)
+    ]
+  --[ Test3() ]->
+    [ Out(<S, R, f(k1), sign(<f(k1), nR>, ltkS)>) ]
+
+// Action block 4: Receiver receives setup response
+rule Receiver0b:
+    [ Receiver0b(nR, R, S)
+    , !Pk(S, pkS)
+    , In(<S, R, commit_k1, signature>)
+    , Fr(~rid)
+    ]
+  --[ Create(R, ~rid), Test4() ]->
+    [ Receiver0b_check(~rid, S, commit_k1, verify(signature, <commit_k1, nR>, pkS)) ]
+
+// Action block 5: Receiver verifies signature
+rule Receiver0b_check:
+    [ Receiver0b_check(nR, S, commit_k1, true), Fr(~rid) ]
+  --[ Test5() ]->
+    [ Receiver1(nR, S, commit_k1) ]
+
+
+// Authenticated broadcasting
+
+// Action block 6: Sender broadcasts first stream message with fresh rand1 tag
+rule Send1:
+  let data1 = <~m1, f(~k2)>
+  in
+    [ Sender1(S, ~k1)
+    , Fr(~m1)
+    , Fr(~k2)
+    , Fr(~rand1)
+    ]
+  --[ Sent(S, data1)
+    , Running(S, S, <'broadcast', data1>)
+    , Test6()
+    ]->
+    [ Sender(S, ~k1, ~k2)
+    , Out(<data1, MAC(data1, ~k1), ~rand1>)
+    ]
+
+// Action block 7: Receiver processes first stream message (rand1 received but not authenticated)
+rule Recv1:
+  let data1 = <m1, commit_k2>
+  in
+    [ Receiver1(rid, S, commit_k1)
+    , In(<data1, mac1, rand1>)
+    ]
+  --[ AssumeCommitNotExpired(rid, commit_k1)
+    , Test7()
+    ]->
+    [ Receiver(rid, S, data1, mac1, commit_k1, commit_k2) ]
+
+// Action block 8: Sender broadcasts subsequent stream message
+rule SendN:
+  let data = <~m, f(~kNew), ~kOld>
+  in
+    [ Sender(S, ~kOld, ~k)
+    , Fr(~m)
+    , Fr(~kNew)
+    ]
+  --[ Sent(S, data)
+    , CommitExpired(f(~kOld))
+    , Running(S, S, <'broadcast', data>)
+    , Test8()
+    ]->
+    [ Sender(S, ~k, ~kNew)
+    , Out(<data, MAC(data, ~k)>)
+    ]
+
+// Action block 9: Receiver verifies subsequent stream message using delayed key disclosure
+rule RecvN:
+  let data = <m, commit_kNew, kOld>
+  in
+    [ In(<data, mac>)
+    , Receiver(rid, S, dataOld, MAC(dataOld, kOld), f(kOld), commit_k)
+    ]
+  --[ FromSender(rid, S, dataOld)
+    , AssumeCommitNotExpired(rid, commit_k)
+    , Commit(rid, S, <'broadcast', dataOld>)
+    , Honest(S)
+    , Test9()
+    ]->
+    [ Receiver(rid, S, data, mac, commit_k, commit_kNew) ]
+
+
+restriction CommitNotExpiredOrdering:
+  "All rid commit #i #j.
+       AssumeCommitNotExpired(rid, commit) @ i & CommitExpired(commit) @ j
+   ==> i < j"
+
+
+// category: noninjective_agreement
+lemma authentic [use_induction]:
+  "All R S m #i.
+     Commit(R, S, <'broadcast', m>) @ i
+   ==>
+       (Ex #j. Running(S, S, <'broadcast', m>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7 #t8 #t9.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & Test7() @ #t7 & Test8() @ #t8 & Test9() @ #t9
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5
+     & #t5 < #t6 & #t6 < #t7 & #t7 < #t8 & #t8 < #t9"
+
+end

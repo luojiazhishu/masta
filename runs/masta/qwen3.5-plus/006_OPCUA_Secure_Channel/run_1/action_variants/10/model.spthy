@@ -1,0 +1,133 @@
+theory OPCUA_SecureChannel begin
+
+builtins: hashing, signing
+
+functions: ServerCertificate/0, ClientCertificate/0
+
+rule Generate_key_pair_Client:
+  [ Fr(~ltkC) ]
+  --[ Honest($C) ]->
+  [ !Pk($C, pk(~ltkC))
+  , !Ltk($C, ~ltkC)
+  , Out(pk(~ltkC))
+  ]
+
+rule Generate_key_pair_Server:
+  [ Fr(~ltkS) ]
+  --[ Honest($S) ]->
+  [ !Pk($S, pk(~ltkS))
+  , !Ltk($S, ~ltkS)
+  , Out(pk(~ltkS))
+  ]
+
+rule LtkReveal_Client:
+  [ !Ltk($C, ltk) ]
+  --[ LtkReveal($C) ]->
+  [ Out(ltk) ]
+
+rule LtkReveal_Server:
+  [ !Ltk($S, ltk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(ltk) ]
+
+rule RuleStep1:
+  let
+    C = $C
+  in
+  [ !Ltk(C, ~ltkC)
+  , Fr(~tid1)
+  ]
+  --[ Test1() ]->
+  [ Out('GEReq')
+  , !State_Client_1(~tid1, C, ~ltkC)
+  ]
+
+rule RuleStep2:
+  let
+    S = $S
+  in
+  [ In('GEReq')
+  , !Ltk(S, ~ltkS)
+  , Fr(~tid2)
+  ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', ServerCertificate, 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >)
+  , !State_Server_1(~tid2, S, ~ltkS)
+  ]
+
+rule RuleStep3:
+  let
+    C = $C
+    RequestBody = < 'OSCReq', pk(~ltkC), ~Nc, 'protoV1' >
+    RequestSignature = sign(h(RequestBody), ~ltkC)
+    RequestBodyDigest = h(RequestBody)
+  in
+  [ !State_Client_1(~tid1, C, ~ltkC)
+  , In(< 'GERes', ServerCert, 'Sign', SecPol, UserTokPol >)
+  , Fr(~Nc)
+  , Fr(~tid3)
+  ]
+  --[ Test3(), Running($C, $S, ~Nc) ]->
+  [ Out(< ClientCertificate, RequestBody, RequestSignature, RequestBodyDigest >)
+  , !State_Client_2(~tid3, C, ~ltkC, ~Nc, ServerCert)
+  ]
+
+rule RuleStep4:
+  let
+    S = $S
+    ResponseBody = < 'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime >
+    ResponseSignature = sign(h(ResponseBody), ~ltkS)
+    ResponseBodyDigest = h(ResponseBody)
+  in
+  [ !State_Server_1(~tid2, S, ~ltkS)
+  , In(< ClientCert, < 'OSCReq', ClientPk, Nc, 'protoV1' >, RequestSignature, RequestBodyDigest >)
+  , Fr(~Ns)
+  , Fr(~SecurityToken)
+  , Fr(~TokenLifetime)
+  , Fr(~tid4)
+  ]
+  --[ Test4(), Commit($S, $C, Nc), Running($S, $C, ~Ns), Secret($S, $C, ~SecurityToken) ]->
+  [ Out(< ServerCertificate, ResponseBody, ResponseSignature, ResponseBodyDigest >)
+  , !State_Server_2(~tid4, S, ~ltkS, ~Ns)
+  ]
+
+rule RuleStep5:
+  let
+    C = $C
+  in
+  [ !State_Client_2(~tid3, C, ~ltkC, ~Nc, ServerCert)
+  , In(< ServerCert2, < 'OSCRes', Ns, SecurityToken, TokenLifetime >, ResponseSignature, ResponseBodyDigest >)
+  ]
+  --[ Test5(), Commit($C, $S, Ns) ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce_agreement:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+      (Ex #j. Running(b, a, t) @ j)
+    | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce_agreement:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+      (Ex #j. Running(b, a, t) @ j)
+    | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

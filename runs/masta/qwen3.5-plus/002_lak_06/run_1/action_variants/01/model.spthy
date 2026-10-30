@@ -1,0 +1,63 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule GenerateKey:
+  [ Fr(~k) ]
+  --[ Honest($R), Honest($T), Secret($R, $T, ~k) ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~r0), Fr(~r0_aux) ]
+  --[ Test1(), Running($R, $T, <~r0, ~r0_aux>) ]->
+  [ Out(<~r0, ~r0_aux>), !ReaderState($R, ~r0) ]
+
+rule RuleStep2:
+  [ In(<r0, r0_aux>), Fr(~r1), !SharedKey($R, $T, k) ]
+  --[ Test2(), Running($T, $R, <r0, ~r1, k>) ]->
+  [ Out(<~r1, h((r0 XOR ~r1) XOR k)>), !TagState($T, r0, ~r1, k) ]
+
+rule RuleStep3:
+  [ In(<r1, tag_mac>), !ReaderState($R, r0), !SharedKey($R, $T, k) ]
+  --[ Test3(), Running($R, $T, <r0, r1, k>), Commit($R, $T, <r0, r1, k>) ]->
+  [ Out(<h((tag_mac XOR k) XOR r0)>) ]
+
+rule RuleStep4:
+  [ In(reader_mac), !TagState($T, r0, r1, k) ]
+  --[ Test4(), Commit($T, $R, <r0, r1, k>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !SharedKey($R, $T, k) ]
+  --[ LtkReveal($R) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag_non_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader_non_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

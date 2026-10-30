@@ -1,0 +1,33 @@
+theory SymmetricKeyEncapsulation
+begin
+
+builtins: symmetric-encryption
+
+functions: aux/1
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+  --[ ]->  
+  [ !Ltk($I, $R, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~sec)
+  , Fr(~pub)
+  , !Ltk($I, $R, k)
+  ]
+  --[ Test1(), Secret(~sec), Honest($I), Honest($R) ]->  
+  [ Out(senc(<~sec, ~pub>, k))
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_payload:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

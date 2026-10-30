@@ -1,0 +1,25 @@
+- role: I_GenChallenge
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: R_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR ~k XOR ~nb)
+    - ~nb
+    - RMK
+- role: I_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+    - RMK
+  - compute:
+    - computed_tag = h(~na XOR ~k XOR nb)
+  - send: <END>

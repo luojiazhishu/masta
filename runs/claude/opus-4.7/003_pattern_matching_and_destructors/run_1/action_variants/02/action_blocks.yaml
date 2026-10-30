@@ -1,0 +1,18 @@
+- role: Init_Send
+  operations:
+  - receive:
+    - $tag
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - m = senc(<~sec, ~pub>, ~k)
+  - send:
+    - m
+    - $tag
+- role: Resp_Recv
+  operations:
+  - receive:
+    - senc(<sec, pub>, ~k)
+    - tag
+  - send: <END>

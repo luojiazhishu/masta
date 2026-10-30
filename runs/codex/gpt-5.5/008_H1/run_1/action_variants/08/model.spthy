@@ -1,0 +1,93 @@
+theory MutualIdentitySignatureResponderResend
+begin
+
+builtins: signing
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk), UniqueId($A) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Send:
+  let mI = sign(<$I, $R>, ltkI)
+  in
+  [ !Ltk($I, ltkI), !Pk($R, pkR), Fr(~sid) ]
+  --[ Test1(), Neq($I, $R), Running($I, $R, <'responder', $I, $R>), Honest($I), Honest($R) ]->
+  [ Out(mI), St_I_Wait($I, $R, ~sid, mI) ]
+
+rule Responder_Verify_Send_First:
+  let pair = <I, R>
+      mR = sign(pair, ltkR)
+  in
+  [ !Ltk(R, ltkR), !Pk(I, pkI), In(mI) ]
+  --[ Test2(), Neq(I, R), Eq(verify(mI, pair, pkI), true), Running(R, I, <'initiator', I, R>), Commit(R, I, <'responder', I, R>), Honest(I), Honest(R) ]->
+  [ Out(mR), St_R_Resend(R, I, mR) ]
+
+rule Responder_Send_Duplicate:
+  [ St_R_Resend(R, I, mR) ]
+  --[ Test3() ]->
+  [ Out(mR) ]
+
+rule Initiator_Verify_Accept:
+  let pair = <I, R>
+  in
+  [ St_I_Wait(I, R, sid, mI), !Pk(R, pkR), In(mR) ]
+  --[ Test4(), Neq(I, R), Eq(verify(mR, pair, pkR), true), Commit(I, R, <'initiator', I, R>), Honest(I), Honest(R) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction UniqueIdentityKey:
+  "All A #i #j. UniqueId(A) @ #i & UniqueId(A) @ #j ==> #i = #j"
+
+restriction Inequality:
+  "All x #i. Neq(x, x) @ #i ==> F"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex id #j. Create(b, id) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ #j
+             & #j < #i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ #i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

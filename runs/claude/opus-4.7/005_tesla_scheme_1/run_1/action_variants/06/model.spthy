@@ -1,0 +1,113 @@
+theory TeslaScheme1
+begin
+
+builtins: signing, hashing
+functions: mac/2
+
+restriction Eq:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// TESLA timing assumption: the receiver must buffer Msg1 before the sender
+// discloses k1.  Without this the DY adversary can use the disclosed k1 to
+// forge a MAC on a different payload and pass the delayed verification.
+restriction TeslaTiming:
+  "All R S #i #j.
+     BufferedMsg1(R, S) @ i & DisclosedKey(S) @ j ==> i < j"
+
+rule Register_Ltk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+// Block 1: Receiver generates nonce and sends SetupRequest
+rule R_SendSetupRequest:
+  [ Fr(~nR), !Pk($S, pkS) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR>),
+    St_R_1($R, $S, ~nR, pkS) ]
+
+// Block 2: Sender processes SetupRequest and sends SetupResponse
+// f(k) is modelled as h(k); signature covers (h(k_1), n_R) only;
+// 'commit_response' tag is appended in the clear, outside the signature.
+rule S_SendSetupResponse:
+  [ In(<r, $S, nR>), !Ltk($S, ~sk), Fr(~k1), Fr(~k2), Fr(~k3) ]
+  --[ Test2() ]->
+  [ Out(<$S, r, h(~k1), sign(<h(~k1), nR>, ~sk), 'commit_response'>),
+    St_S_1($S, r, nR, ~k1, ~k2, ~k3) ]
+
+// Block 3: Receiver verifies SetupResponse
+// Pattern-matches on 'commit_response' (parsing aid) and verifies the
+// signature over (commitment, n_R) with the sender's public key.
+rule R_ProcessSetupResponse:
+  [ St_R_1($R, $S, ~nR, pkS),
+    In(<$S, $R, commitment, sig, 'commit_response'>) ]
+  --[ Test3(),
+      Eq(verify(sig, <commitment, ~nR>, pkS), true) ]->
+  [ St_R_2($R, $S, ~nR, commitment) ]
+
+// Block 4: Sender sends Msg 1
+// D_1 = <m_1, f(k_2)>; MAC computed with k_1.
+rule S_SendMsg1:
+  [ St_S_1($S, r, nR, ~k1, ~k2, ~k3), Fr(~m1) ]
+  --[ Test4(),
+      Running($S, r, <'tesla_stream', nR, <~m1, h(~k2)>>) ]->
+  [ Out(<<~m1, h(~k2)>, mac(~k1, <~m1, h(~k2)>)>),
+    St_S_2($S, r, nR, ~k1, ~k2, ~k3, ~m1) ]
+
+// Block 5: Receiver buffers Msg 1 (cannot verify yet – k_1 not disclosed)
+rule R_BufferMsg1:
+  [ St_R_2($R, $S, ~nR, commitment),
+    In(<<m1, fk2>, mac1>) ]
+  --[ Test5(),
+      BufferedMsg1($R, $S) ]->
+  [ St_R_3($R, $S, ~nR, commitment, <m1, fk2>, mac1) ]
+
+// Block 6: Sender sends Msg 2, disclosing k_1
+// D_2 = <m_2, f(k_3), k_1>; MAC computed with k_2.
+rule S_SendMsg2:
+  [ St_S_2($S, r, nR, ~k1, ~k2, ~k3, ~m1), Fr(~m2) ]
+  --[ Test6(),
+      DisclosedKey($S) ]->
+  [ Out(<<~m2, h(~k3), ~k1>, mac(~k2, <~m2, h(~k3), ~k1>)>),
+    St_S_3($S, r) ]
+
+// Block 7: Receiver retrieves disclosed k_1 from Msg 2 and verifies Msg 1
+// Checks h(k_1) against the committed value from setup, then verifies the
+// stored MAC.
+rule R_VerifyMsg1:
+  [ St_R_3($R, $S, ~nR, commitment, d1, mac1),
+    In(<<m2, fk3, k1>, mac2>) ]
+  --[ Test7(),
+      Eq(h(k1), commitment),
+      Eq(mac(k1, d1), mac1),
+      Commit($R, $S, <'tesla_stream', ~nR, d1>),
+      Honest($R), Honest($S) ]->
+  [ ]
+
+// TESLA is a broadcast protocol: the sender authenticates to all receivers
+// but the receiver identity is not covered by the signature.  Agreement is
+// therefore claimed only on the stream data and session nonce, with the
+// receiver role left existentially quantified (S ran with *some* party c).
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex c #j. Running(b, c, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

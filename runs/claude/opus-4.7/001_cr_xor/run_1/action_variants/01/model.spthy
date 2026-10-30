@@ -1,0 +1,73 @@
+theory CrXorEcho
+begin
+
+builtins: hashing, xor
+
+// Setup the shared symmetric key between an initiator I and a responder R.
+rule Setup_Ltk:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk($I, $R, ~k) ]
+
+// Adversary may compromise the shared long-term key.
+rule Reveal_Ltk:
+  [ !Ltk(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+// Action block 1: Initiator generates fresh na and rho (client echo nonce)
+// and sends them.
+rule Initiator_Start:
+  [ Fr(~na), Fr(~rho), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ St_I($I, $R, k, ~na, ~rho), Out(<~na, ~rho>) ]
+
+// Action block 2: Responder receives <na, rho>, generates nb, computes the
+// tag t = H(na XOR k XOR nb), and emits <t, nb, rho>.
+rule Responder_Respond:
+  [ !Ltk($I, $R, k), In(<na, rho>), Fr(~nb) ]
+  --[ Test2()
+    , Create($R, ~nb)
+    , Running($R, $I, h(na XOR k XOR ~nb))
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(<h(na XOR k XOR ~nb), ~nb, rho>) ]
+
+// Action block 3: Initiator receives <t, nb, rho_echo>, asserts that the
+// tag matches H(na XOR k XOR nb) and that rho_echo equals the retained
+// rho, then commits.
+rule Initiator_Finish:
+  [ St_I($I, $R, k, ~na, ~rho)
+  , In(<h(~na XOR k XOR nb), nb, ~rho>)
+  ]
+  --[ Test3()
+    , Commit($I, $R, h(~na XOR k XOR nb))
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

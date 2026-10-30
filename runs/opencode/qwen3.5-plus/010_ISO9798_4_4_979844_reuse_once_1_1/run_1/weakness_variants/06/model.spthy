@@ -1,0 +1,100 @@
+theory ISO9798_4_4_ReuseOnce
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions: mac/2
+
+rule Setup:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk($A, ~kAB), !Ltk($B, ~kAB), !IdA($A), !IdB($B) ]
+
+rule Responder_Start:
+  [ !Ltk($B, kAB), !IdA($A), Fr(~tidB), Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Create($B, ~tidB), Running($B, $A, <'responder', ~tidB, ~RB>) ]->
+  [ Out(<~RB, ~Text1>), St_B_1($B, ~tidB, kAB, ~RB) ]
+
+rule Initiator_Receive_Challenge:
+  [ !Ltk($A, kAB), !IdB($B), In(<RB, Text1>), Fr(~tidA) ]
+  --[ Create($A, ~tidA) ]->
+  [ St_A_0($A, ~tidA, kAB, RB, Text1, $B) ]
+
+rule Initiator_Send_TokenAB:
+  [ St_A_0(A, tidA, kAB, RB, Text1, B), Fr(~RA), Fr(~Text2), Fr(~Text3) ]
+  --[ Test2(), Running(A, B, <'initiator', tidA, ~RA, RB>), Secret(A, B, kAB) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, B, ~Text2>, mac(< 'sid1_mut_cr', ~RA, B>, kAB)>), St_A_1(A, tidA, kAB, ~RA, RB, B) ]
+
+rule Responder_Verify_TokenAB:
+  [ St_B_1(B, tidB, kAB, RB), !Ltk(B, kAB), !IdA(A), In(<RA, Text3, <'sid1_mut_cr', RA, RB, B, Text2>, mac(< 'sid1_mut_cr', RA, B>, kAB)>), Fr(~Text4), Fr(~Text5) ]
+  --[ Test3(), Commit(B, A, <'responder', tidB, RA, RB>), Honest(B) ]->
+  [ Out(<~Text5, mac(< 'sid2_mut_cr', RB, RA>, kAB)>), St_B_2(B, tidB, kAB, RB, RA) ]
+
+rule Initiator_Verify_TokenBA:
+  [ St_A_1(A, tidA, kAB, RA, RB, B), !Ltk(A, kAB), In(<Text5, mac(< 'sid2_mut_cr', RB, RA>, kAB)>) ]
+  --[ Test4(), Commit(A, B, <'initiator', tidA, RA, RB>), Honest(A) ]->
+  [ ]
+
+rule LtkReveal_A:
+  [ !Ltk(A, kAB) ]
+  --[ LtkReveal(A) ]->
+  [ Out(kAB) ]
+
+rule LtkReveal_B:
+  [ !Ltk(B, kAB) ]
+  --[ LtkReveal(B) ]->
+  [ Out(kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_kAB:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

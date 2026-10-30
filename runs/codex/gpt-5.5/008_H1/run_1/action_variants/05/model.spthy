@@ -1,0 +1,72 @@
+theory IdentitySignatureAudit begin
+
+builtins: signing, hashing
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction UniqueKey:
+  "All A k1 k2 #i #j. Create(A, k1) @ i & Create(A, k2) @ j ==> k1 = k2"
+
+restriction DistinctParticipants:
+  "All A #i. Neq(A, A) @ i ==> F"
+
+rule Initiator_Send:
+  [ !Ltk(I, ltkI), !Pk(R, pkR) ]
+  --[ Test1(), Neq(I, R), Running(I, R, <'initiator', I, R>), Honest(I), Honest(R) ]->
+  [ Out(sign(<I, R>, ltkI)), Out(h(I)), St_I_1(I, R, ltkI, pkR) ]
+
+rule Responder_Process:
+  [ In(mI), !Pk(I, pkI), !Ltk(R, ltkR) ]
+  --[ Test2(), Neq(I, R), Eq(verify(mI, <I, R>, pkI), true), Running(R, I, <'responder', I, R>), Commit(R, I, <'initiator', I, R>), Honest(I), Honest(R) ]->
+  [ Out(sign(<I, R>, ltkR)) ]
+
+rule Initiator_Accept:
+  [ St_I_1(I, R, ltkI, pkR), In(mR) ]
+  --[ Test3(), Eq(verify(mR, <I, R>, pkR), true), Commit(I, R, <'responder', I, R>), Honest(I), Honest(R) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

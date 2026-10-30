@@ -1,0 +1,188 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+              A Simplified NAXOS Authenticated
+                       Key Exchange Protocol
+                      draft-famed-naxos-s-00
+
+
+Abstract
+
+   This document specifies a two-message authenticated key exchange
+   between an Initiator and a Responder using long-term Diffie-
+   Hellman keys and per-session ephemeral exponents.  Message 1
+   carries the Initiator's hashed ephemeral group element together
+   with a freshly generated transport identifier that allows the
+   Initiator to correlate the asynchronous Message 2 with its own
+   pending state.  This memo describes the wire-level messages,
+   the processing rules applied by Initiator and Responder, and
+   the security properties that result from the design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+     2.1.  Requirements Language . . . . . . . . . . . . . . . . .  3
+     2.2.  Notation  . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Security Considerations . . . . . . . . . . . . . . . . . .  7
+   7.  References  . . . . . . . . . . . . . . . . . . . . . . . .  9
+
+
+1.  Introduction
+
+   This document describes a two-message authenticated key
+   exchange between an Initiator and a Responder.  Both parties
+   hold a long-term Diffie-Hellman key pair distributed through
+   a public-key infrastructure (PKI).  The Initiator augments
+   Message 1 with a freshly generated TransportId in its outer
+   envelope so that an Initiator that has many concurrent runs
+   can route the corresponding Message 2 back to the right
+   pending state.
+
+   The protocol assumes a Dolev-Yao adversary that controls the
+   network and is allowed to compromise the long-term secret of
+   any party that is not directly involved in the run under
+   consideration.
+
+
+2.  Terminology
+
+2.1.  Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+2.2.  Notation
+
+   g denotes a fixed generator of a Diffie-Hellman group of prime
+   order.  Exponentiation in the group is written x^y.  lk(P)
+   denotes the long-term secret of party P; the matching public
+   key is g^lk(P).  ~eskI and ~eskR denote per-session ephemeral
+   secrets.  h1 and h2 denote two independent collision-resistant
+   hash functions.  Fresh random values are written with a
+   leading tilde, including ~TransportId.
+
+
+3.  Protocol Overview
+
+         Initiator                                    Responder
+            |                                                |
+            |  <hkI, ~TransportId>                           |
+            |  hkI = g^h1(~eskI, lk(I))                      |
+            |----------------------------------------------->|
+            |                                                |
+            |              hkR = g^h1(~eskR, lk(R))          |
+            |<-----------------------------------------------|
+
+   The Initiator generates a fresh ~eskI and a fresh
+   ~TransportId, computes exI = h1(~eskI, lk(I)) and
+   hkI = g^exI, and emits Message 1 as the pair
+   <hkI, ~TransportId>.  The Responder, upon receiving X (the
+   value purported to be hkI), generates a fresh ~eskR, computes
+   exR = h1(~eskR, lk(R)) and hkR = g^exR, and emits Message 2
+   carrying hkR.  Both parties derive the session key
+
+      kI = h2(<Y^lk(I), g^lk(R)^exI, I, R>)
+      kR = h2(<g^lk(I)^exR, X^lk(R), I, R>).
+
+
+4.  Message Format
+
+      struct {
+          opaque  HashedEphemeral;   // hkI = g^h1(~eskI, lk(I))
+          opaque  TransportId;       // ~TransportId
+      } Message1;
+
+      struct {
+          opaque  HashedEphemeral;   // hkR = g^h1(~eskR, lk(R))
+      } Message2;
+
+
+5.  Processing Rules
+
+   1.  When initiating the exchange, the Initiator SHALL look up
+       its own long-term secret lk(I), generate a fresh ~eskI
+       and a fresh ~TransportId, compute hkI = g^h1(~eskI,
+       lk(I)), and emit Message 1 as the pair
+       <hkI, ~TransportId>.
+
+   2.  Upon receiving Message 1, the Responder SHALL extract
+       TransportId from the outer envelope without
+       interpretation, treat the inner element as X, generate
+       a fresh ~eskR, compute hkR = g^h1(~eskR, lk(R)), and
+       emit Message 2 carrying hkR.  The Responder SHALL
+       compute the session key as
+       kR = h2(<g^lk(I)^exR, X^lk(R), I, R>).
+
+   3.  Upon receiving Message 2 with the value Y = hkR, the
+       Initiator SHALL compute the session key as
+       kI = h2(<Y^lk(I), g^lk(R)^exI, I, R>).
+
+
+6.  Security Considerations
+
+   The session key derived by both parties is the output of a
+   cryptographic hash over two Diffie-Hellman shared secrets that
+   each mix one party's long-term secret with a per-session value
+   emitted by the other.  TransportId is a transport correlator
+   only; it does not enter the input of h1 or h2 and SHALL NOT
+   be relied upon as authentication evidence.  An attacker that
+   observes Message 1 trivially learns TransportId.
+
+   Implementations are responsible for ensuring that ~eskI,
+   ~eskR, and ~TransportId are drawn uniformly from a
+   sufficiently large space and that long-term secrets are stored
+   in tamper-resistant storage.
+
+   This specification deliberately omits the third Diffie-Hellman
+   component that is present in the original NAXOS construction.
+   Implementations that require resistance to ephemeral-key
+   leakage SHOULD use the full NAXOS construction.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [LLM07]    LaMacchia, B., Lauter, K., and Mityagin, A.,
+              "Stronger Security of Authenticated Key Exchange",
+              in Proceedings of ProvSec 2007, Lecture Notes in
+              Computer Science, vol. 4784, Springer, 2007.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Session Key

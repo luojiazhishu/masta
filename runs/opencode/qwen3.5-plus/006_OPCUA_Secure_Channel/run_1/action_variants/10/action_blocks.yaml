@@ -1,0 +1,81 @@
+- role: Setup
+  operations:
+  - generate_nonces:
+    - ~skC
+    - ~skS
+    - ~tidC
+    - ~tidS
+    - ClientCert
+    - ServerCert
+  - send: []
+- role: Client_GetEndpoints
+  operations:
+  - send:
+    - ClientCert
+    - '''GEReq'''
+- role: Server_GetEndpoints
+  operations:
+  - receive:
+    - ClientCert
+    - '''GEReq'''
+  - send:
+    - ServerCert
+    - '''GERes'''
+    - '''Sign'''
+    - '''securityPolicy'''
+    - '''userTokenPolicy'''
+- role: Client_OpenSecureChannel
+  operations:
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - ReqBody = <'OSCReq', pk(~skC), ~Nc, 'protoV1'>
+  - send:
+    - ClientCert
+    - '''OSCReq'''
+    - pk(~skC)
+    - ~Nc
+    - '''protoV1'''
+    - sign(h(ReqBody), ~skC)
+    - h(ReqBody)
+- role: Server_OpenSecureChannel
+  operations:
+  - receive:
+    - ClientCert
+    - '''OSCReq'''
+    - ClientPk
+    - Nc
+    - '''protoV1'''
+    - Sig
+    - ReqDigest
+  - generate_nonces:
+    - ~Ns
+  - compute:
+    - ReqBody = <'OSCReq', ClientPk, Nc, 'protoV1'>
+  - assert:
+    - verify(Sig, h(ReqBody), ClientPk) = true
+    - ReqDigest = h(ReqBody)
+  - send:
+    - ServerCert
+    - '''OSCRes'''
+    - ~Ns
+    - '''SecurityToken'''
+    - '''TokenLifetime'''
+    - sign(h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>), ~skS)
+    - h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>)
+- role: Client_Verify
+  operations:
+  - receive:
+    - ServerCert
+    - '''OSCRes'''
+    - Ns
+    - SecurityToken
+    - TokenLifetime
+    - Sig
+    - ResDigest
+  - compute:
+    - ResBody = <'OSCRes', Ns, SecurityToken, TokenLifetime>
+  - assert:
+    - verify(Sig, h(ResBody), ServerCert) = true
+    - ResDigest = h(ResBody)
+  - send: <END>

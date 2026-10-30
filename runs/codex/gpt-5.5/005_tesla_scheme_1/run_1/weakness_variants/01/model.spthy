@@ -1,0 +1,70 @@
+theory TeslaSchemeOneWeakness
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Sender_Create:
+  [ Fr(~ltkS) ]
+  --[ Create($S, 'sender') ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Receiver_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~nR>), St_R_WaitSetup($R, $S, ~nR) ]
+
+rule Sender_SetupResponse:
+  let commitment = h(~k1)
+      signature = sign(<commitment, nR>, ltkS)
+  in
+  [ In(<R, $S, nR>), !Ltk($S, ltkS), Fr(~k1), Fr(~k2), Fr(~m1), Fr(~m2) ]
+  --[ Test2(), Running($S, R, <$S, R, ~m1, ~m2>) ]->
+  [ Out(<$S, R, commitment, signature>),
+    St_S_Stream1($S, R, ~k1, ~k2, ~m1, ~m2) ]
+
+rule Receiver_AcceptSetup_Unverified:
+  [ St_R_WaitSetup($R, $S, nR), In(<$S, $R, commitment, signature>) ]
+  --[ Test3(), DownstreamCheck($R, $S, commitment, signature) ]->
+  [ St_R_ExpectFirst($R, $S, commitment) ]
+
+rule Sender_Stream_First:
+  let data1 = <~m1, h(~k2)>
+  in
+  [ St_S_Stream1($S, R, ~k1, ~k2, ~m1, ~m2) ]
+  --[ Test4() ]->
+  [ Out(<data1, mac(~k1, data1)>),
+    St_S_Stream2($S, R, ~k1, ~k2, ~m1, ~m2) ]
+
+rule Receiver_Cache_First:
+  [ St_R_ExpectFirst($R, $S, commitment), In(<<m1, next_commitment>, tag1>) ]
+  --[ Test5() ]->
+  [ St_R_CachedFirst($R, $S, commitment, m1, next_commitment, tag1) ]
+
+rule Sender_Stream_Disclose:
+  let data2 = <~m2, h(~k3), ~k1>
+  in
+  [ St_S_Stream2($S, R, ~k1, ~k2, ~m1, ~m2), Fr(~k3) ]
+  --[ Test6() ]->
+  [ Out(<data2, mac(~k2, data2)>), Out(~k1) ]
+
+rule Receiver_Verify_First:
+  [ St_R_CachedFirst($R, $S, h(k1), m1, next_commitment, mac(k1, <m1, next_commitment>)), In(k1) ]
+  --[ Test7(), Commit($R, $S, <$S, $R, m1>) ]->
+  [ Accepted($R, $S, m1, next_commitment) ]
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All R S m #i.
+     Commit(R, S, <S, R, m>) @ #i
+   ==> Ex m2 #j. Running(S, R, <S, R, m, m2>) @ #j & #j < #i"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

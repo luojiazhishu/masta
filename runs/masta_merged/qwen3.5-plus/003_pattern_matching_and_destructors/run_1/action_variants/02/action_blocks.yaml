@@ -1,0 +1,17 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~tag
+  - compute:
+    - msg = senc(<~sec, ~pub>, ~k)
+  - send:
+    - msg
+    - ~tag
+- role: RuleStep2
+  operations:
+  - receive:
+    - msg
+    - tag
+  - send: <END>

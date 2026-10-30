@@ -1,0 +1,31 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~rn
+  - compute:
+    - payload = <I, R>
+    - mI = sign(<I, R>, ltkI)
+  - send:
+    - mI
+    - ~rn
+- role: Responder_Receive_Send
+  operations:
+  - receive:
+    - s
+    - rn
+  - compute:
+    - payload = <I, R>
+    - mR = sign(<I, R>, ltkR)
+  - assert:
+    - verify(s, payload, pkI) = true
+  - send:
+    - mR
+- role: Initiator_Receive_Accept
+  operations:
+  - receive:
+    - s
+  - compute:
+    - payload = <I, R>
+  - assert:
+    - verify(s, payload, pkR) = true
+  - send: <END>

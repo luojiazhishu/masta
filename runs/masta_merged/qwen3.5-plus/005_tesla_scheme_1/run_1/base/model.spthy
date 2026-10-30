@@ -1,0 +1,38 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing, symmetric-encryption
+
+functions: MAC/2, f/1
+
+// Long-term key generation for Sender S
+rule Generate_Keys:
+  [ Fr(~sk_s) ]
+  --[ Ltk($S, ~sk_s), Honest($S) ]->
+  [ !Pk($S, pk(~sk_s)), Out(pk(~sk_s)), !Ltk($S, ~sk_s) ]
+
+// RuleStep1: Receiver R initiates set-up
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Running($R, $S, <'setup_req', ~n_R>) ]->
+  [ Out(<$R, $S, ~n_R>), !StateR(~tid_R, $R, $S, ~n_R) ]
+
+// RuleStep2: Sender S responds with signed commitment
+rule RuleStep2:
+  [ In(<$R, $S, n_R>), !Ltk($S, ~sk_s), Fr(~k_1), Fr(~tid_S) ]
+  let commitment = f(~k_1)
+      sig_data = <commitment, n_R>
+      signature = sign(sig_data, ~sk_s)
+  in
+  --[ Test2(), Running($S, $R, <'setup_resp', commitment, signature>) ]->
+  [ Out(<$S, $R, commitment, signature>), !StateS(~tid_S, $S, $R, ~k_1, '1') ]
+
+// RuleStep3: Receiver R verifies signature and commits
+rule RuleStep3:
+  [ In(<$S, $R, commitment, signature>), !StateR(~tid_R, $R, $S, n_R), !Pk($S, pk_s) ]
+  let sig_data = <commitment, n_R>
+  in
+  [ verify(signature, sig_data, pk_s) = true ]
+  --[ Test3(), Commit($R, $S, <'committed', commitment>) ]->
+  [ !StateR_Committed(~tid_R, $R, $S, commitment) ]
+
+end

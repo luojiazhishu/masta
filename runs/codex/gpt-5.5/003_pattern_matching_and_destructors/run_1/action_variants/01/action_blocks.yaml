@@ -1,0 +1,14 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - send:
+    - senc(<~sec, ~pub>, k)
+    - '''pmd'''
+- role: Responder_Process
+  operations:
+  - receive:
+    - senc(<sec, pub>, k)
+    - tag
+  - send: <END>

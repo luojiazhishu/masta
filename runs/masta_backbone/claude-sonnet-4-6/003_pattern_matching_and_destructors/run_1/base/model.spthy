@@ -1,0 +1,40 @@
+theory SKPMD
+begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  let plaintext = <~sec, ~pub>
+      msg = senc(plaintext, ~k)
+  in
+  [ Fr(~sec), Fr(~pub), Fr(~k) ]
+  --[ Test1(), Secret(~sec), Honest('I'), Honest('R') ]->  
+  [ Out(msg), !Key(~k), StepOne(~k, ~sec, ~pub, msg) ]
+
+rule RuleStep2:
+  let body = sdec(msg, ~k)
+      sec = fst(body)
+      pub = snd(body)
+  in
+  [ In(msg), !Key(~k) ]
+  --[ Test2() ]->  
+  [ Out(pub) ]
+
+rule KeyReveal:
+  [ !Key(~k) ]
+  --[ LtkReveal('I') ]->  
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_of_encapsulated_secret:
+  "All A B x #i.
+     Secret(x) @ i & Honest(A) @ i & Honest(B) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

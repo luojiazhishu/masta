@@ -1,0 +1,61 @@
+theory CR_XOR_IMK
+begin
+
+builtins: hashing, xor
+
+// Persistent facts for long-term key and identities
+rule Setup_Keys:
+  [ Fr(~k) ]
+  --[ Create($I, 'Init'), Create($R, 'Resp') ]->
+  [ !Ltk($I, $R, ~k), !Ltk($R, $I, ~k) ]
+
+// Action Block 1: Initiator generates nonce and sends first flight
+rule Initiator_Start:
+  [ !Ltk($I, $R, k), Fr(~na) ]
+  --[ Test1(), Running($I, $R, ~na) ]->
+  [ Out(~na), Out('Init'), St_I($I, $R, ~na, k) ]
+
+// Action Block 2: Responder receives, verifies marker, generates nonce, computes tag, responds
+rule Responder_Respond:
+  [ !Ltk($R, $I, k), In(na), In('Init'), Fr(~nb) ]
+  --[ Test2(), Running($R, $I, ~nb) ]->
+  [ Out(h((na XOR k) XOR ~nb)), Out(~nb), St_R($R, $I, na, ~nb, k) ]
+
+// Action Block 3: Initiator receives response, verifies tag
+rule Initiator_Verify:
+  [ St_I($I, $R, na, k), In(tag), In(nb) ]
+  --[ Test3(), Commit($I, $R, nb), Honest($I) ]->
+  [ ]
+
+// LTK reveal rule for adversary
+rule Ltk_Reveal:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+// Aliveness of Responder
+// category: aliveness
+lemma aliveness_responder:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex id #j. Create(r, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement on the responder nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_nonce:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex #j. Running(r, i, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma witnessing one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

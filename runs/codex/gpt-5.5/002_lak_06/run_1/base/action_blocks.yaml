@@ -1,0 +1,33 @@
+- role: Provision
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~tid
+  - send: []
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(<'tag_mac', r0, ~r1, k>)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Finish
+  operations:
+  - compute:
+    - tag_mac = h(<'tag_mac', r0, r1, k>)
+    - reader_mac = h(<'reader_mac', h(<'tag_mac', r0, r1, k>), k, r0>)
+  - send:
+    - reader_mac
+- role: Tag_Finish
+  operations:
+  - compute:
+    - reader_mac = h(<'reader_mac', tag_mac, k, r0>)
+  - send: <END>

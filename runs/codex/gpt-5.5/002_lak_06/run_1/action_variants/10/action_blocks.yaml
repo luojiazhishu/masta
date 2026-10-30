@@ -1,0 +1,45 @@
+- role: Register
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - '''Reader'''
+    - '''Tag'''
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(tagmac(r0, ~r1, k))
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Send_R1
+  operations:
+  - receive:
+    - r1
+    - mac
+  - compute:
+    - tag_mac = h(tagmac(r0, r1, k))
+    - reader_mac = h(readermac(h(tagmac(r0, r1, k)), k, r0))
+  - assert:
+    - mac = tag_mac
+  - send:
+    - reader_mac
+- role: Tag_Accept_R1
+  operations:
+  - receive:
+    - mac
+  - compute:
+    - reader_mac = h(readermac(tag_mac, k, r0))
+  - assert:
+    - mac = reader_mac
+  - send: <END>

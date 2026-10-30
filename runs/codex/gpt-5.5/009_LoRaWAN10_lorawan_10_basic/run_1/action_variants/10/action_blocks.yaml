@@ -1,0 +1,42 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - req = <'JoinRequest', deveui, joineui, ~devnonce>
+    - request_mac = mac(appkey, <'JoinRequest', deveui, joineui, ~devnonce>)
+    - msg = <'JoinRequest', deveui, joineui, ~devnonce, mac(appkey, <'JoinRequest',
+      deveui, joineui, ~devnonce>)>
+  - send:
+    - msg
+- role: Server_Process_JoinRequest
+  operations:
+  - receive:
+    - msg
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - req = <'JoinRequest', deveui, joineui, devnonce>
+    - request_mac = mac(appkey, <'JoinRequest', deveui, joineui, devnonce>)
+    - msg = <'JoinRequest', deveui, joineui, devnonce, mac(appkey, <'JoinRequest',
+      deveui, joineui, devnonce>)>
+    - body_no_mac = <'JoinAccept', ~joinnonce, devaddr>
+    - response_mac = mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)
+    - body = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept', ~joinnonce,
+      devaddr>)>
+    - appskey = senc(<'cst1', devnonce, ~joinnonce, 'channelV1'>, appkey)
+    - nwkskey = senc(<'cst2', devnonce, ~joinnonce, 'channelV1'>, appkey)
+  - send:
+    - senc(body, appkey)
+- role: Device_Process_JoinAccept
+  operations:
+  - receive:
+    - senc(body, appkey)
+  - compute:
+    - body_no_mac = <'JoinAccept', joinnonce, devaddr>
+    - response_mac = mac(appkey, <'JoinAccept', joinnonce, devaddr>)
+    - body = <'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept', joinnonce,
+      devaddr>)>
+    - appskey = senc(<'cst1', devnonce, joinnonce, 'channelV1'>, appkey)
+    - nwkskey = senc(<'cst2', devnonce, joinnonce, 'channelV1'>, appkey)
+  - send: <END>

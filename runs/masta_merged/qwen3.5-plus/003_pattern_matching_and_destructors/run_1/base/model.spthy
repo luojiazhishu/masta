@@ -1,0 +1,41 @@
+theory SK_PMD begin
+
+builtins: symmetric-encryption
+
+functions: encSucc/2, isPair/1, and/2
+
+equations: and(true, true) = true
+
+rule SetupKeys:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk($I, ~k), !Ltk($R, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~sec), Fr(~pub), !Ltk($I, k), !Ltk($R, k) ]
+  --[ Test1(), Secret($I, $R, ~sec) ]->
+  [ Out(senc(<~sec, ~pub>, k)), !Ltk($I, k), !Ltk($R, k) ]
+
+rule RuleStep2:
+  [ In(senc(<sec, pub>, k)), !Ltk($R, k) ]
+  --[ Test2(), Honest($R) ]->
+  [ Out(pub), !Ltk($R, k) ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

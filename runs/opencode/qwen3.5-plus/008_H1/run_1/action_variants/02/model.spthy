@@ -1,0 +1,86 @@
+theory MutualIdentitySignatureAuth
+begin
+
+builtins: signing
+
+// Long-term key setup for Initiator
+rule Setup_I:
+  [ Fr(~ltkI) ]
+  --[ Create($I, ~ltkI), Honest($I) ]->
+  [ !Ltk($I, ~ltkI), !Pk($I, pk(~ltkI)) ]
+
+// Long-term key setup for Responder
+rule Setup_R:
+  [ Fr(~ltkR) ]
+  --[ Create($R, ~ltkR), Honest($R) ]->
+  [ !Ltk($R, ~ltkR), !Pk($R, pk(~ltkR)) ]
+
+// Action block 1: Initiator sends signature on <$I, $R>
+rule Initiator_Send:
+  [ !Ltk($I, ~ltkI), !Pk($R, pkR) ]
+  --[ Test1(), Running($I, $R, <$I, $R>) ]->
+  [ Out(sign(<$I, $R>, ~ltkI)), St_I_Wait($I, $R) ]
+
+// Action block 2: Responder receives mI
+rule Responder_Receive:
+  [ !Ltk($R, ~ltkR), !Pk($I, pkI), In(mI) ]
+  --[ Test2() ]->
+  [ St_R_Verified($R, $I) ]
+
+// Action block 3: Responder sends signature with fresh nonce
+rule Responder_Send:
+  [ St_R_Verified($R, $I), !Ltk($R, ~ltkR), Fr(~rn) ]
+  --[ Test3(), Running($R, $I, <$R, $I, ~rn>) ]->
+  [ Out(<sign(<$I, $R>, ~ltkR), ~rn>) ]
+
+// Action block 4: Initiator receives and verifies response
+rule Initiator_Verify:
+  [ St_I_Wait($I, $R), In(<s, rcvd_rn>), !Pk($R, pkR) ]
+  --[ Test4(), Commit($I, $R, <$I, $R, rcvd_rn>), Honest($I) ]->
+  [ ]
+
+// Adversary can reveal long-term keys
+rule LtkReveal_I:
+  [ !Ltk($I, ~ltkI) ]
+  --[ LtkReveal($I) ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk($R, ~ltkR) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~ltkR) ]
+
+// Executable lemma - witnesses one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// Safety properties
+
+// category: weak_agreement
+lemma weak_agreement_I:
+  "All i r t #i.
+       Commit(i, r, t) @ i
+     ==>
+         (Ex t2 #j. Running(r, i, t2) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_R:
+  "All r i t #i.
+       Running(r, i, t) @ i
+     ==>
+         (Ex id #j. Create(i, id) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_I:
+  "All i r t #i.
+       Commit(i, r, t) @ i
+     ==>
+         (Ex id #j. Create(r, id) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

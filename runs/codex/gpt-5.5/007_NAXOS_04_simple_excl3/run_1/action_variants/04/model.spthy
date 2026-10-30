@@ -1,0 +1,89 @@
+theory SimplifiedNaxos begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1 [private], com/2
+
+rule Generate_DH_key_pair:
+  [ Fr(~lk) ]
+  -->
+  [ !Ltk($A, ~lk)
+  , !Pk($A, 'g'^~lk)
+  , Out('g'^~lk)
+  ]
+
+rule Initiator_Audit:
+  let
+    audit = com($I, $R)
+    exI = h1(<~eskI, ~lkI>)
+  in
+  [ Fr(~eskI)
+  , Fr(~tid)
+  , !Ltk($I, ~lkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1()
+    , Audit($I, $R, audit)
+    ]->
+  [ InitReady(~tid, $I, $R, ~lkI, pkR, exI) ]
+
+rule Initiator_Send_Message1:
+  let
+    hkI = 'g'^exI
+  in
+  [ InitReady(~tid, $I, $R, ~lkI, pkR, exI) ]
+  --[ Test2()
+    , RunningI(~tid, $I, $R, hkI)
+    ]->
+  [ Out(hkI)
+  , InitWait(~tid, $I, $R, ~lkI, pkR, exI, hkI)
+  ]
+
+rule Responder_Message1_Message2:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ In(X)
+  , Fr(~eskR)
+  , Fr(~tidR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test3()
+    , RunningR(~tidR, $R, $I, X, hkR)
+    , CommitR(~tidR, $R, $I, kR)
+    , Secret(kR)
+    ]->
+  [ Out(hkR) ]
+
+rule Initiator_Receive_Message2:
+  let
+    kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ InitWait(~tid, $I, $R, ~lkI, pkR, exI, hkI)
+  , In(Y)
+  ]
+  --[ Test4()
+    , CommitI(~tid, $I, $R, kI)
+    , Secret(kI)
+    ]->
+  [ ]
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All k #i. Secret(k) @ #i ==> not (Ex #j. K(k) @ #j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+     Test1() @ #t1
+   & Test2() @ #t2
+   & Test3() @ #t3
+   & Test4() @ #t4
+   & #t1 < #t2
+   & #t2 < #t3
+   & #t3 < #t4"
+
+end

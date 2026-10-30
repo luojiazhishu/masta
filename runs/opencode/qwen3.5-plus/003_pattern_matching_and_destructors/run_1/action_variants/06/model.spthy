@@ -1,0 +1,58 @@
+theory SymmetricKeyEncapsulation
+begin
+
+builtins: symmetric-encryption
+
+rule Setup:
+  [ Fr(~I), Fr(~R), Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~I), !Ltk(~R), !Ps(~I, ~R, ~k) ]
+
+rule Initiator_Send_First:
+  [ Fr(~sec), Fr(~pub), !Ltk(I), !Ltk(R), !Ps(I, R, k) ]
+  --[ Test1(), Create(I, <~sec, ~pub>), Secret(I, R, <~sec, ~pub>) ]->
+  [ Out(senc(<~sec, ~pub>, k)), St_I_1(I, R, ~sec, ~pub, k) ]
+
+rule Initiator_Send_Second:
+  [ St_I_1(I, R, ~sec, ~pub, k) ]
+  --[ Test2() ]->
+  [ Out(senc(<~sec, ~pub>, k)) ]
+
+rule Responder_Receive:
+  [ In(senc(<sec, pub>, k)), !Ltk(R), !Ltk(I), !Ps(I, R, k) ]
+  --[ Test3(), Running(R, I, <'responder', sec, pub>), Honest(R), Honest(I) ]->
+  [ St_R_1(R, I, sec, pub, k) ]
+
+rule Responder_Duplicate:
+  [ St_R_1(R, I, sec, pub, k), In(senc(<sec, pub>, k)), !Ps(I, R, k) ]
+  --[ Test4(), Commit(R, I, <'responder', sec, pub>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(X) ]
+  --[ LtkReveal(X) ]->
+  [ Out(X) ]
+
+// category: secrecy
+lemma secrecy:
+  "All I R sec pub #i.
+     Secret(I, R, <sec, pub>) @ i
+   ==>
+       not (Ex #j. K(<sec, pub>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All r i t #i.
+     Commit(r, i, t) @ i
+   ==>
+       (Ex id #j. Create(i, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

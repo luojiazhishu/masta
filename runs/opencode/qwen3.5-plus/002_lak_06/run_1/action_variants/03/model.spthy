@@ -1,0 +1,71 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+functions: xor_op/2
+
+// Action block 1: Reader generates r0 and sends R0
+rule Reader_Start:
+  [ Fr(~k), Fr(~r0) ]
+  --[ Test1(), Running_Reader(~k, ~r0) ]->
+  [ Out(~r0), !Ltk(~k), St_R1(~k, ~r0) ]
+
+// Action block 2: Tag receives r0, generates r1, computes tag_mac, sends T1
+rule Tag_Respond:
+  [ !Ltk(k), In(r0), Fr(~r1) ]
+  --[ Test2(), Running_Tag(k, r0, ~r1) ]->
+  [ Out(<~r1, h(xor_op(xor_op(r0, ~r1), k))>), St_T1(k, r0, ~r1) ]
+
+// Action block 3: Reader receives T1, verifies tag_mac, sends R1
+rule Reader_Verify:
+  [ St_R1(k, r0), !Ltk(k), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit_Reader(k, r0, r1), Honest(k), Eq(tag_mac, h(xor_op(xor_op(r0, r1), k))) ]->
+  [ Out(h(xor_op(tag_mac, xor_op(k, r0)))) ]
+
+// Action block 4: Tag receives R1, verifies reader_mac
+rule Tag_Verify:
+  [ St_T1(k, r0, r1), !Ltk(k), In(reader_mac) ]
+  --[ Test4(), Commit_Tag(k, r0, r1), Honest(k), Eq(reader_mac, h(xor_op(h(xor_op(xor_op(r0, r1), k)), xor_op(k, r0)))) ]->
+  [ ]
+
+// LTK reveal rule for adversary
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// Secrecy of long-term key
+// category: secrecy
+lemma secrecy_ltk:
+  "All k #i.
+     LtkReveal(k) @ i
+   ==>
+     not (Ex #j. Honest(k) @ j)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All k r0 r1 #i.
+     Commit_Reader(k, r0, r1) @ i
+   ==>
+     (Ex #j. Running_Tag(k, r0, r1) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All k r0 r1 #i.
+     Commit_Tag(k, r0, r1) @ i
+   ==>
+     (Ex #j. Running_Reader(k, r0) @ j & Running_Tag(k, r0, r1) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma: witness a complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+     Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+   & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

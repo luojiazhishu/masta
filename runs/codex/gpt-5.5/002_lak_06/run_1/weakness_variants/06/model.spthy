@@ -1,0 +1,72 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule Register:
+  [ Fr(~k) ]
+  --[ Create($R, 'reader'), Create($T, 'tag') ]->
+  [ !Ltk($R, $T, ~k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1(), Running($R, $T, <'reader', ~r0>) ]->
+  [ Out(~r0), St_R_1($R, $T, ~r0, k) ]
+
+rule Tag_Response:
+  let tag_mac = h(<r0, ~r1, k>)
+  in
+  [ Fr(~r1), !Ltk($R, $T, k), In(r0) ]
+  --[ Test2(), Running($T, $R, <'tag', r0, ~r1, tag_mac, k>), Secret($R, $T, k), Honest($T) ]->
+  [ Out(<~r1, tag_mac, k>), St_T_1($R, $T, r0, ~r1, tag_mac, k) ]
+
+rule Reader_Confirm:
+  let tag_mac = h(<r0, r1, k_recv>)
+      reader_mac = h(<tag_mac, k_recv, r0>)
+  in
+  [ St_R_1($R, $T, r0, k_old), In(<r1, tag_mac, k_recv>) ]
+  --[ Test3(), Commit($R, $T, <'reader', r0, r1, tag_mac, k_recv>), Honest($R) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Finish:
+  let reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ St_T_1($R, $T, r0, r1, tag_mac, k), In(reader_mac) ]
+  --[ Test4(), Commit($T, $R, <'tag', r0, r1, tag_mac, k>), Honest($T) ]->
+  [ ]
+
+rule Reveal_Key:
+  [ !Ltk($R, $T, k) ]
+  --[ LtkReveal($R), LtkReveal($T) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_tag:
+  "All a b r0 r1 tag_mac k #i.
+     Commit(a, b, <'tag', r0, r1, tag_mac, k>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag', r0, r1, tag_mac, k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_reader:
+  "All a b r0 r1 tag_mac k #i.
+     Commit(a, b, <'reader', r0, r1, tag_mac, k>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1, tag_mac, k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

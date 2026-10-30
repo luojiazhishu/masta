@@ -1,0 +1,129 @@
+theory LoRaWAN10Basic
+begin
+
+builtins: symmetric-encryption
+functions: mac/2
+
+rule Register:
+  [ Fr(~AppKey) ]
+  --[ ]->
+  [ !Provision($Device, $Server, ~AppKey, $JoinEUI, $DevAddr) ]
+
+rule RevealKey:
+  [ !Provision($Device, $Server, ~AppKey, $JoinEUI, $DevAddr) ]
+  --[ LtkReveal($Device), LtkReveal($Server) ]->
+  [ Out(~AppKey) ]
+
+rule Device_JoinRequest:
+  let reqMac = mac(~AppKey, <'JoinRequest', $Device, $JoinEUI, ~DevNonce>)
+  in
+  [ !Provision($Device, $Server, ~AppKey, $JoinEUI, $DevAddr),
+    Fr(~DevNonce) ]
+  --[ Test1(),
+      Create($Device, ~DevNonce),
+      Running($Device, $Server, <'server_role', ~DevNonce, $JoinEUI, $Device>) ]->
+  [ Out(<'JoinRequest', $Device, $JoinEUI, ~DevNonce, reqMac>),
+    St_D_1($Device, $Server, ~AppKey, $JoinEUI, $DevAddr, ~DevNonce) ]
+
+rule Server_JoinAccept:
+  let reqMac = mac(~AppKey, <'JoinRequest', devEUI, joinEUI, devNonce>)
+      respMac = mac(~AppKey, <'JoinAccept', ~JoinNonce, $DevAddr>)
+  in
+  [ !Provision(devEUI, $Server, ~AppKey, joinEUI, $DevAddr),
+    In(<'JoinRequest', devEUI, joinEUI, devNonce, reqMac>),
+    Fr(~JoinNonce) ]
+  --[ Test2(),
+      Create($Server, ~JoinNonce),
+      Commit($Server, devEUI, <'server_role', devNonce, joinEUI, devEUI>),
+      Running($Server, devEUI, <'device_role', devNonce, ~JoinNonce, $DevAddr>),
+      Running($Server, devEUI, <'key_role', devNonce, ~JoinNonce>),
+      Honest($Server), Honest(devEUI) ]->
+  [ Out(senc(<'JoinAccept', ~JoinNonce, $DevAddr, respMac>, ~AppKey)) ]
+
+rule Device_ReceiveJoinAccept:
+  let respMac = mac(~AppKey, <'JoinAccept', joinNonce, $DevAddr>)
+      appSKey = senc(<'cst1', ~DevNonce, joinNonce>, ~AppKey)
+      nwkSKey = senc(<'cst2', ~DevNonce, joinNonce>, ~AppKey)
+  in
+  [ St_D_1($Device, $Server, ~AppKey, $JoinEUI, $DevAddr, ~DevNonce),
+    In(senc(<'JoinAccept', joinNonce, $DevAddr, respMac>, ~AppKey)) ]
+  --[ Test3(),
+      Commit($Device, $Server, <'device_role', ~DevNonce, joinNonce, $DevAddr>),
+      Commit($Device, $Server, <'key_role', ~DevNonce, joinNonce>),
+      Secret($Device, $Server, appSKey),
+      Secret($Device, $Server, nwkSKey),
+      Honest($Device), Honest($Server) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, <'server_role', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_role', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, <'server_role', t>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'server_role', t>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'server_role', t>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, <'device_role', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'device_role', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, <'device_role', t>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'device_role', t>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'device_role', t>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_keys:
+  "All a b t #i.
+     Commit(a, b, <'key_role', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'key_role', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_keys:
+  "All a b t #i.
+     Commit(a, b, <'key_role', t>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'key_role', t>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'key_role', t>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

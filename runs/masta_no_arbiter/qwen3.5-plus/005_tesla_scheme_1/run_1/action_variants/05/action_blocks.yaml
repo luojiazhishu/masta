@@ -1,0 +1,46 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+    - '''init_request'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+    - '''init_request'''
+  - generate_nonces:
+    - ~k_1
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R, 'init_request'>, ~sk_s)
+- role: RuleStep3
+  operations:
+  - receive:
+    - $S
+    - $R
+    - commitment
+    - signature
+  - send: []
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - <~m_1, f(~k_2)>
+    - MAC(~k_1, <~m_1, f(~k_2)>)
+- role: RuleStep5
+  operations:
+  - receive:
+    - D_1
+    - mac_1
+  - send: <END>

@@ -1,0 +1,31 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~tidR
+  - send:
+    - ~r0
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~r0
+  - generate_nonces:
+    - ~r1
+    - ~tidT
+  - send:
+    - ~r1
+    - h(~r0 XOR ~r1 XOR k)
+- role: RuleStep3
+  operations:
+  - receive:
+    - r1
+    - h(r0 XOR r1 XOR k)
+  - send:
+    - h(h(r0 XOR r1 XOR k) XOR k XOR r0)
+    - h(h(r0 XOR r1 XOR k) XOR k XOR r0)
+- role: RuleStep4
+  operations:
+  - receive:
+    - reader_mac_a
+    - reader_mac_b
+  - send: <END>

@@ -1,0 +1,14 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ !Ltk($R, $T, ~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+end

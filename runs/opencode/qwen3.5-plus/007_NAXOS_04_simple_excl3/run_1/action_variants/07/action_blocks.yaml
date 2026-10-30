@@ -1,0 +1,30 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tidI
+  - compute:
+    - exI = h1(<~eskI, ~lkI, 'protoV1'>)
+    - hkI = 'g'^h1(<~eskI, ~lkI, 'protoV1'>)
+  - send:
+    - hkI
+- role: Responder_Respond
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+    - ~tidR
+  - compute:
+    - exR = h1(<~eskR, ~lkR, 'protoV1'>)
+    - hkR = 'g'^h1(<~eskR, ~lkR, 'protoV1'>)
+    - kR = h2(<pkI^h1(<~eskR, ~lkR, 'protoV1'>), hkI^~lkR, $I, $R>)
+  - send:
+    - hkR
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - hkR
+  - compute:
+    - kI = h2(<hkR^~lkI, 'g'^(~lkR * exI), $I, $R>)
+  - send: <END>

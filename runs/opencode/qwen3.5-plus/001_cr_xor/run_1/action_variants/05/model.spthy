@@ -1,0 +1,60 @@
+theory CR_XOR_RAudit
+begin
+
+builtins: xor, hashing
+
+functions: bar/1
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !Ltk(~k) ]
+  --[ Test1(), Create('I', ~na) ]->
+  [ Out(~na), St_I_1(~na, ~k) ]
+
+rule Responder_Respond:
+  [ In(na), Fr(~nb), !Ltk(~k) ]
+  --[ Test2(), Create('R', ~nb), Running('R', 'I', <na, ~nb>) ]->
+  [ Out(<h(na XOR ~k XOR ~nb), ~nb>), St_R_Done(na, ~nb, ~k) ]
+
+rule Initiator_Verify:
+  [ St_I_1(~na, ~k), In(<h(~na XOR ~k XOR nb), nb>) ]
+  --[ Test3(), Commit('I', 'R', <~na, nb>) ]->
+  [ ]
+
+rule Responder_Audit:
+  [ St_R_Done(na, nb, k) ]
+  --[ Test4() ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+lemma aliveness:
+  "All a b na nb #i.
+     Commit(a, b, <na, nb>) @ i
+   ==>
+       (Ex id #j. Create('R', id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+end

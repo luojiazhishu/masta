@@ -1,0 +1,34 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(~r0 ⊕ ~r1 ⊕ k())
+- role: RuleStep3
+  operations:
+  - receive:
+    - ~r1
+    - tag_mac
+  - generate_nonces:
+    - ~r0_check
+  - send:
+    - '''CONF'''
+    - h(tag_mac ⊕ k() ⊕ ~r0_check)
+- role: RuleStep4
+  operations:
+  - receive:
+    - '''CONF'''
+    - reader_mac
+  - generate_nonces:
+    - ~r0_tag
+    - ~r1_tag
+  - send: <END>

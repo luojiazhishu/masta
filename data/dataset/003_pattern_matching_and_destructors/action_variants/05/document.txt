@@ -1,0 +1,97 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+    A Symmetric-Key Encapsulation Profile with Public Hash Witness
+                  draft-famed-sk-pmd-v05-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the on-wire transmission consists of a
+   ciphertext under the shared key followed by a hash of the secret
+   payload, h(sec).  The hash is exposed in cleartext as a
+   structural witness of the secret carried inside the ciphertext.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+1.  Introduction
+
+   This profile follows the structure of the base symmetric-key
+   encapsulation.  In addition to the ciphertext, the initiator
+   transmits a hash of the secret payload, h(sec), in the clear.
+   The hash is intended as a structural witness for deployments
+   that need to test for equality of two encapsulated secrets
+   without decrypting either ciphertext.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174].
+
+      h(x)      a one-way cryptographic hash function applied to x.
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  <senc(<sec, pub>, k), h(sec)>                 |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+4.  Message Format
+
+   The on-wire artifact is
+
+      <msg, h(sec)>
+
+   where msg = senc(<sec, pub>, k).
+
+5.  Processing Rules
+
+   The initiator draws sec and pub, forms msg = senc(<sec, pub>,
+   k), computes h(sec), and transmits the pair <msg, h(sec)>.
+   The responder binds the inbound pair into msg and a witness
+   variable that is not used in the destructor checks, and
+   proceeds with the base-profile destructor checks against msg
+   under k.
+
+6.  Security Considerations
+
+   The hash h(sec) is exposed in cleartext.  Because h is one-way,
+   the secrecy of sec is not compromised by exposure of h(sec):
+   an adversary that observes h(sec) cannot recover sec from the
+   hash output alone.  However, the hash MAY be used to detect
+   re-use of the same sec across different sessions; deployments
+   that wish to avoid such linkability MUST select a profile in
+   which sec is not externally witnessed.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

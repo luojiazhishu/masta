@@ -1,0 +1,87 @@
+theory TESLAScheme1Weakness
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+// Long-term key registration for the sender
+rule Register_Sender:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), Out(pk(~sk)) ]
+
+// Adversary key reveal for lemma exemption
+rule LtkReveal:
+  [ !Ltk($X, ~sk) ]
+  --[ LtkReveal($X) ]->
+  [ Out(~sk) ]
+
+// Block 1: Receiver generates nonce and sends SetupRequest
+rule R_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR>), St_R_1($R, $S, ~nR) ]
+
+// Block 2: Sender creates SetupResponse with signed commitment to k1
+rule S_SetupResponse:
+  [ !Ltk($S, ~sk), In(<$R, $S, nR>), Fr(~k1), Fr(~k2) ]
+  --[ Test2() ]->
+  [ Out(<$S, $R, h(~k1), sign(<h(~k1), nR>, ~sk)>),
+    St_S_1($S, $R, ~k1, ~k2) ]
+
+// Block 3: Receiver stores commitment WITHOUT verifying the signature (WEAKNESS)
+rule R_AcceptSetup:
+  [ St_R_1($R, $S, ~nR), In(<$S, $R, fk1, sig>) ]
+  --[ Test3() ]->
+  [ St_R_2($R, $S, ~nR, fk1) ]
+
+// Block 4: Sender sends first stream message (k1 not yet disclosed)
+rule S_StreamMsg1:
+  [ St_S_1($S, $R, ~k1, ~k2), Fr(~m1) ]
+  --[ Test4(), Running($S, $R, <'stream', ~m1>) ]->
+  [ Out(<~m1, h(~k2), mac(~k1, <~m1, h(~k2)>)>),
+    St_S_2($S, $R, ~k1, ~k2, ~m1) ]
+
+// Block 5: Receiver caches first stream message (cannot verify yet)
+rule R_CacheMsg1:
+  [ St_R_2($R, $S, ~nR, fk1), In(<m1, fk2, mac1>) ]
+  --[ Test5() ]->
+  [ St_R_3($R, $S, ~nR, fk1, m1, fk2, mac1) ]
+
+// Block 6: Sender sends second stream message disclosing k1
+rule S_StreamMsg2:
+  [ St_S_2($S, $R, ~k1, ~k2, ~m1), Fr(~m2), Fr(~k3) ]
+  --[ Test6() ]->
+  [ Out(<~m2, h(~k3), ~k1, mac(~k2, <~m2, h(~k3), ~k1>)>) ]
+
+// Block 7: Receiver uses disclosed k1 to verify and accept first stream message
+rule R_VerifyAndAccept:
+  [ St_R_3($R, $S, ~nR, fk1, m1, fk2, mac1),
+    In(<m2, fk3, k1, mac2>) ]
+  --[ Eq(h(k1), fk1),
+      Eq(mac(k1, <m1, fk2>), mac1),
+      Test7(),
+      Commit($R, $S, <'stream', m1>),
+      Honest($R), Honest($S) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All R S m #i.
+     Commit(R, S, <'stream', m>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'stream', m>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

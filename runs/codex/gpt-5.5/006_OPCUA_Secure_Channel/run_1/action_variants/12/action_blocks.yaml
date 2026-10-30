@@ -1,0 +1,59 @@
+- role: Client_Discovery
+  operations:
+  - generate_nonces:
+    - ~ltkC
+    - ~ltkS
+  - send:
+    - pk(~ltkC)
+    - pk(~ltkS)
+    - '''GEReq'''
+    - '''GEReq'''
+- role: Server_Endpoint_Response
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - certS
+    - '''Sign'''
+    - '''Policy'''
+    - '''UserToken'''
+- role: Client_OpenSecureChannel_Request
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - policy
+    - tokenPolicy
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - certC
+    - <'OSCReq', certC, ~Nc>
+    - sign(h(<'OSCReq', certC, ~Nc>), ltkC)
+    - h(<'OSCReq', certC, ~Nc>)
+- role: Server_OpenSecureChannel_Response
+  operations:
+  - receive:
+    - clientCert
+    - <'OSCReq', clientCert, nc>
+    - sign(h(<'OSCReq', clientCert, nc>), ltkC)
+    - h(<'OSCReq', clientCert, nc>)
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - send:
+    - certS
+    - <'OSCRes', ~Ns, ~ST, ~TTL>
+    - sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), ltkS)
+    - h(<'OSCRes', ~Ns, ~ST, ~TTL>)
+- role: Client_Finish
+  operations:
+  - receive:
+    - serverCert
+    - <'OSCRes', ns, st, ttl>
+    - sign(h(<'OSCRes', ns, st, ttl>), ltkS)
+    - h(<'OSCRes', ns, st, ttl>)
+  - send: <END>

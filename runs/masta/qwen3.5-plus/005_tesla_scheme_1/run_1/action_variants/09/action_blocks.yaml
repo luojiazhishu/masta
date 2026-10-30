@@ -1,0 +1,48 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid
+  - send:
+    - '''R'''
+    - '''S'''
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''R'''
+    - '''S'''
+    - n_R
+  - generate_nonces:
+    - ~tid2
+  - compute:
+    - f_k1 = f(k_1)
+    - sig_msg = <f(k_1), n_R>
+    - sig = sign(<f(k_1), n_R>, sk_s)
+    - out_msg = <'S', 'R', f(k_1), sign(<f(k_1), n_R>, sk_s)>
+  - send:
+    - out_msg
+- role: RuleStep3
+  operations:
+  - generate_nonces:
+    - ~tid3
+    - ~k_2
+    - ~m_1
+  - compute:
+    - D_1 = <~m_1, f(~k_2)>
+    - mac_1 = mac(k_1, <~m_1, f(~k_2)>)
+    - audit_digest_1 = aux(~m_1)
+    - out_msg = <<~m_1, f(~k_2)>, mac(k_1, <~m_1, f(~k_2)>)>
+  - send:
+    - out_msg
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~tid4
+    - ~k_3
+    - ~m_2
+  - compute:
+    - D_2 = <~m_2, f(~k_3), k_1>
+    - mac_2 = mac(k_2, <~m_2, f(~k_3), k_1>)
+    - out_msg = <<~m_2, f(~k_3), k_1>, mac(k_2, <~m_2, f(~k_3), k_1>), '<END>'>
+  - send: <END>

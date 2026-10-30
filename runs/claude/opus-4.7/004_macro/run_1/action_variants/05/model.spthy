@@ -1,0 +1,67 @@
+theory BSKTD
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Register_Server:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(skS) ]
+
+// Action Block 1: Client generates fresh session key and sends encrypted to server
+rule Client_Init:
+  [ !Pk($S, pkS), Fr(~k) ]
+  --[ Test1(), Create($C, ~k) ]->
+  [ Out(aenc(~k, pkS)), St_C_1($C, $S, ~k) ]
+
+// Action Block 2: Server decrypts ciphertext and sends hash confirmation with completion tag
+rule Server_Process:
+  [ !Ltk($S, ~skS), In(aenc(k, pk(~skS))) ]
+  --[ Test2(), Running($S, <'server', k>) ]->
+  [ Out(<h(k), 'done'>) ]
+
+// Action Block 3: Client verifies server confirmation and accepts session key
+rule Client_Finish:
+  [ St_C_1($C, $S, ~k), In(<h(~k), 'done'>) ]
+  --[ Test3(), Commit($C, $S, <'client', ~k>), Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All c s k #i.
+     Secret(c, s, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+       (Ex #j. Running(s, <'server', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+       ( (Ex #j. Running(s, <'server', k>) @ j
+             & j < i
+             & not (Ex c2 s2 #i2. Commit(c2, s2, <'client', k>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

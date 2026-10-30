@@ -1,0 +1,120 @@
+theory MutualChallengeResponse begin
+
+builtins: hashing
+
+functions: mac/2
+
+// Long-term symmetric key setup
+rule SetupKey:
+  [ Fr(~kAB) ]
+  -->
+  [ !SymKey('IdA', 'IdB', ~kAB)
+  , !SymKey('IdB', 'IdA', ~kAB)
+  ]
+
+// Key reveal rule for long-term key compromise
+rule LtkReveal:
+  [ !SymKey(A, B, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+// RuleStep1: Responder sends initial challenge <RB, Text1>
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1)
+  , !SymKey('IdB', 'IdA', kAB)
+  ]
+  --[ Test1() ]->
+  [ Out(<~RB, ~Text1>)
+  , !RespState1('IdB', 'IdA', ~RB, kAB)
+  ]
+
+// RuleStep2: Initiator receives challenge, generates nonces, computes mac1, sends TokenAB
+rule RuleStep2:
+  let mac1 = mac(< 'sid1_mut_cr', ~RA, RB, 'IdB' >, kAB)
+  in
+  [ In(<RB, Text1>)
+  , Fr(~RA), Fr(~Text2), Fr(~Text3)
+  , !SymKey('IdA', 'IdB', kAB)
+  ]
+  --[ Test2()
+    , Running('IdA', 'IdB', <~RA, RB>)
+    , Honest('IdA')
+    ]->
+  [ Out(< 'token_ab', ~RA, ~Text3, < 'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2 >, mac1 >)
+  , !InitState1('IdA', 'IdB', ~RA, RB, kAB)
+  ]
+
+// RuleStep3: Responder receives TokenAB, verifies marker and mac1, computes mac2, sends TokenBA
+rule RuleStep3:
+  let mac1_check = mac(< 'sid1_mut_cr', RA, RB, 'IdB' >, kAB)
+      mac2 = mac(< 'sid2_mut_cr', RB, RA >, kAB)
+  in
+  [ In(< 'token_ab', RA, Text3, < 'sid1_mut_cr', RA, RB, 'IdB', Text2 >, mac1_check >)
+  , !RespState1('IdB', 'IdA', RB, kAB)
+  , Fr(~Text4), Fr(~Text5)
+  ]
+  --[ Test3()
+    , Running('IdB', 'IdA', <RA, RB>)
+    , Honest('IdB')
+    , Commit('IdB', 'IdA', <RA, RB>)
+    ]->
+  [ Out(< ~Text5, mac2 >)
+  , !RespState2('IdB', 'IdA', RB, RA, kAB)
+  ]
+
+// RuleStep4: Initiator receives TokenBA, verifies mac2, declares session authenticated
+rule RuleStep4:
+  let mac2_check = mac(< 'sid2_mut_cr', RB, RA >, kAB)
+  in
+  [ In(< Text5, mac2_check >)
+  , !InitState1('IdA', 'IdB', RA, RB, kAB)
+  ]
+  --[ Test4()
+    , Commit('IdA', 'IdB', <RA, RB>)
+    , Honest('IdA')
+    ]->
+  [ Out(< 'END' >)
+  , !SessionComplete('IdA', 'IdB', RA, RB)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

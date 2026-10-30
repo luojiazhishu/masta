@@ -1,0 +1,41 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - m = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, 'protoV1'>)
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - m
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - DevEUI
+    - JoinEUI
+    - DevNonce
+    - RequestMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - AppSKey = senc(<cst1, DevNonce, ~JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<cst2, DevNonce, ~JoinNonce>, ~AppKey)
+  - assert:
+    - verif_mac(~AppKey, <'JoinRequest', DevEUI, JoinEUI, DevNonce, 'protoV1'>, RequestMAC)
+      = true
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, DevAddr, mac(~AppKey, <'JoinAccept', ~JoinNonce,
+      DevAddr>)>, ~AppKey)
+- role: Device_Commit
+  operations:
+  - receive:
+    - senc(<'JoinAccept', JoinNonce, DevAddr, ResponseMAC>, ~AppKey)
+  - compute:
+    - AppSKey = senc(<cst1, ~DevNonce, JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<cst2, ~DevNonce, JoinNonce>, ~AppKey)
+  - assert:
+    - verif_mac(~AppKey, <'JoinAccept', JoinNonce, DevAddr>, ResponseMAC) = true
+  - send: <END>

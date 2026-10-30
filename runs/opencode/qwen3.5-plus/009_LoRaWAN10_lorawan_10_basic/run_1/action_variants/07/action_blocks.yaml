@@ -1,0 +1,31 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~AppKey
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+- role: Server_Receive_And_Respond
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - DevEUI
+    - JoinEUI
+    - DevNonce
+    - mac(AppKey, <'JoinRequest', DevEUI, JoinEUI, DevNonce>)
+  - generate_nonces:
+    - ~JoinNonce
+    - ~DevAddr
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, ~DevAddr>, AppKey)
+- role: Device_Receive_JoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', JoinNonce, DevAddr>, AppKey)
+  - send: <END>

@@ -1,0 +1,19 @@
+- role: Client_Send_KeyTransport
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: Server_Receive_KeyTransport_Send_KeyConfirm
+  operations:
+  - receive:
+    - aenc(k, pk(ltkS))
+  - send:
+    - h(k)
+    - '''ack'''
+- role: Client_Receive_KeyConfirm_Accept
+  operations:
+  - receive:
+    - h(k)
+    - '''ack'''
+  - send: <END>

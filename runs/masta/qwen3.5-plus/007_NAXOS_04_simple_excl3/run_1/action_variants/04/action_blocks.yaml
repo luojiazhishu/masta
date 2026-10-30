@@ -1,0 +1,30 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~xI
+    - ~tid
+  - compute:
+    - exI = h1(<~xI, ~lkI>)
+    - hkI = 'g'^h1(<~xI, ~lkI>)
+  - send:
+    - hkI
+- role: RuleStep2
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~xR
+  - compute:
+    - exR = h1(<~xR, ~lkR>)
+    - hkR = 'g'^h1(<~xR, ~lkR>)
+    - kR = h2(<pkI^h1(<~xR, ~lkR>), hkI^~lkR, $I, $R>)
+  - send:
+    - hkR
+- role: RuleStep3
+  operations:
+  - receive:
+    - hkR
+  - compute:
+    - hkI = 'g'^exI
+    - kI = h2(<hkR^~lkI, pkR^exI, $I, $R>)
+  - send: <END>

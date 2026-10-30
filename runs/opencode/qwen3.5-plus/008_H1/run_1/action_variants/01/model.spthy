@@ -1,0 +1,57 @@
+theory MutualIdentitySignature
+begin
+
+builtins: signing
+
+functions: I/0, R/0
+
+rule Setup_I:
+  [ Fr(~ltkI) ]
+  --[ ]->
+  [ !Ltk(~ltkI), !Pk(~ltkI, I) ]
+
+rule Setup_R:
+  [ Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk(~ltkR), !Pk(~ltkR, R) ]
+
+rule Initiator_Start:
+  [ Fr(~rn), !Ltk(~ltkI), !Pk(~ltkI, I), !Pk(~ltkR, R) ]
+  --[ Test1(), Create(I, I), Running(I, R, <I, R>) ]->
+  [ Out(<sign(<I, R>, ~ltkI), ~rn>), St_I_1(I, R, ~rn) ]
+
+rule Responder_Respond:
+  [ In(<sign(<I, R>, ~ltkI), rn>), !Ltk(~ltkR), !Pk(~ltkR, R), !Pk(~ltkI, I) ]
+  --[ Test2(), Create(R, R), Running(R, I, <I, R>) ]->
+  [ Out(sign(<I, R>, ~ltkR)) ]
+
+rule Initiator_Finish:
+  [ St_I_1(I, R, ~rn), In(sign(<I, R>, ~ltkR)), !Ltk(~ltkI), !Pk(~ltkI, I), !Pk(~ltkR, R) ]
+  --[ Test3(), Commit(I, R, <I, R>), Honest(I), Honest(R) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk(~ltkI) ]
+  --[ LtkReveal(I) ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk(~ltkR) ]
+  --[ LtkReveal(R) ]->
+  [ Out(~ltkR) ]
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,27 @@
+- role: Init_1
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: Resp_1
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(<na XOR ~k XOR ~nb, 'Init'>)
+  - send:
+    - t
+    - ~nb
+- role: Init_2
+  operations:
+  - receive:
+    - t
+    - nb
+  - compute:
+    - t_check = h(<~na XOR ~k XOR nb, 'Init'>)
+  - assert:
+    - t = t_check
+  - send: <END>

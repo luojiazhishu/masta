@@ -1,0 +1,24 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: Responder_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR ~k XOR ~nb)
+    - ~nb
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - h(~na XOR ~k XOR nb)
+    - nb
+  - send: []
+- role: Responder_Audit
+  operations:
+  - send: <END>

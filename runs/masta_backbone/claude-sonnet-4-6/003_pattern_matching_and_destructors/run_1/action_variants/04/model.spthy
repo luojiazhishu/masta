@@ -1,0 +1,30 @@
+theory SK_PMD_V04
+begin
+
+builtins: symmetric-encryption
+
+functions: tag_aux/2
+
+rule RuleStep1:
+  [ Fr(~sec)
+  , Fr(~k) ]
+  --[ Test1() ]->  
+  [ Out(senc(<~sec, ~sec>, ~k))
+  , !SharedKey(~k) ]
+
+rule RuleStep2:
+  let auxr = tag_aux(sec, pub)
+  in
+  [ In(senc(<sec, pub>, k))
+  , !SharedKey(k) ]
+  --[ Test2()
+    , ComputeAux(auxr) ]->  
+  [ Out(pub) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

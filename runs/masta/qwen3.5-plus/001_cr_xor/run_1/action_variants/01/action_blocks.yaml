@@ -1,0 +1,31 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~r
+    - ~tid
+  - send:
+    - ~na
+    - ~r
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~na
+    - ~r
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(~na XOR k XOR ~nb)
+  - send:
+    - t
+    - ~nb
+    - ~r
+- role: RuleStep3
+  operations:
+  - receive:
+    - expected_tag
+    - ~nb
+    - ~r
+  - compute:
+    - expected_tag = h(~na XOR k XOR ~nb)
+  - send: <END>

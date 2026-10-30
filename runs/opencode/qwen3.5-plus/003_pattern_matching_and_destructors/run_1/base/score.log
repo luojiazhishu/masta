@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/opencode/qwen3.5-plus/003_pattern_matching_and_destructors/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 003_pattern_matching_and_destructors --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/003_pattern_matching_and_destructors/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    003_pattern_matching_and_destructors
+
+==== Score ====
+ protocol: 003_pattern_matching_and_destructors
+ M1: 0.833
+ M2: 0.000
+ M3: 0.000
+ M4: 0.000  (no action variants supplied)
+ M5: 0.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/003_pattern_matching_and_destructors/run_1/base/score.json

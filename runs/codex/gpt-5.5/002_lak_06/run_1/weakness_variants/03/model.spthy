@@ -1,0 +1,68 @@
+theory Lak06
+begin
+
+builtins: hashing, xor
+
+rule Register:
+  [ Fr(~k), Fr(~tid) ]
+  --[ Create($R, $T), Honest($R), Honest($T) ]->
+  [ !Ltk($R, $T, ~k), !TagId($R, $T, ~tid) ]
+
+rule Reveal_Key:
+  [ !Ltk(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+  [ Out(k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk($R, $T, k), !TagId($R, $T, tid) ]
+  --[ Test1(), Running($R, $T, <'reader', ~r0>), Secret($R, $T, tid) ]->
+  [ Out(~r0), St_R_1($R, $T, k, ~r0) ]
+
+rule Tag_Respond:
+  let tag_mac = h(((r0 XOR ~r1) XOR k)) in
+  [ Fr(~r1), !Ltk($R, $T, k), In(r0) ]
+  --[ Test2(), Running($T, $R, <'tag', r0, ~r1>) ]->
+  [ Out(<~r1, tag_mac>), St_T_1($R, $T, k, r0, ~r1, tag_mac) ]
+
+rule Reader_Confirm:
+  let reader_mac = h((tag_mac_in XOR k)) in
+  [ St_R_1($R, $T, k, r0), In(<r1, tag_mac_in>) ]
+  --[ Test3(), Commit($R, $T, <'reader', r0, r1>) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Finish:
+  [ St_T_1($R, $T, k, r0, r1, tag_mac), In(reader_mac) ]
+  --[ Test4(), Commit($T, $R, <'tag', r0, r1>) ]->
+  [ ]
+
+// category: secrecy
+lemma tag_identifier_secrecy:
+  "All R T id #i.
+     Secret(R, T, id) @ i
+   ==>
+       not (Ex #j. K(id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All T R r0 r1 #i.
+     Commit(T, R, <'tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(R, T, <'reader', r0>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma reader_noninjective_agreement:
+  "All R T r0 r1 #i.
+     Commit(R, T, <'reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(T, R, <'tag', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

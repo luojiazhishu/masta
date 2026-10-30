@@ -1,0 +1,71 @@
+theory SimplifiedNAXOS
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/3, h2/4
+
+rule Register_LTK:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($A, ~lk), !Pk($A, 'g'^~lk), Out('g'^~lk) ]
+
+rule Reveal_LTK:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+// Block 1: Initiator generates eskI, computes hkI = g^h1(eskI, lkI, 'protoV1'), sends hkI
+rule Initiator_Send:
+  let exI = h1(~eskI, ~lkI, 'protoV1')
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ St_I_1($I, $R, ~eskI, ~lkI, pkR), Out(hkI) ]
+
+// Block 2: Responder receives hkI, generates eskR, computes hkR and session key kR, sends hkR
+rule Responder_Receive_Send:
+  let exR = h1(~eskR, ~lkR, 'protoV1')
+      hkR = 'g'^exR
+      kR  = h2(pkI^exR, hkI^~lkR, $I, $R)
+  in
+  [ Fr(~eskR), !Ltk($R, ~lkR), !Pk($I, pkI), In(hkI) ]
+  --[ Test2(), Create($R, ~eskR),
+      Running($R, $I, <'session', kR>),
+      Secret($R, $I, kR), Honest($I), Honest($R) ]->
+  [ Out(hkR) ]
+
+// Block 3: Initiator receives hkR, computes session key kI
+rule Initiator_Receive:
+  let exI = h1(~eskI, ~lkI, 'protoV1')
+      kI  = h2(hkR^~lkI, pkR^exI, $I, $R)
+  in
+  [ St_I_1($I, $R, ~eskI, ~lkI, pkR), In(hkR) ]
+  --[ Test3(), Commit($I, $R, <'session', kI>),
+      Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

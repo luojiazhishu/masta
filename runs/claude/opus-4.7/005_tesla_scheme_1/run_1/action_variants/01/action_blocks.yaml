@@ -1,0 +1,65 @@
+- role: R_Init
+  operations:
+  - generate_nonces:
+    - ~nR
+    - ~tagR
+  - send:
+    - $R
+    - $S
+    - ~nR
+    - ~tagR
+- role: S_Response
+  operations:
+  - receive:
+    - $R
+    - $S
+    - nR
+    - tagR
+  - generate_nonces:
+    - ~k1
+  - send:
+    - $S
+    - $R
+    - f(~k1)
+    - sign(<f(~k1), nR, tagR>, ~ltk)
+- role: R_Verify
+  operations:
+  - receive:
+    - $S
+    - $R
+    - fk1
+    - sig
+  - assert:
+    - verify(sig, <fk1, ~nR, ~tagR>, pkS) = true
+  - send: []
+- role: S_Stream1
+  operations:
+  - generate_nonces:
+    - ~k2
+    - ~m1
+  - send:
+    - <~m1, f(~k2)>
+    - mac(~k1, <~m1, f(~k2)>)
+- role: R_Cache
+  operations:
+  - receive:
+    - d1
+    - mac1
+  - send: []
+- role: S_Stream2
+  operations:
+  - generate_nonces:
+    - ~k3
+    - ~m2
+  - send:
+    - <~m2, f(~k3), ~k1>
+    - mac(~k2, <~m2, f(~k3), ~k1>)
+- role: R_Accept
+  operations:
+  - receive:
+    - <m2, fk3, k1>
+    - mac2
+  - assert:
+    - f(k1) = fk1
+    - mac1 = mac(k1, d1)
+  - send: <END>

@@ -1,0 +1,79 @@
+- role: Receiver_setup_request
+  operations:
+  - generate_nonces:
+    - ~nR
+    - ~rid
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: Sender_setup_response
+  operations:
+  - receive:
+    - R
+    - S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~sid
+  - compute:
+    - commitment1 = h(~k1)
+    - setup_data = <h(~k1), nR>
+  - send:
+    - S
+    - R
+    - commitment1
+    - sign(setup_data, ltkS)
+- role: Receiver_accept_setup
+  operations:
+  - receive:
+    - S
+    - R
+    - commitment1
+    - sig
+  - compute:
+    - setup_data = <commitment1, nR>
+  - assert:
+    - verify(sig, setup_data, pkS) = true
+  - send: []
+- role: Sender_first_stream
+  operations:
+  - generate_nonces:
+    - ~k2
+    - ~m1
+    - ~tag1
+  - compute:
+    - commitment2 = h(~k2)
+    - d1 = <~m1, h(~k2)>
+    - mac1 = mac(<~m1, h(~k2)>, k1)
+  - send:
+    - d1
+    - mac1
+    - ~tag1
+- role: Receiver_cache_first_stream
+  operations:
+  - receive:
+    - <m1, commitment2>
+    - mac1
+    - tag1
+  - send: []
+- role: Sender_second_stream
+  operations:
+  - generate_nonces:
+    - ~k3
+    - ~m2
+  - compute:
+    - commitment3 = h(~k3)
+    - d2 = <~m2, h(~k3), k1>
+    - mac2 = mac(<~m2, h(~k3), k1>, k2)
+  - send:
+    - d2
+    - mac2
+- role: Receiver_verify_first_payload
+  operations:
+  - receive:
+    - <m2, commitment3, k1>
+    - mac2
+  - compute:
+    - d1 = <m1, commitment2>
+  - send: <END>

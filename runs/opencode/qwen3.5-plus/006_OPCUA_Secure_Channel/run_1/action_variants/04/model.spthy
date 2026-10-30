@@ -1,0 +1,87 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: signing, hashing
+
+// Long-term key facts
+rule Ltk_Client:
+  [ Fr(~skC) ]
+  --[ Create('Client', ~skC) ]->
+  [ !Ltk('Client', ~skC), !Pk('Client', pk(~skC)) ]
+
+rule Ltk_Server:
+  [ Fr(~skS) ]
+  --[ Create('Server', ~skS) ]->
+  [ !Ltk('Server', ~skS), !Pk('Server', pk(~skS)) ]
+
+// Rule 1: Server sends GetEndpointsResponse
+rule Server_GetEndpoints:
+  [ !Ltk('Server', ~skS), !Pk('Server', pkS) ]
+  --[ Test1(), Running('Server', 'Client', <'GERes', pkS>) ]->
+  [ Out(< 'GERes', pkS, 'Sign', 'policy', 'userPolicy', 'OPCUA-1.04' >) ]
+
+// Rule 2: Client sends OpenSecureChannelRequest
+rule Client_OpenChannel:
+  [ !Ltk('Client', ~skC), !Pk('Client', pkC),
+    Fr(~Nc),
+    In(< 'GERes', pkS, 'Sign', 'policy', 'userPolicy', 'OPCUA-1.04' >) ]
+  --[ Test2(), Running('Client', 'Server', <'OSCReq', pkC, pkS, ~Nc>) ]->
+  [ St_C('Client', pkS, ~Nc),
+    Out(< pkC, < 'OSCReq', pkC, ~Nc >, sign(h(< 'OSCReq', pkC, ~Nc >), ~skC), h(< 'OSCReq', pkC, ~Nc >) >) ]
+
+// Rule 3: Server responds with OpenSecureChannelResponse
+rule Server_OpenChannel_Resp:
+  [ !Ltk('Server', ~skS), !Pk('Server', pkS),
+    Fr(~Ns),
+    In(< pkC, < 'OSCReq', pkC, nC >, sigC, h(< 'OSCReq', pkC, nC >) >) ]
+  --[ Test3(), 
+      Running('Server', 'Client', <'OSCReq', pkS, pkC, nC>),
+      Running('Server', 'Client', <'OSCRes', pkS, pkC, nC, ~Ns>),
+      Eq(verify(sigC, h(< 'OSCReq', pkC, nC >), pkC), true) ]->
+  [ St_S('Server', pkC, nC, ~Ns),
+    Out(< pkS, < 'OSCRes', ~Ns, 'token', 'lifetime' >,
+        sign(h(< 'OSCRes', ~Ns, 'token', 'lifetime' >), ~skS),
+        h(< 'OSCRes', ~Ns, 'token', 'lifetime' >) >) ]
+
+// Rule 4: Client verifies and completes
+rule Client_Verify:
+  [ St_C('Client', pkS, nC),
+    In(< pkS, < 'OSCRes', nS, token, lifetime >, sigS, h(< 'OSCRes', nS, token, lifetime >) >) ]
+  --[ Test4(),
+      Eq(verify(sigS, h(< 'OSCRes', nS, token, lifetime >), pkS), true),
+      Commit('Client', 'Server', <nC, nS>),
+      Honest('Client'), Honest('Server') ]->
+  [ ]
+
+// Long-term key reveal rule
+rule Ltk_Reveal:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+// Safety lemmas
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b t nS #i.
+     Commit(a, b, <t, nS>) @ i
+   ==>
+       (Ex #j x y. Running(b, a, <x, y, t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b nC t #i.
+     Commit(a, b, <nC, t>) @ i
+   ==>
+       (Ex #j w x y. Running(b, a, <w, x, y, t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,153 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 29, 2026                                          FAMED
+                                                          April 27, 2026
+
+
+   Mutual Identity-Signature Authentication, Self-Bound Reply
+                       draft-famed-h1-sbr-00
+
+
+Abstract
+
+   This document specifies a two-message mutual authentication
+   handshake in which the Responder's reply is a signature on
+   the Responder's own identity alone under the Responder's
+   long-term private key.  The Initiator validates the
+   Responder's reply against the Responder's public key and
+   accepts the run on a successful check.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . .  2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . .  3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . .  3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . .  4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . .  4
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . .  5
+
+
+1.  Introduction
+
+   This document specifies a two-message mutual authentication
+   handshake.  The Initiator signs the ordered pair of
+   participant identities under its own private key and
+   transmits the resulting signature to the Responder.  The
+   Responder validates the Initiator's signature and replies
+   with a signature on its own identity, signed under its own
+   private key.  The Initiator validates the Responder's reply
+   against the Responder's public key.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted
+   as described in BCP 14 [RFC2119] [RFC8174] when, and only
+   when, they appear in all capitals, as shown here.
+
+   I             The Initiator party.
+   R             The Responder party.
+   ltkI, ltkR    The long-term signing private keys of I and R.
+   pk(x)         The long-term signing public key derived from
+                 x.
+   sign(m, sk)   Digital signature of message m under signing
+                 key sk.
+
+3.  Protocol Overview
+
+       Initiator                                     Responder
+       ---------                                     ---------
+       construct mI = sign(<I, R>, ltkI)
+
+                            ----- mI ----->
+
+                                          verify(mI, <I, R>,
+                                                 pk(ltkI))
+                                          construct
+                                            mR = sign(R, ltkR)
+
+                            <----- mR -----
+
+       verify(mR, R, pk(ltkR))
+       accept the run.
+
+4.  Message Format
+
+   InitiatorAuthMessage carries sign(<I, R>, ltkI).
+
+   ResponderAuthMessage carries sign(R, ltkR), where R is the
+   Responder's identifier.
+
+5.  Processing Rules
+
+   The Initiator transmits mI = sign(<I, R>, ltkI).  The
+   Responder verifies the Initiator's signature, computes
+   mR = sign(R, ltkR), and emits mR.  The Initiator verifies
+   that mR is a valid signature on R under pk(ltkR) and
+   accepts the run.
+
+6.  Security Considerations
+
+   The handshake provides only weak evidence of Responder
+   participation in the run.  The Responder's reply is a
+   signature on the Responder's own identity under the
+   Responder's long-term private key; the same value is
+   produced by the Responder in any session, regardless of
+   the corresponding Initiator identity.  An adversary that
+   observes a single instance of the Responder's reply, even
+   from an unrelated session with a different Initiator, can
+   deliver that value to the present Initiator and elicit
+   acceptance without participation by the Responder in this
+   particular run.
+
+   Implementations that require any agreement on participant
+   identities beyond the Responder's own identity, or any
+   session-level parameter binding, MUST NOT rely on this
+   handshake.
+
+   The protocol does not provide replay protection at the
+   Initiator side: a single Responder reply may be reused
+   across an unbounded number of Initiator runs.  Compromise
+   of either party's long-term signing key allows the
+   adversary to forge signatures under that key.  The
+   protocol does not provide forward secrecy.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC8032]  Josefsson, S. and I. Liusvaara, "Edwards-Curve
+              Digital Signature Algorithm (EdDSA)", RFC 8032,
+              January 2017.
+
+
+8. Analysis Targets
+
+8.1 Weak Agreement
+8.2 Non-injective Agreement
+8.3 Injective Agreement

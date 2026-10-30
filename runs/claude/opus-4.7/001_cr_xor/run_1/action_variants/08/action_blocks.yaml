@@ -1,0 +1,24 @@
+- role: initiator
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+    - ~na
+- role: responder
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR ~k XOR ~nb)
+    - ~nb
+- role: initiator2
+  operations:
+  - receive:
+    - m
+    - nb
+  - assert:
+    - h(~na XOR ~k XOR nb) = m
+  - send: <END>

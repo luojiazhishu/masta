@@ -1,0 +1,115 @@
+theory OPCUA_Secure_Channel_V11
+begin
+
+builtins: signing, hashing
+
+rule genServerKey:
+    [ Fr(~x) ]
+    --[ ServerKey($S, pk(~x)) ]->
+    [ !Ltk($S, ~x), !Pk($S, pk(~x)), Out(<$S, pk(~x)>) ]
+
+rule genClientKey:
+    [ Fr(~x) ]
+    --[ ClientKey($C, pk(~x)) ]->
+    [ !Ltk($C, ~x), !Pk($C, pk(~x)), Out(<$C, pk(~x)>) ]
+
+rule LtkReveal:
+    [ !Ltk($A, ~lk) ]
+    --[ LtkReveal($A) ]->
+    [ Out(~lk) ]
+
+/* Block 1: Client sends GetEndpointsRequest */
+rule Init:
+let
+    m = 'GEReq'
+in
+    [ ]
+    --[ Test1() ]->
+    [ Out(m) ]
+
+/* Block 2: Server responds with GetEndpointsResponse */
+rule Resp_Init:
+let
+    m = 'GEReq'
+    m2 = <'GERes', pk(~x), 'Sign', $SP, $UP>
+in
+    [ In(m), !Ltk($S, ~x) ]
+    --[ Create($S, $S), Test2() ]->
+    [ Out(m2) ]
+
+/* Block 3: Client sends OpenSecureChannelRequest */
+rule Resp_Client:
+let
+    m = <'GERes', keyS, 'Sign', sp, up>
+    m2 = <'OSCReq', pk(~x), ~nc>
+in
+    [ In(m), !Ltk($C, ~x), Fr(~nc) ]
+    --[ Create($C, ~nc),
+        Running($C, $S, <'I', ~nc>),
+        Honest($C), Honest($S),
+        Test3() ]->
+    [ Out(<pk(~x), m2, sign(h(m2), ~x), h(m2)>),
+      St_Client($C, $S, ~nc, ~x, keyS) ]
+
+/* Block 4: Server verifies request and sends OpenSecureChannelResponse */
+rule Resp_Server:
+let
+    m = <'OSCReq', keyC, nc>
+    m2 = <'OSCRes', ~ns, $ST, $TTL, 'channelV1'>
+in
+    [ !Ltk($S, ~x), In(<keyC, m, signature, h(m)>), Fr(~ns) ]
+    --[ Eq(verify(signature, h(<'OSCReq', keyC, nc>), keyC), true),
+        Running($S, $C, <'R', ~ns>),
+        Commit($S, $C, <'I', nc>),
+        Secret($C, $S, h(<nc, ~ns>)),
+        Honest($C), Honest($S),
+        Test4() ]->
+    [ Out(<pk(~x), m2, sign(h(m2), ~x), h(m2)>) ]
+
+/* Block 5: Client verifies response and completes */
+rule Auth_Client:
+let
+    m = <keys, 'OSCRes', ns, st, ttl, 'channelV1'>
+in
+    [ In(<m, signature>) ]
+    --[ Eq(verify(signature, h(<'OSCRes', ns, st, ttl, 'channelV1'>), keys), true),
+        Commit($C, $S, <'R', ns>),
+        Honest($C), Honest($S),
+        Test5() ]->
+    [ ]
+
+restriction Equality:
+    "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+// category: secrecy
+lemma key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma nc_auth:
+  "All a b nc #i.
+     Commit(a, b, <'I', nc>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'I', nc>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma ns_auth:
+  "All a b ns #i.
+     Commit(a, b, <'R', ns>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'R', ns>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

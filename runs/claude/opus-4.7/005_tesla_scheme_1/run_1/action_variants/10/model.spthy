@@ -1,0 +1,118 @@
+theory TeslaScheme1
+begin
+
+builtins: signing
+
+functions: f/1, bar/1, mac/2
+
+rule Register_Ltk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, ~sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~sk) ]
+
+// Action Block 1: Receiver generates nonce and sends SetupRequest (Msg 0a)
+rule R_SetupRequest:
+  [ Fr(~n_R),
+    !Pk($S, pk_S) ]
+  --[ Test1(), Create($R, ~n_R) ]->
+  [ Out(<$R, $S, ~n_R>),
+    St_R_1($R, $S, ~n_R, pk_S) ]
+
+// Action Block 2: Sender receives SetupRequest, logs bar(n_R), sends SetupResponse (Msg 0b)
+rule S_SetupResponse:
+  [ In(<$R, $S, n_R>),
+    !Ltk($S, ~sk_S),
+    Fr(~k_1), Fr(~k_2) ]
+  --[ Test2(),
+      LogEntry($S, bar(n_R)),
+      Create($S, <n_R, f(~k_1)>),
+      Running($S, $R, <'sender', n_R, f(~k_1)>) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~sk_S)>),
+    St_S_1($S, $R, n_R, ~k_1, ~k_2) ]
+
+// Action Block 3: Receiver verifies SetupResponse
+rule R_VerifySetup:
+  [ St_R_1($R, $S, ~n_R, pk_S),
+    In(<$S, $R, f_k1, sig>) ]
+  --[ Test3(),
+      Eq(verify(sig, <f_k1, ~n_R>, pk_S), true) ]->
+  [ St_R_2($R, $S, ~n_R, f_k1) ]
+
+// Action Block 4: Sender sends Msg 1 (D_1 = m_1, f(k_2); MAC(k_1, D_1))
+rule S_SendMsg1:
+  [ St_S_1($S, $R, n_R, ~k_1, ~k_2),
+    Fr(~m_1) ]
+  --[ Test4(),
+      Running($S, $R, <'broadcast', n_R, <~m_1, f(~k_2)>, ~k_1>) ]->
+  [ Out(<<~m_1, f(~k_2)>, mac(~k_1, <~m_1, f(~k_2)>)>),
+    St_S_2($S, $R, n_R, ~k_1, ~k_2, ~m_1) ]
+
+// Action Block 5: Receiver buffers Msg 1 (cannot verify without k_1)
+rule R_BufferMsg1:
+  [ St_R_2($R, $S, ~n_R, f_k1),
+    In(<d1, mac1>) ]
+  --[ Test5(), Buffered($R, ~n_R) ]->
+  [ St_R_3($R, $S, ~n_R, f_k1, d1, mac1) ]
+
+// Action Block 6: Sender sends Msg 2 disclosing k_1 (D_2 = m_2, f(k_3), k_1; MAC(k_2, D_2))
+rule S_SendMsg2:
+  [ St_S_2($S, $R, n_R, ~k_1, ~k_2, ~m_1),
+    Fr(~m_2), Fr(~k_3) ]
+  --[ Test6(), KeyDisclose($S, ~k_1) ]->
+  [ Out(<<~m_2, f(~k_3), ~k_1>, mac(~k_2, <~m_2, f(~k_3), ~k_1>)>),
+    St_S_3($S, $R, ~k_1, ~m_1) ]
+
+// Action Block 7: Receiver verifies Msg 1 using k_1 disclosed in Msg 2
+rule R_VerifyMsg1:
+  [ St_R_3($R, $S, ~n_R, f_k1, d1, mac1),
+    In(<<m_2, f_k3, k_1>, mac2>) ]
+  --[ Test7(),
+      Eq(f(k_1), f_k1),
+      Eq(mac(k_1, d1), mac1),
+      Commit($R, $S, <'broadcast', ~n_R, d1, k_1>),
+      Honest($R), Honest($S) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+// Models the receiver time-lock: R only accepts a message whose key was not yet
+// disclosed at the time it was buffered, identified by the session nonce n_R.
+restriction tesla_timelock:
+  "All R S n_R k1 d1 #tc.
+     Commit(R, S, <'broadcast', n_R, d1, k1>) @ tc
+   ==> Ex S2 #tb #td.
+         Buffered(R, n_R) @ tb &
+         KeyDisclose(S2, k1) @ td &
+         #tb < #td"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5
+     & #t5 < #t6 & #t6 < #t7"
+
+end

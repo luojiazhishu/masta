@@ -1,0 +1,83 @@
+theory BSKTI begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Register_Server:
+  [ Fr(~ltk) ]
+  --[ Create($S, ~ltk) ]->
+  [ !Ltk($S, ~ltk)
+  , !Pk($S, pk(~ltk))
+  , Out(pk(~ltk))
+  ]
+
+rule Reveal_Server:
+  [ !Ltk(S, ltk) ]
+  --[ Reveal(S), LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Client_Initiates_KeyTransport:
+  [ Fr(~k)
+  , !Pk(S, pkS)
+  ]
+  --[ Test1()
+    , Secret(~k)
+    , Honest(S)
+    ]->
+  [ Out(<aenc(~k, pkS), 'init'>)
+  , ClientState('C', S, ~k)
+  ]
+
+rule Server_Processes_KeyTransport:
+  [ In(<aenc(k, pk(ltk)), 'init'>)
+  , !Ltk(S, ltk)
+  ]
+  --[ Test2()
+    , Running(S, 'C', k)
+    , Honest(S)
+    ]->
+  [ Out(h(k)) ]
+
+rule Client_Verifies_KeyConfirm:
+  [ ClientState(C, S, k)
+  , In(h(k))
+  ]
+  --[ Test3()
+    , Commit(C, S, k)
+    , Honest(S)
+    ]->
+  [ ClientAccept(C, S, k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All k #i.
+     Secret(k) @ #i
+   ==>
+     not (Ex #j. K(k) @ #j)
+     | (Ex S #r. Reveal(S) @ #r & Honest(S) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_key:
+  "All c s k #i.
+     Commit(c, s, k) @ #i
+   ==>
+     (Ex #j. Running(s, c, k) @ #j)
+     | (Ex S #r. Reveal(S) @ #r & Honest(S) @ #i)"
+
+// category: injective_agreement
+lemma injective_agreement_key:
+  "All c s k #i.
+     Commit(c, s, k) @ #i
+   ==>
+     ( (Ex #j. Running(s, c, k) @ #j
+          & #j < #i
+          & not (Ex c2 s2 #i2. Commit(c2, s2, k) @ #i2
+                               & not (#i2 = #i))) )
+     | (Ex S #r. Reveal(S) @ #r & Honest(S) @ #i)"
+
+end

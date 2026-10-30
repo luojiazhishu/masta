@@ -1,0 +1,27 @@
+- role: Reader
+  operations:
+    - generate_nonces:
+        - ~r0
+    - send:
+        - ~r0
+- role: Tag
+  operations:
+    - receive:
+        - r0
+    - generate_nonces:
+        - ~r1
+    - send:
+        - ~r1
+        - h(r0 XOR ~r1 XOR ~k)
+- role: Reader
+  operations:
+    - receive:
+        - r1
+        - h(~r0 XOR r1 XOR ~k)
+    - send:
+        - h(h(~r0 XOR r1 XOR ~k) XOR ~k XOR ~r0 XOR 'CONFIRM')
+- role: Tag
+  operations:
+    - receive:
+        - h(h(r0 XOR ~r1 XOR ~k) XOR ~k XOR r0 XOR 'CONFIRM')
+    - send: "<END>"

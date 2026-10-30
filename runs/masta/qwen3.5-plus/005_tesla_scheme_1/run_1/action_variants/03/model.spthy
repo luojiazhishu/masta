@@ -1,0 +1,88 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: mac/2, f/1
+
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1(), Honest($R) ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+rule RuleStep2:
+  [ In(<$R, $S, ~n_R>)
+  , Fr(~k_1)
+  , Fr(~SK_S)
+  ]
+  --[ Test2(), Running($S, $R, <f(~k_1), ~n_R>), Honest($S) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), ~n_R>, ~SK_S)>)
+  , !Ltk($S, ~SK_S)
+  , !Commitment($S, f(~k_1), ~k_1)
+  ]
+
+rule RuleStep2_Receiver:
+  [ In(<$S, $R, commitment, sig>)
+  , Fr(~n_R)
+  ]
+  --[ Test2_R(), Commit($R, $S, <commitment, ~n_R>), Honest($R) ]->
+  [ !AcceptedCommitment($R, commitment) ]
+
+rule RuleStep3:
+  [ !Commitment($S, f(~k_1), ~k_1)
+  , Fr(~k_2)
+  , Fr(~m_1)
+  , Fr(~r_1)
+  ]
+  --[ Test3(), Running($S, $R, ~m_1), Commit($R, $S, ~m_1), Secret($S, $R, ~k_1), Honest($S) ]->
+  [ Out(< <~m_1, f(~k_2)>, mac(~k_1, <~m_1, f(~k_2)>), ~r_1 >)
+  , !KeyChain($S, ~k_1, ~k_2)
+  ]
+
+rule RuleStep4:
+  [ !KeyChain($S, ~k_prev, ~k_curr)
+  , Fr(~k_next)
+  , Fr(~m_n)
+  ]
+  --[ Test4(), Running($S, $R, ~m_n), Commit($R, $S, ~m_n) ]->
+  [ Out(< <~m_n, f(~k_next), ~k_prev>, mac(~k_curr, <~m_n, f(~k_next), ~k_prev>) >)
+  , !KeyChain($S, ~k_curr, ~k_next)
+  , !EndMarker()
+  ]
+
+rule LtkReveal:
+  [ !Ltk($S, ~SK_S) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~SK_S) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_broadcast_authenticity:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+      ( (Ex #j. Running(b, a, t) @ j
+            & j < i
+            & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                               & not (#i2 = #i))) )
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_mac_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_commitment_agreement:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+      (Ex #j. Running(b, a, t) @ j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

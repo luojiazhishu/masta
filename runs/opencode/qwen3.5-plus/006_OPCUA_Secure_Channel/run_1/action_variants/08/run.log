@@ -1,0 +1,9 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.coding_agent_model --document data/dataset/006_OPCUA_Secure_Channel/action_variants/08/document.txt --output-dir runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/action_variants/08 --tool opencode --model qwen3.5-plus --skills-source /root/project/llm-tamarin/masta/experiments/coding_agent/skills --agent-timeout 3600 --label 006_OPCUA_Secure_Channel run_1 action_variants/08 --provider openai --api-model qwen3.5-plus --api-key <REDACTED> --base-url https://api.gpt.ge/v1
+
+==== MASTA coding_agent_model ====
+ document:   /root/project/llm-tamarin/masta/data/dataset/006_OPCUA_Secure_Channel/action_variants/08/document.txt
+ output_dir: /root/project/llm-tamarin/masta/runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/action_variants/08
+ tool:       opencode
+ provider:   openai / qwen3.5-plus @ https://api.gpt.ge/v1
+ label:      006_OPCUA_Secure_Channel run_1 action_variants/08
+[coding_agent] model written to: /root/project/llm-tamarin/masta/runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/action_variants/08/model.spthy

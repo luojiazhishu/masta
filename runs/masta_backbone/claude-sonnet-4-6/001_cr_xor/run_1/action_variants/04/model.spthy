@@ -1,0 +1,80 @@
+theory CRXORIAudit
+begin
+
+builtins: hashing, xor
+
+functions: com/2
+
+rule Generate_key_pair:
+  [ Fr(~k) ]
+  -->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule RuleStep1:
+  let tag_audit_I = com(~na, ~na)
+  in
+  [ Fr(~na)
+  , Fr(~tid)
+  ]
+  --[ Test1(), Create($I, ~tid) ]-> 
+  [ Out(~na)
+  , Init_1(~tid, $I, $R, ~na)
+  ]
+
+rule RuleStep2:
+  [ In(na)
+  , Fr(~nb)
+  , Fr(~tid)
+  , !SharedKey($I, $R, k)
+  ]
+  --[ Test2(), Create($R, ~tid), Running($R, $I, <'I', 'R', h(na XOR k XOR ~nb)>) ]->  
+  [ Out(<h(na XOR k XOR ~nb), ~nb>)
+  , Resp_1(~tid, $I, $R, na, ~nb, k)
+  ]
+
+rule RuleStep3:
+  let t_prime = h(na XOR k XOR nb)
+  in
+  [ Init_1(tid, $I, $R, na)
+  , In(<tag, nb>)
+  , !SharedKey($I, $R, k)
+  ]
+  --[ Test3()
+    , Eq(t_prime, tag)
+    , Commit($I, $R, <'I', 'R', tag>)
+    , Honest($I)
+    , Honest($R)
+    ]-> 
+  [ Out('<END>') ]
+
+rule KeyReveal:
+  [ !SharedKey($I, $R, k) ]
+  --[ Reveal($I) ]->  
+  [ Out(k) ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @#i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_aliveness_of_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. Reveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement_on_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. Reveal(X) @ r & Honest(X) @ i)"
+
+end

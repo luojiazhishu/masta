@@ -1,0 +1,45 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+// PKI Setup: Generate long-term keys for Sender S
+rule Setup_PKI:
+  [ Fr(~sk_s) ]
+  --[ SetupPKI() ]->
+  [ !Ltk('S', ~sk_s), !Pk('S', pk(~sk_s)), Out(pk(~sk_s)) ]
+
+// Step 1: Receiver R sends SetupRequest (duplicated)
+// Msg 0a: R -> S: <R, S, n_R, R, S, n_R>
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), SendReq(~tid_R, 'R', 'S', ~n_R) ]->
+  [ Out(< 'R', 'S', ~n_R, 'R', 'S', ~n_R >), !StateR_1(~tid_R, 'R', 'S', ~n_R) ]
+
+// Step 2: Sender S receives SetupRequest, verifies duplication, sends SetupResponse
+// Msg 0b: S -> R: <S, R, f(k_1), sign(<f(k_1), n_R>, sk_s)>
+rule RuleStep2:
+  [ In(< R_id, S_id, n_R, R_id2, S_id2, n_R2 >),
+    !Ltk('S', ~sk_s),
+    Fr(~k_1),
+    Fr(~tid_S) ]
+  let
+    f_k1 = f(~k_1)
+    msg_to_sign = <f_k1, n_R>
+    sig = sign(msg_to_sign, ~sk_s)
+  in
+  [ R_id = R_id2,
+    S_id = S_id2,
+    n_R = n_R2 ]
+  --[ Test2(), SendResp(~tid_S, 'S', R_id, f_k1, sig) ]->
+  [ Out(< 'S', R_id, f_k1, sig >),
+    !StateS_1(~tid_S, 'S', R_id, ~k_1, f_k1, n_R) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

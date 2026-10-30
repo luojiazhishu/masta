@@ -1,0 +1,63 @@
+theory CR_XOR_RMK begin
+
+builtins: hashing, xor
+
+// Pre-shared key - established out of band
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ Create('R', ~k) ]->
+  [ !SharedKey(~k) ]
+
+// RuleStep1: Initiator generates fresh nonce na and sends it
+rule RuleStep1:
+  [ Fr(~na), !SharedKey(~k) ]
+  --[ Test1(), Honest('I') ]->
+  [ Out(~na), !I_State(~na, ~k) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag, sends response
+rule RuleStep2:
+  let
+    xor_input = ~na XOR ~k XOR ~nb
+    t = h(xor_input)
+  in
+  [ In(~na), Fr(~nb), !SharedKey(~k) ]
+  --[ Test2(), Running('R', 'I', <~na, ~nb>), Honest('R') ]->
+  [ Out(<t, ~nb, 'Resp'>) ]
+
+// RuleStep3: Initiator receives response, verifies marker and tag
+rule RuleStep3:
+  let
+    xor_input = ~na XOR ~k XOR ~nb
+    t_prime = h(xor_input)
+  in
+  [ In(<t_prime, ~nb, 'Resp'>), !I_State(~na, ~k) ]
+  --[ Test3(), Commit('I', 'R', <~na, ~nb>) ]->
+  [ ]
+
+// LtkReveal rule for long-term key compromise
+rule LtkReveal:
+  [ !SharedKey(~k) ]
+  --[ LtkReveal('R') ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_aliveness_of_the_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement_on_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,95 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+// Server long-term key setup
+rule Setup_Server:
+  [ Fr(~ltkS) ]
+  --[ Setup('S') ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), !ServerCert($S, pk(~ltkS)) ]
+
+// Client long-term key setup  
+rule Setup_Client:
+  [ Fr(~ltkC) ]
+  --[ Setup('C') ]->
+  [ !Ltk($C, ~ltkC), !Pk($C, pk(~ltkC)), !ClientCert($C, pk(~ltkC)) ]
+
+// Long-term key reveal (for threat model)
+rule LtkReveal:
+  [ !Ltk(X, ltk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(ltk) ]
+
+// Action Block 1: Client sends GetEndpointsRequest
+rule Client_GetEndpoints:
+  [ !Pk($S, pkS), !ClientCert($C, certC), Fr(~cid) ]
+  --[ Test1() ]->
+  [ Out('GEReq'), St_C1($C, $S, pkS, certC, ~cid) ]
+
+// Action Block 2: Server responds with GetEndpointsResponse
+rule Server_GetEndpoints_Response:
+  [ In('GEReq'), !Ltk($S, ~ltkS), !ServerCert($S, certS) ]
+  --[ Test2() ]->
+  [ Out(<'GERes', certS, 'Sign', 'OPCUA-Sign', 'Anonymous'>), St_S1($S, ~ltkS) ]
+
+// Action Block 3: Client sends OpenSecureChannelRequest (signed)
+rule Client_OpenSecureChannel:
+  [ St_C1($C, $S, pkS, certC, ~cid), In(<'GERes', serverCert, 'Sign', policy, tokenPolicy>),
+    !Ltk($C, ~ltkC), !Pk($C, pkC), Fr(~nC), Fr(~reqId) ]
+  --[ Test3(), Running($C, $S, <'client', ~nC, serverCert>) ]->
+  [ Out(<'ClientOSCReq', certC, pkC, ~nC, sign(<'OSCReq', pkC, ~nC>, ~ltkC), ~reqId>),
+    St_C2($C, $S, pkS, certC, serverCert, ~nC, ~reqId) ]
+
+// Action Block 4: Server responds with OpenSecureChannelResponse (signed)
+rule Server_OpenSecureChannel_Response:
+  [ St_S1($S, ~ltkS), !Ltk($S, ~ltkS), !Pk($S, pkS), !ServerCert($S, certS),
+    In(<'ClientOSCReq', clientCert, pkC, nC, reqSig, reqId>),
+    Fr(~nS), Fr(~ST) ]
+  --[ Test4(), Running($S, $C, <'server', nC, ~nS, ~ST>) ]->
+  [ Out(<'ServerOSCRes', certS, ~nS, ~ST, '3600', sign(<'OSCRes', ~nS, ~ST, '3600'>, ~ltkS)>),
+    St_S2($S, $C, clientCert, pkC, nC, ~nS, ~ST) ]
+
+// Action Block 5: Client receives and verifies response
+rule Client_Verify_Response:
+  [ St_C2($C, $S, pkS, certC, serverCert, ~nC, ~reqId),
+    In(<'ServerOSCRes', serverCert, nS, ST, TTL, respSig>) ]
+  --[ Test5(), Commit($C, $S, <'client', ~nC, nS, ST>),
+      Secret($C, $S, <~nC, nS>) ]->
+  [ St_C3($C, $S, ST, TTL, <~nC, nS>) ]
+
+// Security property: Secrecy of channel binding
+// category: secrecy
+lemma secrecy_channel_binding:
+  "All C S cb #i.
+     Secret(C, S, cb) @ i
+   ==>
+       not (Ex #j. K(cb) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Security property: Non-injective agreement on client nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All C S nC nS ST #i.
+     Commit(C, S, <'client', nC, nS, ST>) @ i
+   ==>
+       (Ex #j. Running(S, C, <'server', nC, nS, ST>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Security property: Non-injective agreement on server nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All C S nC nS ST #i.
+     Commit(C, S, <'client', nC, nS, ST>) @ i
+   ==>
+       (Ex #j. Running(S, C, <'server', nC, nS, ST>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Executable lemma: witness complete protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

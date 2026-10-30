@@ -1,0 +1,14 @@
+theory SymmetricKeyEncapsulation begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  [ Fr(~sec), Fr(~pub) ]
+  --[ Test1() ]->
+  [ Out(<senc(<~sec, ~pub>, $k), 'pmd'>) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+end

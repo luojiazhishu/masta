@@ -1,0 +1,60 @@
+theory CR_XOR_NoVfy
+begin
+
+builtins: hashing, xor
+
+rule Setup_Ltk:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Setup_Pk:
+  [ Fr(~id) ]
+  --[ ]->
+  [ !Pk(~id) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !Ltk(~k), !Pk(I), !Pk(R) ]
+  --[ Test1(), Create(I, ~na), Running(I, R, <'init', ~na>), Honest(I) ]->
+  [ Out(~na), St_I_1(I, R, ~na, ~k) ]
+
+rule Responder_Respond:
+  [ In(na), Fr(~nb), !Ltk(~k), !Pk(R), !Pk(I) ]
+  --[ Test2(), Create(R, ~nb), Running(R, I, <'resp', na, ~nb>), Honest(R) ]->
+  [ Out(<h(na XOR ~k XOR ~nb), ~nb>), St_R_1(R, I, na, ~nb, ~k) ]
+
+rule Initiator_Accept:
+  [ St_I_1(I, R, ~na, ~k), In(<tag, nb>), !Pk(I) ]
+  --[ Test3(), Commit(I, R, <'init', ~na, nb, tag>), Honest(I) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All i r t #i.
+       Commit(i, r, t) @ i
+     & Honest(i) @ i
+     & not (Ex #r. LtkReveal(r) @ r)
+   ==>
+       (Ex id #j. Create(r, id) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All i r t #i.
+       Commit(i, r, t) @ i
+     & Honest(i) @ i
+     & not (Ex #r. LtkReveal(r) @ r)
+   ==>
+       (Ex #j. Running(r, i, t) @ j)"
+
+end

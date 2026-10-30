@@ -1,0 +1,40 @@
+theory SymmetricKeyEncapsulationPublicTag begin
+
+builtins: symmetric-encryption
+
+rule Register_Shared_Key:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Initiator_Send:
+  let msg = senc(<~sec, ~pub>, k) in
+  [ Fr(~sec), Fr(~pub), Fr(~tag), !SharedKey(I, R, k) ]
+  --[ Test1(), Create(I, ~sec), Secret(I, R, ~sec), Honest(I), Honest(R), Running(I, R, <'initiator', ~sec, ~pub, ~tag>) ]->
+  [ Out(<msg, ~tag>), Out(~pub) ]
+
+rule Responder_Receive:
+  [ !SharedKey(I, R, k), In(<senc(<sec, pub>, k), tag>) ]
+  --[ Test2(), Create(R, sec), Commit(R, I, <'responder', sec, pub, tag>) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

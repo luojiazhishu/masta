@@ -1,0 +1,91 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Setup_Key:
+  [ Fr(~k) ]
+--[ Secret($R, $T, ~k), Honest($R), Honest($T) ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+rule Reveal_Key:
+  [ !SharedKey($R, $T, ~k) ]
+--[ LtkReveal($R), LtkReveal($T) ]->
+  [ Out(~k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !SharedKey($R, $T, ~k) ]
+--[ Test1(), Create($R, ~r0) ]->
+  [ Out(~r0), St_R_1($R, $T, ~k, ~r0) ]
+
+rule Tag_Respond:
+  let tag_mac = h(r0 XOR ~r1 XOR ~k)
+  in
+  [ !SharedKey($R, $T, ~k), In(r0), Fr(~r1), Fr(~r1aux) ]
+--[ Test2(),
+    Create($T, ~r1),
+    Running($T, $R, <'Tag', r0, ~r1>)
+  ]->
+  [ Out(<~r1, tag_mac, ~r1aux>),
+    St_T_1($R, $T, ~k, r0, ~r1, tag_mac) ]
+
+rule Reader_Finish:
+  let expected = h(~r0 XOR r1 XOR ~k)
+      reader_mac = h(expected XOR ~k XOR ~r0)
+  in
+  [ St_R_1($R, $T, ~k, ~r0), In(<r1, tag_mac, r1aux>) ]
+--[ Test3(),
+    Eq(tag_mac, expected),
+    Running($R, $T, <'Reader', ~r0, r1>),
+    Commit($R, $T, <'Tag', ~r0, r1>),
+    Honest($R), Honest($T),
+    Secret($R, $T, ~k)
+  ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Finish:
+  let expected = h(tag_mac XOR ~k XOR r0)
+  in
+  [ St_T_1($R, $T, ~k, r0, ~r1, tag_mac), In(reader_mac) ]
+--[ Test4(),
+    Eq(reader_mac, expected),
+    Commit($T, $R, <'Reader', r0, ~r1>),
+    Honest($R), Honest($T),
+    Secret($T, $R, ~k)
+  ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'Reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'Reader', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'Tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'Tag', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

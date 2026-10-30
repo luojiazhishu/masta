@@ -1,0 +1,76 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+// Persistent fact for long-term key
+rule Setup:
+  [ Fr(~k), Fr(~id) ]
+  --[ Create(~id) ]->
+  [ !Ltk(~id, ~k), !Pk(~id) ]
+
+// Action Block 1: Reader sends challenge r0
+rule Reader_Start:
+  [ Fr(~r0), !Pk(id) ]
+  --[ Test1(), Running(id, '$R', <'reader', ~r0>) ]->
+  [ St_R(id, ~r0), Out(~r0) ]
+
+// Action Block 2: Tag responds with r1 and tag_mac
+rule Tag_Respond:
+  [ In(r0), !Ltk(id, k), Fr(~r1) ]
+  --[ Test2(), Running('$R', id, <'tag', r0, ~r1>), Secret(id, '$R', k) ]->
+  [ St_T(id, r0, ~r1, k), Out(<~r1, h(r0 XOR ~r1 XOR k)>) ]
+
+// Action Block 3: Reader verifies tag_mac and sends confirmation
+rule Reader_Verify:
+  [ St_R(id, r0), In(<r1, tag_mac>), !Ltk(id, k) ]
+  --[ Test3(), Commit('$R', id, <'reader', r0, r1>), Honest('$R') ]->
+  [ Out(h(tag_mac XOR k XOR r0)) ]
+
+// Action Block 4: Tag verifies reader_mac
+rule Tag_Verify:
+  [ St_T(id, r0, r1, k), In(reader_mac), !Ltk(id, k) ]
+  --[ Test4(), Commit(id, '$R', <'tag', r0, r1>), Honest(id) ]->
+  [ ]
+
+// Adversary can reveal long-term key
+rule Ltk_Reveal:
+  [ !Ltk(id, k) ]
+  --[ LtkReveal(id) ]->
+  [ Out(k) ]
+
+// Secrecy of the long-term key
+// category: secrecy
+lemma secrecy_ltk:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma: witness one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,97 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+    A Symmetric-Key Encapsulation Profile with Public Tag
+                  draft-famed-sk-pmd-v02-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the on-wire transmission consists of a
+   ciphertext under the shared key followed by a public tag value
+   $tag chosen by the initiator.  The ciphertext carries the secret
+   and public payloads; the public tag is exposed in cleartext and
+   is intended for deployment-level routing.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+1.  Introduction
+
+   This profile follows the structure of the base symmetric-key
+   encapsulation, with the addition of a public tag value $tag
+   transmitted alongside the ciphertext.  The tag is intended to
+   carry deployment-level metadata such as a tenant identifier or
+   a routing key; it is not bound to any cryptographic computation.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174].
+
+      $tag      a public deployment-level value selected by the
+                initiator at the time of transmission.
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  <senc(<sec, pub>, k), $tag>                   |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+4.  Message Format
+
+   The on-wire artifact is
+
+      <msg, $tag>
+
+   where msg = senc(<sec, pub>, k).  The component $tag is a
+   public value carried in cleartext.
+
+5.  Processing Rules
+
+   The initiator selects $tag according to deployment policy,
+   draws sec and pub, forms msg, and transmits the pair
+   <msg, $tag>.  The responder binds the inbound pair into msg
+   and a tag variable that is otherwise unused, and proceeds to
+   apply the destructor checks of the base profile against msg
+   under k.
+
+6.  Security Considerations
+
+   The $tag value is public and does not enter any keyed
+   computation.  An adversary observing the wire learns $tag in
+   the clear; no secrecy guarantee is made for it.  Implementations
+   MUST NOT use $tag to carry confidential information.  Secrecy
+   of sec is provided against an adversary that does not hold k.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

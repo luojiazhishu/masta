@@ -1,0 +1,55 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption, hashing
+
+rule Setup:
+  [
+    Fr(~k)
+  ]
+  --[ ]->
+  [
+    !Ltk('K', ~k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    !Ltk('K', k)
+  ]
+  --[ Test1(), Secret(~sec), Honest('K') ]->
+  [
+    Out(<senc(<~sec, ~pub>, k), h(~sec)>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<msg, witness>),
+    !Ltk('K', k)
+  ]
+  --[ Test2() ]->
+  [
+  ]
+
+rule KReveal:
+  [
+    !Ltk(X, k)
+  ]
+  --[ LtkReveal(X) ]->
+  [
+    Out(k)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_secrecy_of_encapsulated_secret:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

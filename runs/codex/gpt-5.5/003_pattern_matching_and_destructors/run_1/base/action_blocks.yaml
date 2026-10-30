@@ -1,0 +1,20 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - body = <~sec, ~pub>
+    - msg = senc(<~sec, ~pub>, k)
+  - send:
+    - msg
+- role: Responder_Process
+  operations:
+  - receive:
+    - msg
+  - compute:
+    - msg = senc(<sec, pub>, k)
+    - body = sdec(senc(<sec, pub>, k), k)
+  - assert:
+    - and(encSucc(msg, k), isPair(body)) = true
+  - send: <END>

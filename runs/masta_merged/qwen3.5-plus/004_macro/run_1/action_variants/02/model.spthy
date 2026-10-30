@@ -1,0 +1,23 @@
+theory BSKTSN begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: h/1
+
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($Server, ~ltk)
+  , !Pk($Server, pk(~ltk))
+  , Out(pk(~ltk))
+  ]
+
+rule RuleStep1:
+  [ Fr(~k)
+  , !Pk($Server, pkS)
+  ]
+  --[ Test1() ]->
+  [ Out(aenc(~k, pkS))
+  ]
+
+end

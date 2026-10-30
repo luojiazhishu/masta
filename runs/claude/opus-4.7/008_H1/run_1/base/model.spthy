@@ -1,0 +1,79 @@
+theory H1MutualAuth
+begin
+
+builtins: signing
+
+rule Register_Pk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+/* Block 1: Initiator computes and sends its signature */
+rule Init_1:
+  [ !Ltk($I, ~ltkI), !Pk($R, pkR) ]
+  --[ Test1(),
+      Running($I, $R, <$I, $R>) ]->
+  [ St_I_1($I, $R),
+    Out(sign(<$I, $R>, ~ltkI)) ]
+
+/* Block 2: Responder verifies Initiator signature, signs and sends reply */
+rule Resp_1:
+  [ !Ltk($R, ~ltkR), !Pk($I, pkI), In(mI) ]
+  --[ Test2(),
+      Eq(verify(mI, <$I, $R>, pkI), true),
+      Running($R, $I, <$I, $R>),
+      Commit($R, $I, <$I, $R>),
+      Honest($I), Honest($R) ]->
+  [ Out(sign(<$I, $R>, ~ltkR)) ]
+
+/* Block 3: Initiator verifies Responder signature and accepts */
+rule Init_2:
+  [ St_I_1($I, $R), !Pk($R, pkR), In(mR) ]
+  --[ Test3(),
+      Eq(verify(mR, <$I, $R>, pkR), true),
+      Commit($I, $R, <$I, $R>),
+      Honest($I), Honest($R) ]->
+  [ ]
+
+restriction equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

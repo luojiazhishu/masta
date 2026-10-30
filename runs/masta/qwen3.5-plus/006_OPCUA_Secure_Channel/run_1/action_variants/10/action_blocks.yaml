@@ -1,0 +1,76 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid1
+  - compute:
+    - C = $C
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~tid2
+  - compute:
+    - S = $S
+  - send:
+    - '''GERes'''
+    - ServerCertificate
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - SecPol
+    - UserTokPol
+  - generate_nonces:
+    - ~Nc
+    - ~tid3
+  - compute:
+    - C = $C
+    - RequestBody = <'OSCReq', pk(~ltkC), ~Nc, 'protoV1'>
+    - RequestSignature = sign(h(<'OSCReq', pk(~ltkC), ~Nc, 'protoV1'>), ~ltkC)
+    - RequestBodyDigest = h(<'OSCReq', pk(~ltkC), ~Nc, 'protoV1'>)
+  - send:
+    - ClientCertificate
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - ClientCert
+    - <'OSCReq', ClientPk, Nc, 'protoV1'>
+    - RequestSignature
+    - RequestBodyDigest
+  - generate_nonces:
+    - ~Ns
+    - ~SecurityToken
+    - ~TokenLifetime
+    - ~tid4
+  - compute:
+    - S = $S
+    - ResponseBody = <'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>
+    - ResponseSignature = sign(h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>),
+      ~ltkS)
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>)
+  - send:
+    - ServerCertificate
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - ServerCert2
+    - <'OSCRes', Ns, SecurityToken, TokenLifetime>
+    - ResponseSignature
+    - ResponseBodyDigest
+  - compute:
+    - C = $C
+  - send: <END>

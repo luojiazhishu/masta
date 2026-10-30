@@ -1,0 +1,94 @@
+theory SimplifiedNaxos begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule GenerateKeyPair:
+  [ Fr(~ltk) ]
+  --[ Honest($P), Create($P, ~ltk) ]->
+  [ !Ltk($P, ~ltk)
+  , !Pk($P, 'g'^~ltk)
+  , Out('g'^~ltk)
+  , Out(~ltk)
+  ]
+
+rule RuleStep1:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tid)
+  , !Ltk($I, ~lkI)
+  ]
+  --[ Test1() ]->
+  [ Out(hkI)
+  , !InitState(~tid, $I, ~lkI, exI)
+  ]
+
+rule RuleStep2:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^~eskR, hkI^~lkR, $I, $R>)
+  in
+  [ In(hkI)
+  , Fr(~eskR)
+  , Fr(~tidR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), Running($R, $I, <hkI, hkR>) ]->
+  [ Out(hkR)
+  , !RespState(~tidR, $R, $I, ~lkR, exR, kR)
+  ]
+
+rule RuleStep3:
+  let
+    hkI = 'g'^exI
+    kI = h2(<hkR^~lkI, 'g'^~lkR^exI, $I, $R>)
+  in
+  [ In(hkR)
+  , !InitState(~tid, $I, ~lkI, exI)
+  , !Ltk($R, ~lkR)
+  ]
+  --[ Test3(), Commit($I, $R, <hkI, hkR>), Secret($I, $R, kI) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All I R k #i.
+     Secret(I, R, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All I R t #i.
+     Commit(I, R, t) @ i
+   ==>
+       (Ex id #j. Create(R, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_protocol_messages:
+  "All I R t #i.
+     Commit(I, R, t) @ i
+   ==>
+       (Ex #j. Running(R, I, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

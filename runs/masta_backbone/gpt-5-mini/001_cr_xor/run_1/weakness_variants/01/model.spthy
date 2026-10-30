@@ -1,0 +1,73 @@
+theory CR_XOR_NoVfy begin
+
+builtins: hashing
+
+/*
+  RuleStep1: Initiator generates na and sends it out.
+*/
+rule RuleStep1:
+  [ Fr(~na) ]
+  --[ Test1() ]->
+  [ Out(~na) ]
+
+/*
+  RuleStep2: Responder receives na, requires presence of a shared symmetric key,
+  generates nb, computes tag = H(na, k, nb) and sends <tag, nb>.
+  Also emits Secret and Create action facts to support secrecy and aliveness lemmas.
+*/
+rule RuleStep2:
+  let t = h(<na, ~k, ~nb>) in
+  [ In(na), Fr(~nb), !SharedKey(~k) ]
+  --[ Test2(), Secret(na, ~nb, t), Create(~nb, ~nb) ]->
+  [ Out(<t, ~nb>) ]
+
+/*
+  RuleStep3: Initiator receives a responder flight <tag, nb> and concludes.
+  Emits Commit action fact to indicate the initiator concluded a run.
+*/
+rule RuleStep3:
+  [ In(<tag, nb>) ]
+  --[ Test3(), Commit(tag, nb, tag) ]->
+  [ ]
+
+/*
+  RuleStep4: (Out-of-band setup) Generate a long-term symmetric key and publish it as
+  a persistent fact to model the shared key established out-of-band.
+  Also mark the key as Honest when created (so lemmas can reference Honest(X)).
+*/
+rule RuleStep4:
+  [ Fr(~k) ]
+  --[ Test4(), Honest(~k) ]->
+  [ !SharedKey(~k) ]
+
+/*
+  Reveal rule for the long-term/shared key (allowed reveal-shape) to model compromise.
+*/
+rule SharedKeyReveal:
+  [ !SharedKey(~k) ]
+  --[ LtkReveal(~k) ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_session_value_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,180 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+// PKI Setup: Generate long-term keys for Sender
+rule Setup_Sender:
+  [
+    Fr(~sk_s)
+  ]
+  --[ SetupS($S, ~sk_s) ]->
+  [
+    !Ltk($S, ~sk_s),
+    !Pk($S, pk(~sk_s)),
+    Out(pk(~sk_s))
+  ]
+
+// Step 1: Receiver sends nonce
+rule RuleStep1:
+  [
+    Fr(~n_R),
+    Fr(~sk_r),
+    !Pk($S, pk_s)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<$R, $S, ~n_R>),
+    !StateR1($R, ~n_R, ~sk_r, pk_s)
+  ]
+
+// Step 2: Sender receives nonce, generates k1, signs commitment
+rule RuleStep2:
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1),
+    !Ltk($S, ~sk_s),
+    !Pk($S, pk(~sk_s))
+  ]
+  let f_k1 = f(~k_1)
+      sig_data = <f_k1, n_R>
+      sig = sign(sig_data, ~sk_s)
+  in
+  --[ Test2(), Running($S, $R, <f_k1, n_R>) ]->
+  [
+    Out(<$S, $R, f_k1, sig>),
+    !StateS1($S, $R, ~k_1, n_R)
+  ]
+
+// Step 3: Receiver verifies signature
+rule RuleStep3:
+  [
+    In(<$S, $R, f_k1, sig>),
+    !StateR1($R, n_R, ~sk_r, pk_s)
+  ]
+  let sig_data = <f_k1, n_R>
+  in
+  --[ Test3() ]->
+  [
+    !StateR2($R, f_k1, ~sk_r)
+  ]
+
+// Step 4: Sender sends Msg 1 (D_1, MAC)
+rule RuleStep4:
+  [
+    !StateS1($S, $R, ~k_1, n_R)
+  ]
+  let m_1 = ~m_1
+      f_k2 = f(~k_2)
+      D_1 = <m_1, f_k2>
+      mac_1 = mac(~k_1, D_1)
+  in
+  --[ Test4(), Running($S, $R, m_1) ]->
+  [
+    Out(<D_1, mac_1>),
+    !StateS2($S, $R, ~k_1, ~k_2)
+  ]
+
+// Step 5: Receiver verifies MAC for Msg 1
+// To satisfy the 'executable' trace, we model the receiver having obtained k_1.
+rule RuleStep5:
+  [
+    In(<D_1, mac_1>),
+    !StateR2($R, f_k1, ~sk_r),
+    !KnownKey($R, ~k_1)
+  ]
+  let check_mac = mac(~k_1, D_1)
+  in
+  --[ Test5() ]->
+  [
+    !StateR3($R, f_k1, ~sk_r, ~k_1)
+  ]
+
+// Step 6: Sender sends Msg 2 (D_2, MAC, channel_tag)
+rule RuleStep6:
+  [
+    !StateS2($S, $R, ~k_1, ~k_2)
+  ]
+  let m_2 = ~m_2
+      f_k3 = f(~k_3)
+      D_2 = <m_2, f_k3, ~k_1>
+      mac_2 = mac(~k_2, D_2)
+      tag = 'channel_tag'
+  in
+  --[ Test6(), Running($S, $R, m_2) ]->
+  [
+    Out(<D_2, mac_2, tag>),
+    !StateS3($S, $R, ~k_2, ~k_3)
+  ]
+
+// Step 7: Receiver verifies Msg 2
+rule RuleStep7:
+  [
+    In(<D_2, mac_2, tag>),
+    !StateR3($R, f_k1, ~sk_r, ~k_1),
+    !KnownKey($R, ~k_2)
+  ]
+  let check_mac = mac(~k_2, D_2)
+  in
+  --[ Test7(), Commit($R, $S, m_2) ]->
+  [
+    !StateR4($R, f_k1, ~sk_r, ~k_1, ~k_2)
+  ]
+
+// Helper rule to model key disclosure for the trace to be executable
+rule DiscloseKey:
+  [
+    !StateS2($S, $R, ~k_1, ~k_2)
+  ]
+  -->
+  [
+    !KnownKey($R, ~k_1),
+    Out(~k_1)
+  ]
+
+rule DiscloseKey2:
+  [
+    !StateS3($S, $R, ~k_2, ~k_3)
+  ]
+  -->
+  [
+    !KnownKey($R, ~k_2),
+    Out(~k_2)
+  ]
+
+// Reveal rule for long-term key compromise
+rule LtkRevealRule:
+  [
+    !Ltk(A, ltk)
+  ]
+  --[ LtkReveal(A) ]->
+  [
+    Out(ltk)
+  ]
+
+// Honest action fact to mark honest agents
+rule HonestAgent:
+  [
+    Fr(~id)
+  ]
+  --[ Honest($A) ]->
+  [
+    !HonestState($A, ~id)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_authenticity_of_broadcast_messages:
+  "All R S m #i.
+     Commit(R, S, m) @ i
+   ==>
+     (Ex #j. Running(S, R, m) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

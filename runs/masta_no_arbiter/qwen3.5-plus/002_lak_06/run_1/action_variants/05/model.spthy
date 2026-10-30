@@ -1,0 +1,57 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+/* Pre-shared long-term key between Reader and Tag */
+rule SetupKey:
+  [
+    Fr(~k)
+  ]
+  --[ ]->
+  [
+    !Ltk(~k)
+  ]
+
+/* RuleStep1: Reader sends R0 with fresh r0 */
+rule RuleStep1:
+  [
+    Fr(~r0),
+    !Ltk(k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0),
+    !StR(~r0, k)
+  ]
+
+/* RuleStep2: Tag receives r0, generates r1, computes tag_mac, sends T1 */
+rule RuleStep2:
+  [
+    In(~r0),
+    Fr(~r1),
+    !Ltk(k)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<'TAG_HDR', ~r1, mac_val>),
+    !StT(~r0, ~r1, mac_val),
+    Eq(mac_val, h(~r0 ^ ~r1 ^ k))
+  ]
+
+/* RuleStep3: Reader receives T1, sends R1 */
+rule RuleStep3:
+  [
+    In(<'TAG_HDR', ~r1, mac_val>),
+    !StR(~r0, k),
+    Eq(mac_val, h(~r0 ^ ~r1 ^ k))
+  ]
+  --[ Test3() ]->
+  [
+    Out(h(mac_val ^ k ^ ~r0))
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

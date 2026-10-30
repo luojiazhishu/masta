@@ -1,0 +1,48 @@
+- role: SetupRequest
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~r
+    - ~s
+  - send:
+    - ~r
+    - ~s
+    - ~n_R
+- role: SetupResponse
+  operations:
+  - receive:
+    - rcvr
+    - snd
+    - n_R
+  - generate_nonces:
+    - ~k_1
+  - send:
+    - snd
+    - rcvr
+    - f(~k_1)
+    - sign(<f(~k_1), n_R, 'init'>, sk)
+- role: VerifySetupResponse
+  operations:
+  - receive:
+    - S
+    - R
+    - commit
+    - sig
+  - send: []
+- role: StreamMsg1
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - '''m1'''
+    - ~m_1
+    - f(~k_2)
+    - mac(k_1, <'m1', ~m_1, f(~k_2)>)
+- role: StreamMsgN
+  operations:
+  - generate_nonces:
+    - ~m_n
+    - ~k_next
+    - ~k_prev
+  - send: <END>

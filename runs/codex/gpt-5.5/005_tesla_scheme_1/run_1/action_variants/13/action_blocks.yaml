@@ -1,0 +1,61 @@
+- role: Receiver_Send_SetupRequest
+  operations:
+  - generate_nonces:
+    - ~nr
+  - send:
+    - $R
+    - $S
+    - ~nr
+    - $R
+    - $S
+    - ~nr
+- role: Sender_Verify_Request_Send_Response
+  operations:
+  - receive:
+    - R
+    - S
+    - nr
+    - R
+    - S
+    - nr
+  - generate_nonces:
+    - ~k1
+    - ~k2
+  - compute:
+    - commitment = h(~k1)
+  - send:
+    - S
+    - R
+    - commitment
+    - sign(<commitment, nr>, skS)
+- role: Receiver_Verify_SetupResponse
+  operations:
+  - receive:
+    - S
+    - R
+    - commitment
+    - sig
+  - assert:
+    - verify(sig, <commitment, nr>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_Stream_Message
+  operations:
+  - generate_nonces:
+    - ~m1
+  - compute:
+    - d1 = <~m1, h(k2)>
+  - send:
+    - d1
+    - mac(k1, d1)
+- role: Sender_Disclose_Previous_Key
+  operations:
+  - send:
+    - k1
+- role: Receiver_Accept_Stream_Message
+  operations:
+  - receive:
+    - k1
+  - assert:
+    - commitment = h(k1)
+    - tag = mac(k1, <m1, next_commitment>)
+  - send: <END>

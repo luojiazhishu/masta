@@ -1,0 +1,29 @@
+- role: initiatereader
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: tag1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - '''TAG_HDR'''
+    - ~r1
+    - h(r0 XOR ~r1 XOR ~k)
+- role: acceptreader
+  operations:
+  - receive:
+    - '''TAG_HDR'''
+    - r1
+    - h(~r0 XOR r1 XOR ~k)
+  - send:
+    - h(h(~r0 XOR r1 XOR ~k) XOR ~k XOR ~r0)
+- role: accepttag
+  operations:
+  - receive:
+    - h(h(r0 XOR ~r1 XOR ~k) XOR ~k XOR r0)
+  - send: <END>

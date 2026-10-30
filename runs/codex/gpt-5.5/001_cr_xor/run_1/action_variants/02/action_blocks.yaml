@@ -1,0 +1,29 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+    - '''Init'''
+- role: Responder_Respond
+  operations:
+  - receive:
+    - na
+    - '''Init'''
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(na XOR k XOR ~nb)
+  - send:
+    - tag
+    - ~nb
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - tag
+    - nb
+  - compute:
+    - expected = h(na XOR k XOR nb)
+  - assert:
+    - tag = expected
+  - send: <END>

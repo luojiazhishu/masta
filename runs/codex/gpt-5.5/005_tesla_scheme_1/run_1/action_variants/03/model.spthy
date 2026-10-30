@@ -1,0 +1,97 @@
+theory TeslaScheme1 begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Register_sender:
+  [ Fr(~ltkS) ]
+--[ ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_sender_key:
+  [ !Ltk(S, ltkS) ]
+--[ LtkReveal(S) ]->
+  [ Out(ltkS) ]
+
+rule Receiver_setup_request:
+  [ Fr(~nR), Fr(~rid) ]
+--[ Test1(), Create($R, ~rid) ]->
+  [ Out(<$R, $S, ~nR>), ReceiverWaitSetup($R, $S, ~rid, ~nR) ]
+
+rule Sender_setup_response:
+  let commitment1 = h(~k1)
+      setup_data = <commitment1, nR>
+  in
+  [ !Ltk(S, ltkS), In(<R, S, nR>), Fr(~k1), Fr(~sid) ]
+--[ Test2(), Create(S, ~sid), Running(S, R, <'setup', commitment1, nR>) ]->
+  [ Out(<S, R, commitment1, sign(setup_data, ltkS)>),
+    SenderState(S, R, ~sid, ~k1, commitment1, nR) ]
+
+rule Receiver_accept_setup:
+  let setup_data = <commitment1, nR>
+  in
+  [ ReceiverWaitSetup(R, S, rid, nR), !Pk(S, pkS), In(<S, R, commitment1, sig>) ]
+--[ Test3(), Eq(verify(sig, setup_data, pkS), true) ]->
+  [ ReceiverState(R, S, rid, commitment1, nR) ]
+
+rule Sender_first_stream:
+  let commitment2 = h(~k2)
+      d1 = <~m1, commitment2>
+      mac1 = mac(d1, k1)
+  in
+  [ SenderState(S, R, sid, k1, commitment1, nR), Fr(~k2), Fr(~m1), Fr(~tag1) ]
+--[ Test4(), Running(S, R, <'payload', ~m1, commitment1, commitment2>) ]->
+  [ Out(<d1, mac1, ~tag1>),
+    !FirstBroadcast(S, R, k1, commitment1, ~m1, commitment2, mac1),
+    SenderNext(S, R, sid, k1, commitment1, ~k2, commitment2, ~m1, d1, mac1, nR) ]
+
+rule Receiver_cache_first_stream:
+  [ ReceiverState(R, S, rid, commitment1, nR),
+    !FirstBroadcast(S, R, k1, commitment1, m1, commitment2, mac1),
+    In(<<m1, commitment2>, mac1, tag1>) ]
+--[ Test5() ]->
+  [ ReceiverCached(R, S, rid, k1, commitment1, nR, m1, commitment2, mac1) ]
+
+rule Sender_second_stream:
+  let commitment3 = h(~k3)
+      d2 = <~m2, commitment3, k1>
+      mac2 = mac(d2, k2)
+  in
+  [ SenderNext(S, R, sid, k1, commitment1, k2, commitment2, m1, d1, mac1, nR), Fr(~k3), Fr(~m2) ]
+--[ Test6(), Running(S, R, <'payload', m1, commitment1, commitment2>) ]->
+  [ Out(<d2, mac2>) ]
+
+rule Receiver_verify_first_payload:
+  let d1 = <m1, commitment2>
+  in
+  [ ReceiverCached(R, S, rid, k1, h(k1), nR, m1, commitment2, mac(d1, k1)), In(<<m2, commitment3, k1>, mac2>) ]
+--[ Test7(), Commit(R, S, <'payload', m1, h(k1), commitment2>), Honest(S) ]->
+  [ ReceiverAccepted(R, S, rid, m1) ]
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex #j. Running(s, r, t) @ j)
+     | (Ex x #r. LtkReveal(x) @ r & Honest(x) @ i)"
+
+// category: aliveness
+lemma sender_aliveness:
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex id #j. Create(s, id) @ j)
+     | (Ex x #r. LtkReveal(x) @ r & Honest(x) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

@@ -1,0 +1,122 @@
+theory OPCUA_Secure_Channel_Sign_Sign begin
+
+builtins: signing, hashing
+
+/* Long-term signing keys and public certificates. */
+rule Register:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+/* 1. Client sends GetEndpointsRequest. */
+rule Client_GetEndpointsRequest:
+  [ Fr(~sid) ]
+  --[ Test1(), Create($C, ~sid) ]->
+  [ Out(<'GEReq', $C, $S>), ClientWaitEndpoints($C, $S, ~sid) ]
+
+/* 2. Server replies with an endpoint description for Sign mode. */
+rule Server_GetEndpointsResponse:
+  [ In(<'GEReq', C, $S>), !Pk($S, pkS) ]
+  --[ Test2() ]->
+  [ Out(<'GERes', $S, C, pkS, 'Sign', 'policy', 'userToken'>) ]
+
+/* 3. Client selects Sign endpoint, creates Nc, and signs OSCReq with protoV1. */
+rule Client_OpenSecureChannelRequest:
+  let body = <'OSCReq', pk(ltkC), ~Nc, 'protoV1'>
+  in
+  [ ClientWaitEndpoints($C, $S, sid)
+  , In(<'GERes', S_seen, $C, serverCert, 'Sign', policy, userToken>)
+  , Fr(~Nc)
+  , !Ltk($C, ltkC)
+  ]
+  --[ Test3()
+    , Running($C, S_seen, <'client_nonce', ~Nc, pk(ltkC), serverCert, 'protoV1'>)
+    ]->
+  [ Out(<'OSCReqMsg', pk(ltkC), body, sign(h(body), ltkC), h(body)>)
+  , ClientWaitOSC($C, S_seen, sid, ~Nc, serverCert)
+  ]
+
+/* 4. Server verifies OSCReq, creates Ns/ST/TTL, and signs OSCRes. */
+rule Server_OpenSecureChannelResponse:
+  let reqBody = <'OSCReq', clientCert, Nc, 'protoV1'>
+      responseBody = <'OSCRes', ~Ns, ~ST, 'ttl'>
+  in
+  [ In(<'OSCReqMsg', clientCert, reqBody, sign(h(reqBody), ltkC), h(reqBody)>)
+  , !Ltk($C, ltkC)
+  , Fr(~Ns)
+  , Fr(~ST)
+  , !Ltk($S, ltkS)
+  ]
+  --[ Test4()
+    , Running($S, $C, <'server_nonce', Nc, ~Ns, ~ST, pk(ltkS)>)
+    , Commit($S, $C, <'client_nonce', Nc, clientCert, pk(ltkS), 'protoV1'>)
+    , Secret($C, $S, h(<Nc, ~Ns>))
+    , Honest($C)
+    , Honest($S)
+    ]->
+  [ Out(<'OSCResMsg', pk(ltkS), responseBody, sign(h(responseBody), ltkS), h(responseBody)>) ]
+
+/* Attacker-controlled endpoint/service for unauthenticated discovery traces. */
+rule Attacker_OpenSecureChannelResponse:
+  let responseBody = <'OSCRes', ~Ns, ~ST, 'ttl'>
+  in
+  [ In(<'OSCReqMsg', clientCert, <'OSCReq', clientCert, Nc, 'protoV1'>, sig, digest>)
+  , Fr(~Ns)
+  , Fr(~ST)
+  , Fr(~ltkA)
+  ]
+  --[ ]->
+  [ Out(<'OSCResMsg', pk(~ltkA), responseBody, sign(h(responseBody), ~ltkA), h(responseBody)>) ]
+
+/* 5. Client verifies the response against the discovered certificate. */
+rule Client_AcceptOpenSecureChannel:
+  let responseBody = <'OSCRes', Ns, ST, TTL>
+  in
+  [ ClientWaitOSC($C, S_seen, sid, Nc, serverCert)
+  , In(<'OSCResMsg', serverCert, responseBody, sign(h(responseBody), ltkS), h(responseBody)>)
+  , !Ltk(S_seen, ltkS)
+  ]
+  --[ Test5()
+    , Commit($C, S_seen, <'server_nonce', Nc, Ns, ST, serverCert>)
+    , Secret($C, S_seen, h(<Nc, Ns>))
+    , Honest($C)
+    , Honest(S_seen)
+    ]->
+  [ Channel($C, S_seen, sid, h(<Nc, Ns>), ST) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma channel_binding_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma client_nonce_noninjective_agreement:
+  "All a b nc certC certS #i.
+     Commit(a, b, <'client_nonce', nc, certC, certS, 'protoV1'>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'client_nonce', nc, certC, certS, 'protoV1'>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma server_nonce_noninjective_agreement:
+  "All a b nc ns st certS #i.
+     Commit(a, b, <'server_nonce', nc, ns, st, certS>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_nonce', nc, ns, st, certS>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

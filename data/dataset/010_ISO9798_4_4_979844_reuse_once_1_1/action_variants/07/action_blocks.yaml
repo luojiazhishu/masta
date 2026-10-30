@@ -1,0 +1,40 @@
+- role: RoleB_1
+  operations:
+  - generate_nonces:
+    - ~Text1
+  - compute:
+    - auxB1 = aux1(~Text1)
+  - send:
+    - ~RB
+    - ~Text1
+- role: RoleA_1
+  operations:
+  - receive:
+    - RB
+    - Text1
+  - generate_nonces:
+    - ~Text2
+    - ~Text3
+  - send:
+    - ~RA
+    - ~Text3
+    - <sid1_mut_cr, ~RA, RB, $IdB, ~Text2>
+    - mac(<sid1_mut_cr, ~RA, RB, $IdB>, ~kAB)
+- role: RoleB_2
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - mac(<sid1_mut_cr, RA, ~RB, $IdB>, ~kAB)
+  - generate_nonces:
+    - ~Text4
+    - ~Text5
+  - send:
+    - ~Text5
+    - mac(<sid2_mut_cr, ~RB, RA>, ~kAB)
+- role: RoleA_2
+  operations:
+  - receive:
+    - Text5
+    - mac(<sid2_mut_cr, RB, ~RA>, ~kAB)
+  - send: <END>

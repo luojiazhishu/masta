@@ -1,0 +1,107 @@
+theory H1_RT
+begin
+
+builtins: signing
+
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  --[
+    KeyGen($A)
+  ]->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  ]
+
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[
+    LtkReveal($A)
+  ]->
+  [ Out(ltk) ]
+
+rule RuleStep1:
+  let
+    mI = sign(<$I, $R>, ~ltkI)
+  in
+  [ Fr(~tid)
+  , !Ltk($I, ~ltkI)
+  , !Pk($R, pkR)
+  ]
+  --[
+    Test1()
+  , Honest($I)
+  , Create($I, ~tid)
+  ]->
+  [ Out(mI)
+  , St_I_1(~tid, $I, $R, ~ltkI)
+  ]
+
+rule RuleStep2:
+  let
+    mR = sign(<$I, $R>, ~ltkR)
+  in
+  [ In(mI)
+  , !Ltk($R, ~ltkR)
+  , !Pk($I, pkI)
+  ]
+  --[
+    Test2()
+  , Eq(verify(mI, <$I, $R>, pkI), true)
+  , Running($R, $I, <'I', 'R', <$I, $R>>)
+  , Honest($R)
+  ]->
+  [ Out(<mR, 'resp'>)
+  ]
+
+rule RuleStep3:
+  [ In(<s, t>)
+  , St_I_1(~tid, $I, $R, ~ltkI)
+  , !Pk($R, pkR)
+  ]
+  --[
+    Test3()
+  , Eq(t, 'resp')
+  , Eq(verify(s, <$I, $R>, pkR), true)
+  , Commit($I, $R, <'I', 'R', <$I, $R>>)
+  , Honest($I)
+  ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+restriction Eq:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+// category: weak_agreement
+lemma weak_agreement_weak_agreement:
+  "All a b t1 #i.
+    Commit(a, b, t1) @i
+    ==>
+        (Ex t2 #j. Running(b, a, t2) @j)
+      | (Ex X #r. LtkReveal(X) @r & Honest(X) @i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==>
+        (Ex #j. Running(b, a, t) @j)
+      | (Ex X #r. LtkReveal(X) @r & Honest(X) @i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==>
+        ( (Ex #j. Running(b, a, t) @j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @i2
+                                & not (#i2 = #i))) )
+      | (Ex X #r. LtkReveal(X) @r & Honest(X) @i)"
+
+end

@@ -1,0 +1,89 @@
+theory TESLA_Scheme1 begin
+
+builtins: hashing, signing
+
+functions: f/1, mac/2
+
+rule Generate_key_pair:
+  [ Fr(~sk_S) ]
+  -->
+  [ !Ltk($S, ~sk_S)
+  , !Pk($S, pk(~sk_S))
+  , Out(pk(~sk_S))
+  ]
+
+rule LtkReveal_S:
+  [ !Ltk($S, sk_S) ]
+  --[ LtkReveal($S) ]->
+  [ Out(sk_S) ]
+
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+rule RuleStep2:
+  [ In(<$R, $S, n_R>),
+    Fr(~k_1),
+    !Ltk($S, sk_S) ]
+  --[ Test2(), Secret($S, $R, ~k_1), Running($S, $R, <'setup', f(~k_1)>), Honest($S) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, sk_S)>),
+    !Commitment($S, $R, f(~k_1)),
+    !Key_1($S, ~k_1)
+  ]
+
+rule RuleStep3:
+  [ In(<$S, $R, commitment_1, sig_1>) ]
+  --[ Test3(), Commit($R, $S, <'setup', commitment_1>) ]->
+  [ ]
+
+rule RuleStep4:
+  [ Fr(~k_2),
+    !Key_1($S, k_1),
+    In(m_1) ]
+  --[ Test4(), Secret($S, $R, ~k_2), Running($S, $R, <'stream', k_1, m_1>), Honest($S) ]->
+  [ Out(< <m_1, f(~k_2)>, mac(k_1, <m_1, f(~k_2)>) >),
+    !Key_2($S, ~k_2)
+  ]
+
+rule RuleStep5:
+  [ Fr(~k_3),
+    !Key_2($S, k_2),
+    In(m_2) ]
+  --[ Test5(), Running($S, $R, <'stream', k_2, m_2>) ]->
+  [ Out(< <m_2, f(~k_3), k_2>, mac(k_2, <m_2, f(~k_3), k_2>) >) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_key_timeliness:
+  "All S R k #i.
+     Secret(S, R, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_setup_authenticity:
+  "All R S t #i.
+     Commit(R, S, t) @ i
+   ==>
+       ( (Ex #j. Running(S, R, t) @ j
+             & j < i
+             & not (Ex R2 S2 #i2. Commit(R2, S2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_mac_integrity:
+  "All R S t #i.
+     Commit(R, S, t) @ i
+   ==>
+       (Ex #j. Running(S, R, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

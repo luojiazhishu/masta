@@ -1,0 +1,4 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.coding_agent_model --document data/dataset/006_OPCUA_Secure_Channel/action_variants/04/document.txt --output-dir runs/claude/opus-4.7/006_OPCUA_Secure_Channel/run_1/action_variants/04 --tool claude_code --model opus-4.7 --skills-source /root/project/llm-tamarin/masta/experiments/coding_agent/skills --agent-timeout 3600 --label 006_OPCUA_Secure_Channel run_1 action_variants/04
+
+
+[gen timeout after 3600s]

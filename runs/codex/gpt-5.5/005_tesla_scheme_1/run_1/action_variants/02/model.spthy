@@ -1,0 +1,94 @@
+theory TeslaSchemeOne
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction CacheBeforeDisclosure:
+  "All r s k m c nc auth #i #j #a. Cached(r, s, m, c, nc, auth) @ i & Disclosed(s, k) @ j & AcceptWithKey(r, s, k, m, c) @ a ==> i < j"
+
+rule Register_Sender:
+  [ Fr(~sk) ]
+  --[ Create($S, 'sender') ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(S, sk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(sk) ]
+
+rule Receiver_Send_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1(), Create($R, 'receiver') ]->
+  [ Out(<'setup_request', $R, $S, ~nR>), St_R_Setup($R, $S, ~nR) ]
+
+rule Sender_Send_SetupResponse:
+  let commitment1 = h(~k1)
+      signature = sign(<commitment1, nR>, sk)
+  in
+  [ In(<'setup_request', R, S, nR>), !Ltk(S, sk), Fr(~k1), Fr(~k2), Fr(~stag), Fr(~m1), Fr(~m2) ]
+  --[ Test2(), Running(S, R, <'setup', commitment1, nR>) ]->
+  [ Out(<'setup_response', S, R, commitment1, signature, ~stag>),
+    St_S_Stream(S, R, ~k1, ~k2, ~m1, ~m2, commitment1) ]
+
+rule Receiver_Accept_SetupResponse:
+  [ St_R_Setup(R, S, nR), !Pk(S, pkS), In(<'setup_response', S, R, commitment1, signature, stag>) ]
+  --[ Test3(), Eq(verify(signature, <commitment1, nR>, pkS), true), Commit(R, S, <'setup', commitment1, nR>), Honest(S) ]->
+  [ St_R_Ready(R, S, commitment1) ]
+
+rule Sender_Broadcast_Message1:
+  let data1 = <m1, h(k2)>
+      auth1 = mac(k1, data1)
+  in
+  [ St_S_Stream(S, R, k1, k2, m1, m2, commitment1) ]
+  --[ Test4(), Running(S, R, <'payload', m1, commitment1>) ]->
+  [ Out(<'stream', S, data1, 'none', auth1>),
+    St_S_Disclose(S, R, k1, k2, m1, m2, commitment1),
+    !SentPayload(S, R, m1, commitment1) ]
+
+rule Sender_Broadcast_Message2_Disclose_Key1:
+  let data2 = <m2, h(~k3)>
+      auth2 = mac(k2, data2)
+  in
+  [ St_S_Disclose(S, R, k1, k2, m1, m2, commitment1), Fr(~k3) ]
+  --[ Test5(), Disclosed(S, k1) ]->
+  [ Out(<'stream', S, data2, k1, auth2>) ]
+
+rule Receiver_Cache_Message1:
+  [ St_R_Ready(R, S, commitment1), In(<'stream', S, <m1, commitment2>, 'none', auth1>) ]
+  --[ Cached(R, S, m1, commitment1, commitment2, auth1) ]->
+  [ St_R_Cached(R, S, commitment1, m1, commitment2, auth1) ]
+
+rule Receiver_Accept_Message1:
+  [ St_R_Cached(R, S, commitment1, m1, commitment2, auth1), In(<'stream', S, data2, k1, auth2>) ]
+  --[ Test6(), Eq(h(k1), commitment1), Eq(auth1, mac(k1, <m1, commitment2>)), AcceptWithKey(R, S, k1, m1, commitment1), Commit(R, S, <'payload', m1, commitment1>), Honest(S) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All r s m c #i.
+     Commit(r, s, <'payload', m, c>) @ i
+   ==>
+       (Ex b #j. Running(s, b, <'payload', m, c>) @ j)
+     | (Ex #r. LtkReveal(s) @ r & Honest(s) @ i)"
+
+// category: noninjective_agreement
+lemma setup_commitment_authenticity:
+  "All r s c n #i.
+     Commit(r, s, <'setup', c, n>) @ i
+   ==>
+       (Ex b #j. Running(s, b, <'setup', c, n>) @ j)
+     | (Ex #r. LtkReveal(s) @ r & Honest(s) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+end

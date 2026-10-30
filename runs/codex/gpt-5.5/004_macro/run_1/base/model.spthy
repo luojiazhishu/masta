@@ -1,0 +1,65 @@
+theory BSKT begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Register_Server:
+  [ Fr(~ltkS) ]
+  --[ Create($S, ~ltkS) ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_Server_Ltk:
+  [ !Ltk(S, sk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(sk) ]
+
+rule Client_Send_KeyTransport:
+  let m1 = aenc(~k, pkS) in
+  [ Fr(~k), Fr(~tid), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, ~tid) ]->
+  [ Out(<$C, $S, m1>), St_Client_1($C, $S, ~tid, ~k) ]
+
+rule Server_Process_KeyTransport:
+  let m2 = h(k) in
+  [ Fr(~stid), !Ltk($S, skS), In(<C, $S, aenc(k, pk(skS))>) ]
+  --[ Test2(), Create($S, ~stid), Running($S, C, <'server', k>) ]->
+  [ Out(<$S, C, m2>), St_Server_Done($S, ~stid, k) ]
+
+rule Client_Receive_KeyConfirm:
+  [ St_Client_1($C, $S, tid, k), In(<$S, $C, h(k)>) ]
+  --[ Test3(), Commit($C, $S, <'server', k>), Secret($C, $S, k), Honest($S) ]->
+  [ St_Client_Done($C, $S, tid, k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_transport_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transport_key:
+  "All C S k #i.
+     Commit(C, S, <'server', k>) @ i
+   ==>
+       (Ex C2 #j. Running(S, C2, <'server', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_transport_key:
+  "All C S k #i.
+     Commit(C, S, <'server', k>) @ i
+   ==>
+       ( (Ex C2 #j. Running(S, C2, <'server', k>) @ j
+             & j < i
+             & not (Ex C2 S2 #i2. Commit(C2, S2, <'server', k>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

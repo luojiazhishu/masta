@@ -1,0 +1,62 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R>, ~sk_S)
+    - '''commit_response'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - $S
+    - $R
+    - commitment
+    - signature
+    - message_type
+  - send: []
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - <~m_1, f(~k_2)>
+    - MAC(k_1, <~m_1, f(~k_2)>)
+- role: RuleStep5
+  operations:
+  - receive:
+    - D_1
+    - mac_1
+  - send: []
+- role: RuleStep6
+  operations:
+  - generate_nonces:
+    - ~m_2
+    - ~k_3
+  - send:
+    - <~m_2, f(~k_3), k_1>
+    - MAC(k_2, <~m_2, f(~k_3), k_1>)
+- role: RuleStep7
+  operations:
+  - receive:
+    - D_2
+    - mac_2
+  - send: []
+- role: RuleStep8
+  operations:
+  - send: <END>

@@ -1,0 +1,64 @@
+theory PublicKeySessionKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Server_Register:
+  [ Fr(~ltk) ]
+  --[ Create($S, ~ltk) ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Server_Ltk:
+  [ !Ltk(S, ltk) ]
+  --[ LtkReveal(S) ]->
+  [ Out(ltk) ]
+
+rule Client_Initiate:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, ~k), Secret($C, $S, ~k), Honest($S) ]->
+  [ Out(<$C, aenc(~k, pkS)>), St_Client_1($C, $S, ~k) ]
+
+rule Server_Confirm:
+  [ In(<$C, ct>), !Ltk($S, ltk) ]
+  --[ Test2(), Running($S, $C, <'transported_key', adec(ct, ltk)>) ]->
+  [ Out(h(<adec(ct, ltk), 'session'>)) ]
+
+rule Client_Accept:
+  [ St_Client_1($C, $S, k), In(h(<k, 'session'>)) ]
+  --[ Test3(), Commit($C, $S, <'transported_key', k>), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_transport_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex peer #j. Running(b, peer, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex peer #j. Running(b, peer, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

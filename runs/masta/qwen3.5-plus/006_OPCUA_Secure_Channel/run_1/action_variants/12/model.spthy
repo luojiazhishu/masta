@@ -1,0 +1,160 @@
+theory OPCUA_SecureChannel begin
+
+builtins: hashing, signing
+
+// Key generation for Client and Server
+rule Generate_Client_Keys:
+  [ Fr(~ltkC) ]
+  -->
+  [ !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  , Out(pk(~ltkC))
+  ]
+
+rule Generate_Server_Keys:
+  [ Fr(~ltkS) ]
+  -->
+  [ !Ltk($S, ~ltkS)
+  , !Pk($S, pk(~ltkS))
+  , Out(pk(~ltkS))
+  ]
+
+// LtkReveal rules for long-term key compromise
+rule LtkReveal_C:
+  [ !Ltk($C, ltk) ]
+  --[ LtkReveal($C) ]->
+  [ Out(ltk) ]
+
+rule LtkReveal_S:
+  [ !Ltk($S, ltk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(ltk) ]
+
+// RuleStep1: Client sends first GetEndpointsRequest
+rule RuleStep1:
+  [ Fr(~tid1)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  ]
+  --[ Test1() ]->
+  [ Out('GEReq')
+  , !StateC1(~tid1, $C, ~ltkC)
+  ]
+
+// RuleStep2: Client sends second GetEndpointsRequest (duplicate)
+rule RuleStep2:
+  [ Fr(~tid2)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  ]
+  --[ Test2() ]->
+  [ Out('GEReq')
+  , !StateC2(~tid2, $C, ~ltkC)
+  ]
+
+// RuleStep3: Server receives GetEndpointsRequest, sends GetEndpointsResponse
+rule RuleStep3:
+  [ In('GEReq')
+  , Fr(~tid3)
+  , !Ltk($S, ~ltkS)
+  , !Pk($S, pk(~ltkS))
+  ]
+  --[ Test3() ]->
+  [ Out(< 'GERes', pk(~ltkS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >)
+  , !StateS1(~tid3, $S, ~ltkS)
+  ]
+
+// RuleStep4: Client receives GetEndpointsResponse, generates nonce, computes signature, sends OpenSecureChannelRequest
+rule RuleStep4:
+  let
+    RequestBody = < 'OSCReq', pk(~ltkC), ~Nc >
+    RequestBodyDigest = h(RequestBody)
+    RequestSignature = sign(RequestBodyDigest, ~ltkC)
+  in
+  [ In(< 'GERes', ServerCert, 'Sign', SecurityPolicy, UserTokenPolicy >)
+  , Fr(~tid4)
+  , Fr(~Nc)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  ]
+  --[ Test4()
+    , Running($C, $S, ~Nc)
+    , Honest($C)
+    ]->
+  [ Out(< pk(~ltkC), RequestBody, RequestSignature, RequestBodyDigest >)
+  , !StateC3(~tid4, $C, ~ltkC, ~Nc)
+  ]
+
+// RuleStep5: Server receives OpenSecureChannelRequest, generates nonce, computes signature, sends OpenSecureChannelResponse
+rule RuleStep5:
+  let
+    ResponseBody = < 'OSCRes', ~Ns, 'ST', 'TTL' >
+    ResponseBodyDigest = h(ResponseBody)
+    ResponseSignature = sign(ResponseBodyDigest, ~ltkS)
+  in
+  [ In(< ClientCert, < 'OSCReq', ClientPubKey, ~Nc >, RequestSignature, RequestBodyDigest >)
+  , Fr(~tid5)
+  , Fr(~Ns)
+  , !Ltk($S, ~ltkS)
+  , !Pk($S, pk(~ltkS))
+  ]
+  --[ Test5()
+    , Running($S, $C, ~Ns)
+    , Commit($S, $C, ~Nc)
+    , Honest($S)
+    ]->
+  [ Out(< pk(~ltkS), ResponseBody, ResponseSignature, ResponseBodyDigest >)
+  , !StateS2(~tid5, $S, ~ltkS, ~Ns)
+  ]
+
+// RuleStep6: Client receives OpenSecureChannelResponse, verifies signature, computes channel binding
+rule RuleStep6:
+  let
+    ChannelBinding = h(< ~Nc, ~Ns >)
+  in
+  [ In(< ServerCert, < 'OSCRes', ~Ns, 'ST', 'TTL' >, ResponseSignature, ResponseBodyDigest >)
+  , Fr(~tid6)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  , !StateC3(~tid4, $C, ~ltkC, ~Nc)
+  ]
+  --[ Test6()
+    , Verified($C, ResponseSignature, ResponseBodyDigest, ServerCert)
+    , ChannelBindingComputed($C, ChannelBinding)
+    , Secret($C, $S, ChannelBinding)
+    , Commit($C, $S, ~Ns)
+    , Honest($C)
+    ]->
+  [ Out('END')
+  , !StateC4(~tid6, $C, ~ltkC, ~Nc, ChannelBinding)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+// category: secrecy
+lemma secrecy_channel_session_key_secrecy:
+  "All C S cb #i.
+     Secret(C, S, cb) @ i
+   ==>
+       not (Ex #j. K(cb) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

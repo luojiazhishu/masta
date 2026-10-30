@@ -1,0 +1,54 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - req_body = <'JoinRequest', $D, $S, ~devnonce>
+    - req_mac = mac(~appkey, <'JoinRequest', $D, $S, ~devnonce>)
+    - req_msg = <'JoinRequest', $D, $S, ~devnonce, mac(~appkey, <'JoinRequest', $D,
+      $S, ~devnonce>)>
+  - send:
+    - req_msg
+- role: Server_Verify_JoinRequest
+  operations:
+  - receive:
+    - req_msg
+  - compute:
+    - req_body = <'JoinRequest', D, S, devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', D, S, devnonce>)
+    - req_msg = <'JoinRequest', D, S, devnonce, mac(appkey, <'JoinRequest', D, S,
+      devnonce>)>
+  - send: []
+- role: Server_Send_JoinAccept
+  operations:
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - app_skey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwk_skey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+    - resp_body = <'JoinAccept', ~joinnonce, devaddr>
+    - resp_mac = mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)
+    - accept_body = <'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      ~joinnonce, devaddr>)>
+    - accept_msg = senc(<'JoinAccept', ~joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      ~joinnonce, devaddr>)>, appkey)
+  - send:
+    - accept_msg
+- role: Device_Accept_JoinAccept
+  operations:
+  - receive:
+    - accept_msg
+  - compute:
+    - resp_body = <'JoinAccept', joinnonce, devaddr>
+    - resp_mac = mac(appkey, <'JoinAccept', joinnonce, devaddr>)
+    - accept_body = <'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      joinnonce, devaddr>)>
+    - accept_msg = senc(<'JoinAccept', joinnonce, devaddr, mac(appkey, <'JoinAccept',
+      joinnonce, devaddr>)>, appkey)
+  - send: []
+- role: Device_Derive_SessionKeys
+  operations:
+  - compute:
+    - app_skey = senc(<'cst1', devnonce, joinnonce>, appkey)
+    - nwk_skey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  - send: <END>

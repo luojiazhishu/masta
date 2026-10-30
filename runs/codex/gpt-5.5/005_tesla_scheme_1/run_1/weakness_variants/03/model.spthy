@@ -1,0 +1,107 @@
+theory TeslaScheme1Weak03 begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Init_Sender:
+  [ Fr(~skS), Fr(~k1) ]
+  --[ Create('S'), Honest('S') ]->
+  [ !Ltk('S', ~skS)
+  , !Pk('S', pk(~skS))
+  , !FirstKey('S', ~k1)
+  , Out(pk(~skS))
+  ]
+
+rule Receiver_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1(), FreshNonce('R','S',~nR) ]->
+  [ R_WaitSetup('R','S',~nR)
+  , Out(<'R','S',~nR>)
+  ]
+
+rule Sender_SetupResponse:
+  let commitment = h(~k1)
+      sig = sign(nR, ~skS)
+  in
+  [ !Ltk('S', ~skS)
+  , !FirstKey('S', ~k1)
+  , In(<'R','S',nR>)
+  ]
+  --[ Test2()
+    , Running('S','R',<'setup',nR,commitment>)
+    , SenderCommitted('S','R',commitment)
+    ]->
+  [ S_StreamReady('S','R',~k1)
+  , Out(<'S','R',commitment,sig>)
+  ]
+
+rule Receiver_AcceptSetup:
+  [ R_WaitSetup('R','S',nR)
+  , !Pk('S', pkS)
+  , In(<'S','R',commitment,sig>)
+  ]
+  --[ Test3()
+    , Eq(verify(sig,nR,pkS), true)
+    , Commit('R','S',<'setup',nR,commitment>)
+    , ReceiverCommitted('R','S',commitment)
+    ]->
+  [ R_ExpectStream('R','S',commitment) ]
+
+rule Sender_Broadcast1:
+  let d1 = <~m1,h(~k2)>
+  in
+  [ S_StreamReady('S','R',k1)
+  , Fr(~m1)
+  , Fr(~k2)
+  ]
+  --[ Test4()
+    , Running('S','R',<'broadcast',h(k1),d1>)
+    , SenderBroadcast('S','R',d1,h(k1))
+    ]->
+  [ Out(<d1,mac(k1,d1)>)
+  , Out(k1)
+  ]
+
+rule Receiver_AcceptBroadcast1:
+  [ R_ExpectStream('R','S',commitment)
+  , In(<d1,tag>)
+  , In(k1)
+  ]
+  --[ Test5()
+    , Eq(commitment,h(k1))
+    , Eq(tag,mac(k1,d1))
+    , Commit('R','S',<'broadcast',commitment,d1>)
+    , AcceptBroadcast('R','S',d1,commitment)
+    ]->
+  [ R_Accepted('R','S',d1,commitment) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1
+     & Test2() @ #t2
+     & Test3() @ #t3
+     & Test4() @ #t4
+     & Test5() @ #t5
+     & #t1 < #t2
+     & #t2 < #t3
+     & #t3 < #t4
+     & #t4 < #t5"
+
+// category: weak_agreement
+lemma setup_weak_agreement:
+  "All r s data #i.
+     Commit(r,s,data) @ #i
+   ==> Ex data2 #j. Running(s,r,data2) @ #j"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All r s d c #i.
+     AcceptBroadcast(r,s,d,c) @ #i
+   ==> Ex #j. SenderBroadcast(s,r,d,c) @ #j & #j < #i"
+
+end

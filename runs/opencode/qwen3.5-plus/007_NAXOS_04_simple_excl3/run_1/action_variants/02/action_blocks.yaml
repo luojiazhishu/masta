@@ -1,0 +1,33 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tidI
+  - compute:
+    - exI = h1(<~eskI, ~lkI>)
+    - hkI = 'g'^h1(<~eskI, ~lkI>)
+  - send:
+    - hkI
+- role: Responder_Receive
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+    - ~SessionCorrelator
+    - ~tidR
+  - compute:
+    - exR = h1(<~eskR, ~lkR>)
+    - hkR = 'g'^h1(<~eskR, ~lkR>)
+    - kR = h2(<pkI^h1(<~eskR, ~lkR>), X^~lkR, X^h1(<~eskR, ~lkR>), $I, $R>)
+  - send:
+    - hkR
+    - ~SessionCorrelator
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - Y
+    - SessionCorrelator
+  - compute:
+    - kI = h2(<Y^~lkI, pkR^~eskI, Y^~eskI, $I, $R>)
+  - send: <END>

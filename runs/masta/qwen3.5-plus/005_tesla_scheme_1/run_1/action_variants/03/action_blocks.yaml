@@ -1,0 +1,38 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - ~n_R
+  - generate_nonces:
+    - ~k_1
+    - ~SK_S
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), ~n_R>, ~SK_S)
+- role: RuleStep3
+  operations:
+  - generate_nonces:
+    - ~k_2
+    - ~m_1
+    - ~r_1
+  - send:
+    - <~m_1, f(~k_2)>
+    - mac(~k_1, <~m_1, f(~k_2)>)
+    - ~r_1
+- role: RuleStep4
+  operations:
+  - generate_nonces:
+    - ~k_next
+    - ~m_n
+  - send: <END>

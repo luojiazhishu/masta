@@ -1,0 +1,29 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: RuleStep2
+  operations:
+  - receive:
+    - ~na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(<~na, k, ~nb>)
+  - send:
+    - tag
+    - ~nb
+    - '''Resp'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - tag
+    - ~nb
+    - '''Resp'''
+  - compute:
+    - tag = h(<~na, k, ~nb>)
+  - assert:
+    - tag = h(<~na, k, ~nb>)
+  - send: <END>

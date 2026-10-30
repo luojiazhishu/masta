@@ -1,0 +1,65 @@
+theory NaxosSimplified
+begin
+
+builtins: diffie-hellman
+
+functions: h/1, pair/2
+
+rule Setup:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk('I', ~ltkI), !Ltk('R', ~ltkR) ]
+
+rule Initiator_Start:
+  [ Fr(~eskI), !Ltk('I', ~ltkI) ]
+  --[ Test1(), Create('I', ~eskI), Running('I', 'R', ~eskI) ]->
+  [ Out(g^h(pair(~eskI, ~ltkI))), St_I_1('I', 'R', ~eskI, ~ltkI) ]
+
+rule Responder_Receive:
+  [ In(hkI), Fr(~eskR), !Ltk('R', ~ltkR) ]
+  --[ Test2(), Create('R', ~eskR), Running('R', 'I', hkI) ]->
+  [ Out(g^h(pair(~eskR, ~ltkR))), St_R_Done('R', 'I', hkI, ~ltkR) ]
+
+rule Initiator_Finish:
+  [ St_I_1('I', 'R', ~eskI, ~ltkI), In(hkR), !Ltk('R', ~ltkR) ]
+  --[ Test3(), Commit('I', 'R', pair(~eskI, hkR)), Secret('I', 'R', h(pair(hkR^~ltkI, pair('I', 'R')))) ]->
+  [ ]
+
+rule Responder_Commit:
+  [ St_R_Done('R', 'I', hkI, ~ltkR) ]
+  --[ Commit('R', 'I', hkI) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk('I', ~ltkI) ]
+  --[ LtkReveal('I'), Honest('I') ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', ~ltkR) ]
+  --[ LtkReveal('R'), Honest('R') ]->
+  [ Out(~ltkR) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All I R k #i.
+     Secret(I, R, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma responder_alive:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex id #j. Create(r, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

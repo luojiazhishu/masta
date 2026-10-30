@@ -1,0 +1,10 @@
+Subset aggregation from archived artifacts; no new prover invocation.
+M4 recomputed from archived action-block files for the three selected action variants; M1-M3 and M5 retained from the original score because the baseline and all weakness variants are unchanged.
+{
+  "protocol_id": "008_H1",
+  "m1": 1.0,
+  "m2": 0.8524871355060034,
+  "m3": 0.6666666666666666,
+  "m4": 0.9629629629629629,
+  "m5": 1.0
+}

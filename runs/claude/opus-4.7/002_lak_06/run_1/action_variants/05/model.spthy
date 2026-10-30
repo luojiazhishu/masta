@@ -1,0 +1,83 @@
+theory LAK06_actionvariant
+begin
+
+builtins: xor, hashing
+
+/*
+  Protocol (action variant: Tag response carries the 'TAG_HDR' framing label):
+
+    R -> T: r0
+    T -> R: 'TAG_HDR', r1, h(r0 XOR r1 XOR k)
+    R -> T: h(h(r0 XOR r1 XOR k) XOR k XOR r0)
+
+  The 'TAG_HDR' literal is a transport-level marker and is NOT folded
+  into MAC inputs.
+*/
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ i & OnlyOnce(x) @ j ==> #i = #j"
+
+rule setup:
+  [ Fr(~k) ]
+  --[ OnlyOnce('setup'), Create(~k), Secret('R', 'T', ~k) ]->
+  [ !Reader(~k), !Tag(~k) ]
+
+// Action block 1: Reader draws r0 and sends R0
+rule initiatereader:
+  [ !Reader(~k), Fr(~r0) ]
+  --[ OnlyOnce('initiatereader'), Test1() ]->
+  [ ReaderState1(~k, ~r0), Out(~r0) ]
+
+// Action block 2: Tag receives r0, draws r1, sends T1 with 'TAG_HDR' label
+rule tag1:
+  [ !Tag(~k), Fr(~r1), In(r0) ]
+  --[ Running('T', 'R', <'reader', ~k, r0, ~r1>)
+    , Test2() ]->
+  [ TagState1(~k, ~r1, r0)
+  , Out(<'TAG_HDR', ~r1, h(r0 XOR ~r1 XOR ~k)>) ]
+
+// Action block 3: Reader checks 'TAG_HDR', verifies tag_mac, sends R1
+rule acceptreader:
+  [ ReaderState1(~k, ~r0)
+  , In(<'TAG_HDR', r1, h(~r0 XOR r1 XOR ~k)>) ]
+  --[ Commit('R', 'T', <'reader', ~k, ~r0, r1>)
+    , Running('R', 'T', <'tag', ~k, ~r0, r1>)
+    , Test3() ]->
+  [ Out(h(h(~r0 XOR r1 XOR ~k) XOR ~k XOR ~r0)) ]
+
+// Action block 4: Tag verifies reader_mac
+rule accepttag:
+  [ TagState1(~k, ~r1, r0)
+  , In(h(h(r0 XOR ~r1 XOR ~k) XOR ~k XOR r0)) ]
+  --[ Commit('T', 'R', <'tag', ~k, r0, ~r1>)
+    , Test4() ]->
+  [ ]
+
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==> not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag [use_induction]:
+  "All t #i.
+     Commit('T', 'R', t) @ i
+   ==>
+       (Ex #j. Running('R', 'T', t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader [use_induction]:
+  "All t #i.
+     Commit('R', 'T', t) @ i
+   ==>
+       (Ex #j. Running('T', 'R', t) @ j)"
+
+end

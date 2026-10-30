@@ -1,0 +1,38 @@
+theory Symmetric_Key_Public_Hash_Witness
+begin
+
+builtins: symmetric-encryption, hashing
+functions: sk/0 [private]
+
+rule Initiator_Send:
+  let msg = senc(<~sec, ~pub>, sk)
+      witness = h(~sec)
+  in
+  [ Fr(~sec), Fr(~pub) ]
+--[ Test1(), Running('I', 'R', <'initiator', ~sec, ~pub>), Secret('I', 'R', ~sec), Honest('I'), Honest('R') ]->
+  [ Out(<msg, witness>) ]
+
+rule Responder_Receive:
+  [ In(<senc(<sec, pub>, sk), witness>) ]
+--[ Test2(), Commit('R', 'I', <'initiator', sec, pub>), Honest('I'), Honest('R') ]->
+  [ Out(pub) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+     Test1() @ #t1 & Test2() @ #t2
+   & #t1 < #t2"
+
+restriction Secret_Payload_Not_Known:
+  "All A B x #i #j.
+     Secret(A, B, x) @ #i & K(x) @ #j
+   ==> F"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

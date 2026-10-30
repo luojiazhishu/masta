@@ -1,0 +1,102 @@
+theory ISO9798_4_Mechanism4
+begin
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// Provisioning: shared symmetric long-term key between A and B
+rule Setup:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk($A, $B, ~kAB) ]
+
+// Adversary can reveal the shared long-term key
+rule Reveal_Ltk:
+  [ !Ltk($A, $B, ~kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(~kAB) ]
+
+// Block 1: Responder B generates challenge RB and sends it
+rule B_Challenge:
+  [ Fr(~RB), !Ltk($A, $B, ~kAB) ]
+  --[ Test1() ]->
+  [ Out(<~RB>), St_B_1($A, $B, ~kAB, ~RB) ]
+
+// Block 2: Initiator A receives challenge, obtains RA from its random source
+// (modeled via In to capture the reuse-once property: RA may repeat across sessions)
+rule A_Respond:
+  [ In(<RB>), In(RA), !Ltk($A, $B, ~kAB) ]
+  --[ Test2(),
+      Running($A, $B, <'initiator', RA, RB>) ]->
+  [ Out(<'token_ab', RA, <'sid1_mut_cr', RA, RB, $B>, mac(<'sid1_mut_cr', RA, RB, $B>, ~kAB)>),
+    St_A_1($A, $B, ~kAB, RA, RB) ]
+
+// Block 3: Responder B verifies TokenAB, sends TokenBA, and commits on A
+rule B_Verify_Respond:
+  [ St_B_1($A, $B, ~kAB, ~RB),
+    In(<'token_ab', RA, <'sid1_mut_cr', RA, ~RB, $B>, mac1>) ]
+  --[ Test3(),
+      Eq(mac1, mac(<'sid1_mut_cr', RA, ~RB, $B>, ~kAB)),
+      Running($B, $A, <'responder', RA, ~RB>),
+      Commit($B, $A, <'initiator', RA, ~RB>),
+      Honest($A), Honest($B) ]->
+  [ Out(<mac(<'sid2_mut_cr', ~RB, RA>, ~kAB)>),
+    St_B_2($A, $B, ~kAB, ~RB, RA) ]
+
+// Block 4: Initiator A verifies TokenBA and commits on B
+rule A_Complete:
+  [ St_A_1($A, $B, ~kAB, RA, RB),
+    In(<mac2>) ]
+  --[ Test4(),
+      Eq(mac2, mac(<'sid2_mut_cr', RB, RA>, ~kAB)),
+      Commit($A, $B, <'responder', RA, RB>),
+      Honest($A), Honest($B) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'responder', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'responder', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'responder', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'responder', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'responder', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'initiator', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,142 @@
+/**********************************************************************
+ * crawled at : 2026-04-26T03:00:58Z
+ * source     : https://github.com/KaplanHalil/Tamarin/blob/0c78596d6ea47d702dcc34fc0f68219580a8ce27/exercises/H1.spthy
+ * repository : KaplanHalil/Tamarin
+ * repo url   : https://github.com/KaplanHalil/Tamarin
+ **********************************************************************/
+
+theory H1
+begin
+
+builtins: signing
+
+// pre-shared key distribution
+rule Register_pk:
+  [ Fr(~ltkX) ]
+  --[ Register($X) ]->
+  [ !Ltk($X, ~ltkX), Out(pk(~ltkX))]
+
+rule Reveal_ltk:
+  [ !Ltk(X, ltkX) ] --[ Reveal(X), LtkReveal(X) ]-> [ Out(ltkX) ]
+
+/* We formalize the following protocol
+  protocol {
+    1. I -> R: {I,R}sk(I)  /// add an Ni that will not be used, maybe add Nr to the response
+    2. I <- R: {I,R}sk(R)
+  }
+*/
+
+rule Init_I:
+  [ Fr(~id)
+  , !Ltk(I, ltkI), !Ltk(R, ltkR)
+  ]
+--[ Create_I(I, ~id) , NotEq(I,R) ]->
+  [ St_I_1(I, ~id, ltkI, pk(ltkR), R)
+  ]
+
+rule Init_R:
+  [ Fr(~id)
+  , !Ltk(R, ltkR), !Ltk(I, ltkI)
+  ]
+--[ Create_R(R, ~id) , NotEq(I,R) ]->
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  ]
+
+rule I_1_send:
+  let mI1 = sign{I,R}ltkI
+  in
+  [ St_I_1(I, ~id, ltkI, pkltkR, R)
+  ]
+--[ Send(I, mI1)
+  , Running(I, R, 'anyroles')  // relevant for weak agreement only, as the roles are not taken into account
+  , Test1()
+  ]->
+  [ St_I_2(I, ~id, ltkI, pkltkR, R)
+  , Out(mI1)
+  ]
+
+rule R_1_receive [no_derivcheck]:
+  let mR1 = sign{I,R}ltkI
+  in
+  [ St_R_1(R, ~id, ltkR, pk(ltkI), I)
+  , In(mR1)
+  ]
+--[ Recv(R, mR1)
+  , Test2()
+  ]->
+  [ St_R_2(R, ~id, ltkR, pk(ltkI), I)
+  ]
+
+rule R_2_send:
+  let mR2 = sign{I,R}ltkR
+  in
+  [ St_R_2(R, ~id, ltkR, pkltkI, I)
+  ]
+--[ Send(R, mR2)
+  , Running(R, I, <'Init', 'Resp'>)
+  , Test3()
+  ]->
+  [ St_R_3(R, ~id, ltkR, pkltkI, I)
+  , Out(mR2)
+  ]
+
+rule I_2_receive [no_derivcheck]:
+  let mI2 = sign{I,R}ltkR
+  in
+  [ St_I_2(I, ~id, ltkI, pk(ltkR), R)
+  , In(mI2)
+  ]
+--[ Receive(I, mI2)
+  , Commit(I, R, <'Init', 'Resp'>)
+  , Finish(I, R)
+  , Honest(I)
+  , Honest(R)
+  , Test4()
+  ]->
+  [ St_I_3(I, ~id, ltkI, pk(ltkR), R)
+  ]
+
+
+// ---------- 3. Weak agreement ----------
+lemma weakagree:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+
+// ---------- 4. Non-injective agreement ----------
+lemma noninjective_agree:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i & r < i)"
+
+
+// ---------- 5. Injective agreement ----------
+lemma injective_agree:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i & r < i)"
+
+
+restriction onekeypername:
+  "All X #i #j. Register(X)@i & Register(X)@j ==> #i = #j"
+
+//restriction noselfcommunication:
+//  " All X Y #i. NotEq(X,Y) @i ==> not (X = Y)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,55 @@
+- role: Receiver_Send_SetupRequest
+  operations:
+  - generate_nonces:
+    - ~nR
+    - ~rid
+  - send:
+    - '''R'''
+    - '''S'''
+    - ~nR
+- role: Sender_Send_SetupResponse
+  operations:
+  - receive:
+    - '''R'''
+    - '''S'''
+    - nR
+  - generate_nonces:
+    - ~sid
+    - ~k1
+    - ~k2
+    - ~m1
+  - compute:
+    - commitment = h(~k1)
+    - signed = sign(<h(~k1), nR, 'init'>, ltk)
+  - send:
+    - '''S'''
+    - '''R'''
+    - commitment
+    - signed
+- role: Receiver_Verify_SetupResponse
+  operations:
+  - receive:
+    - '''S'''
+    - '''R'''
+    - commitment
+    - signature
+  - assert:
+    - verify(signature, <commitment, nR, 'init'>, pkS) = true
+  - send: []
+- role: Sender_Broadcast_Data
+  operations:
+  - compute:
+    - d1 = <m1, h(k2)>
+    - tag1 = mac(k1, <m1, h(k2)>)
+  - send:
+    - d1
+    - tag1
+- role: Receiver_Accept_Broadcast
+  operations:
+  - receive:
+    - d1
+    - tag1
+  - compute:
+    - d1 = <m, nextCommitment>
+    - tag1 = mac(k1, <m, nextCommitment>)
+  - send: <END>

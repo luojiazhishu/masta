@@ -1,0 +1,19 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - send:
+    - h1(~eskI, ~ltkI)
+- role: Responder
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+  - send:
+    - h1(~eskR, ~ltkR)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - hkR
+  - send: <END>

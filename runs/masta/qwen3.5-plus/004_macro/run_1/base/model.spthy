@@ -1,0 +1,61 @@
+theory BSKT begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Setup:
+  [ Fr(~skS) ]
+  --[ Honest($S) ]->
+  [ !Ltk($S, pk(~skS)), !Ltk_priv($S, ~skS) ]
+
+rule RuleStep1:
+  [ Fr(~k), !Ltk($S, pkS) ]
+  --[ Test1(), Secret($C, $S, ~k), Honest($S) ]->
+  [ Out(aenc(~k, pkS)), StC($C, ~k) ]
+
+rule RuleStep2:
+  [ In(aenc(k, pk(skS))), !Ltk_priv($S, skS) ]
+  --[ Test2(), Running($S, $C, k) ]->
+  [ Out(h(k)), StS($S, k) ]
+
+rule RuleStep3:
+  [ In(h(~k)), StC($C, ~k) ]
+  --[ Test3(), Commit($C, $S, ~k), Honest($C) ]->
+  [ Out('END') ]
+
+rule LtkReveal:
+  [ !Ltk(X, ltk), !Ltk_priv(X, sk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(sk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_secrecy_of_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_on_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_on_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,192 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+                  LoRaWAN 1.0 Join Procedure
+                       draft-famed-lora10-00
+
+
+Abstract
+
+   This document specifies the over-the-air activation handshake
+   used by LoRaWAN 1.0 end devices to join a network.  Before
+   sending the JoinRequest, the end device records a local audit
+   value that binds its DevEUI to the freshly generated
+   DevNonce; the value is retained in the local audit log for
+   operator inspection but is not transmitted.  This memo
+   describes the wire-level messages, the processing rules
+   applied by end devices and the network-side join server, and
+   the security properties that result from the design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+     2.1.  Local Diagnostic Functions  . . . . . . . . . . . . . .  3
+   3.  Provisioning  . . . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  7
+   7.  Session-Key Derivation  . . . . . . . . . . . . . . . . . .  8
+   8.  Security Considerations . . . . . . . . . . . . . . . . . .  8
+   9.  References  . . . . . . . . . . . . . . . . . . . . . . . . 10
+
+
+1.  Introduction
+
+   The end device derives a local commitment over its DevEUI and
+   the freshly generated DevNonce before constructing a
+   JoinRequest, and writes the resulting value to a client-side
+   audit log.  This derivation supports deployment monitoring
+   without affecting the cryptographic processing of the
+   handshake.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   senc(m, k), mac(k, m), verif_mac(k, m, t), <a, b, ...>, cst1,
+   cst2 are as defined for the symmetric primitives used by
+   LoRaWAN 1.0.
+
+2.1.  Local Diagnostic Functions
+
+   One opaque function is referenced in the device-side
+   processing rules of this specification:
+
+   o  com(a, b) is a binding commitment over two arguments and
+      is used by the device to record a local audit value that
+      ties DevEUI to the freshly generated DevNonce.
+
+   The exact algorithm used to realise com is a local matter.
+   Its output is not transmitted, is not part of any encrypted
+   value, and does not appear in any wire-format message.
+
+
+3.  Provisioning
+
+   The join server provisions each device with DevEUI, JoinEUI,
+   AppKey, and DevAddr.
+
+
+4.  Protocol Overview
+
+         Device                                          Server
+            |                                                |
+            |  <"JoinRequest", DevEUI, JoinEUI, DevNonce, m> |
+            |----------------------------------------------->|
+            |                                                |
+            |  senc(JoinAcceptBody, AppKey)                  |
+            |<-----------------------------------------------|
+
+
+5.  Message Format
+
+      struct {
+          opaque  Tag = "JoinRequest";
+          opaque  DevEUI;
+          opaque  JoinEUI;
+          opaque  DevNonce;
+          opaque  RequestMAC;
+      } JoinRequest;
+
+      struct {
+          opaque  Tag = "JoinAccept";
+          opaque  JoinNonce;
+          opaque  DevAddr;
+          opaque  ResponseMAC;
+      } JoinAcceptBody;
+
+
+6.  Processing Rules
+
+   1.  Before sending a JoinRequest, the Device SHALL draw a
+       fresh ~DevNonce and SHALL compute the local audit value
+       AuditCommitment = com(DevEUI, ~DevNonce).
+       AuditCommitment SHALL be retained in the local audit log;
+       the value is not transmitted.
+
+   2.  The Device SHALL emit the JoinRequest carrying RequestMAC
+       computed under AppKey.
+
+   3.  Upon receiving a JoinRequest, the join server SHALL
+       perform the standard MAC verification, derive the session
+       keys, and emit the JoinAccept body encrypted under
+       AppKey.
+
+   4.  Upon receiving a JoinAccept, the Device SHALL decrypt the
+       message under AppKey, validate ResponseMAC, and derive
+       AppSKey and NwkSKey.
+
+
+7.  Session-Key Derivation
+
+      AppSKey = senc(<cst1, DevNonce, JoinNonce>, AppKey)
+      NwkSKey = senc(<cst2, DevNonce, JoinNonce>, AppKey)
+
+
+8.  Security Considerations
+
+   The local diagnostic value AuditCommitment is derived by the
+   Device and recorded in a client-side log.  It does not enter
+   the wire format and does not contribute to authentication.
+
+   The Device-side commit on the five-tuple (AppKey, DevNonce,
+   JoinNonce) is taken on the JoinAccept actually received and
+   not on a JoinNonce that the join server is required to have
+   generated in the same exchange.  An attacker that captures a
+   JoinAccept emitted in any earlier exchange can replay that
+   message to a Device that has just sent a fresh JoinRequest;
+   the replayed JoinAccept passes MAC verification because
+   AppKey is long-term.
+
+
+9.  References
+
+9.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+9.2.  Informative References
+
+   [LoRaWAN10]
+              LoRa Alliance, "LoRaWAN 1.0 Specification",
+              October 2017.
+
+
+10. Analysis Targets
+
+10.1 Injective Agreement at the Device
+10.2 Non-injective Agreement at the Device
+10.3 Injective Agreement at the Network Server
+10.4 Non-injective Agreement at the Network Server
+10.5 Injective Agreement on the Session Keys
+10.6 Non-injective Agreement on the Session Keys
+10.7 Secrecy of the Session Keys

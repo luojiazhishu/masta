@@ -1,0 +1,15 @@
+- role: RuleStep1
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+- role: RuleStep2
+  operations:
+  - receive:
+    - sigI
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: RuleStep3
+  operations:
+  - receive:
+    - sigR
+  - send: <END>

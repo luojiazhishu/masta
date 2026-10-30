@@ -1,0 +1,19 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - send:
+    - g^h(pair(~eskI, ~ltkI))
+- role: Responder_Receive
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+  - send:
+    - g^h(pair(~eskR, ~ltkR))
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - hkR
+  - send: <END>

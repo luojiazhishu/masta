@@ -1,0 +1,239 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                       with a Responder Audit Tag
+                       draft-famed-crxor-raudit-00
+
+
+Abstract
+
+   This document specifies CR-XOR-RAudit, a two-flow challenge-
+   response authentication protocol between two endpoints that
+   already share a long-term symmetric key.  The responder computes
+   a local audit tag derived from its fresh nonce and stores it in
+   an internal log; the audit tag does not appear on the wire and
+   is not part of the protocol's cryptographic verification.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-RAudit provides a compact mechanism by which an initiator
+   verifies that a peer holding a pre-shared key is reachable and
+   currently active.  In addition to the basic two-flight challenge-
+   response exchange, the responder derives a local audit tag
+
+         tag_audit_R = bar(nb)
+
+   immediately after generating its fresh nonce nb, and stores the
+   resulting value in an implementation-defined audit log.  The
+   audit tag is intended for offline reconciliation against
+   external sources of evidence and is never transmitted.
+
+   This document defines bar as a unary function symbol whose
+   semantics are deliberately left unconstrained; implementers MAY
+   use any deterministic transform that meets their auditing
+   needs.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  bar is a
+   deterministic unary transform whose specific construction is
+   chosen by the implementation.  na is the initiator nonce, nb is
+   the responder nonce, and k is the shared symmetric key.  The
+   role names I and R denote the initiator and the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-RAudit runs in a single round trip on the wire:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb                  |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify H tag                                  |
+          |                                                |
+
+   On the responder side, immediately after generating nb, the
+   implementation also derives tag_audit_R = bar(nb) and stores it
+   in an internal audit log.  The audit log is local to the
+   responder and is not exchanged with the initiator.
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+      } ResponderFlight;
+
+   The audit tag has no wire encoding because it is never
+   transmitted.
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band.  k MUST be
+   drawn uniformly at random and MUST be kept secret to both
+   endpoints.
+
+   An implementation in role I performs the following steps.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(na XOR k XOR nb).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  If t' equals tag, declare the responder authenticated;
+           otherwise abort.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   performs the following steps.
+
+   1.  Verify that na has length L_n and is non-zero.
+
+   2.  Generate a fresh nonce nb of length L_n.  nb MUST NOT be
+       reused across runs.
+
+   3.  Compute tag_audit_R = bar(nb) and append it to the
+       responder's audit log.  The audit step MUST NOT modify any
+       protocol state used by step 4.
+
+   4.  Compute t = H(na XOR k XOR nb).
+
+   5.  Transmit ResponderFlight{ tag = t, response_nonce = nb }.
+
+
+6.  Security Considerations
+
+   CR-XOR-RAudit is designed to convince the initiator that the
+   holder of k has reacted to the current challenge.  When the
+   verification at step 5.3.c succeeds, the initiator can conclude
+   that the responder has been active at some point in time and is
+   in possession of k.  This property is sometimes referred to as
+   aliveness of the responder.
+
+   The audit tag tag_audit_R is local to the responder, never
+   appears on the wire, and is not consumed by any protocol
+   verification step.  The protocol's authentication guarantees do
+   not depend on the construction of bar.
+
+   The hash function H provides the cryptographic barrier against
+   forgery of the responder flight.  H MUST be selected so that
+   the work factor of preimage and collision attacks exceeds the
+   lifetime value of k.
+
+   The non-zero check on the nonces removes a degenerate case in
+   which an attacker submits the all-zeros nonce; without the
+   check, the algebraic identity x XOR x = 0 could be exploited to
+   drive the hash input into a state that is independent of one of
+   the nonces.
+
+   Implementers should be aware that the construction H(na XOR k
+   XOR nb) is bilinear with respect to its operands.  An active
+   attacker that observes one valid responder flight for a
+   challenge na', and that is in a position to reroute traffic,
+   can choose a fresh challenge na for an honest initiator and
+   deliver a crafted response_nonce nb' = na XOR na' XOR nb
+   together with the originally observed tag.  Under these
+   circumstances the initiator's tag check succeeds even though
+   the responder did not react to na.  CR-XOR-RAudit therefore
+   does not provide agreement on the per-session parameters; it
+   provides aliveness of the entity holding k, and nothing
+   stronger.
+
+   Implementations should be aware that the audit tag stored in
+   the local log can leak the value of nb if the audit log is
+   exposed to an adversary, depending on the construction of bar.
+   The audit log MUST be protected with at least the same
+   confidentiality as nb itself.
+
+   Compromise of k breaks all guarantees of CR-XOR-RAudit, both
+   for past and future runs.  Implementations SHOULD provide a
+   mechanism to rotate k.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments operating
+   over open networks SHOULD rate-limit incoming InitiatorFlights
+   at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

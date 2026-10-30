@@ -1,0 +1,76 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+// Long-term key generation
+rule Ltk_Gen:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+// Rule 1: Reader sends challenge R0
+rule Reader_Challenge:
+  [ Fr(~r0), !Ltk(k), Fr(~R) ]
+  --[ Test1(), Create(~R, ~r0) ]->
+  [ Out(< 'INIT', ~r0, ~R >), StReaderChallenge(k, ~r0, ~R) ]
+
+// Rule 2: Tag receives challenge, sends response T1
+rule Tag_Response:
+  [ In(< 'INIT', r0, R >), !Ltk(k), Fr(~r1), Fr(~T) ]
+  --[ Test2(), Create(~T, ~r1), Running(~T, R, < k, r0, ~r1 >) ]->
+  [ Out(< ~r1, h(<r0, ~r1, k>), ~T >), StTagResp(k, r0, ~r1, ~T, R) ]
+
+// Rule 3: Reader receives response, verifies and sends confirmation R1
+rule Reader_Verify:
+  [ StReaderChallenge(k, r0, R), In(< r1, h(<r0, r1, k>), T >) ]
+  --[ Test3(), Running(R, T, < k, r0, r1 >), Commit(R, T, < 'reader', k, r0, r1 >), Honest(R) ]->
+  [ Out(< h(<h(<r0, r1, k>), k, r0>) >), StReaderVerify(k, r0, r1, R) ]
+
+// Rule 4: Tag receives confirmation, verifies
+rule Tag_Verify:
+  [ StTagResp(k, r0, r1, T, R), In(< h(<h(<r0, r1, k>), k, r0>) >) ]
+  --[ Test4(), Commit(T, R, < 'tag', k, r0, r1 >), Honest(T), Secret(T, R, k) ]->
+  [ StTagDone(k, r0, r1, T) ]
+
+// LTK reveal rule for adversary
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// Secrecy of long-term key
+// category: secrecy
+lemma secrecy_ltk:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma - witnesses one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

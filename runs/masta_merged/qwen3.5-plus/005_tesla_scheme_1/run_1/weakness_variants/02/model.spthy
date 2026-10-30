@@ -1,0 +1,62 @@
+theory TESLA_Scheme1_Profile begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+// PKI Setup: Generate long-term keys for Sender
+rule Generate_Keys:
+  [ Fr(~sk_S) ]
+  --[ Setup() ]->
+  [ !Ltk($S, ~sk_S), !Pk($S, pk(~sk_S)), Out(pk(~sk_S)) ]
+
+// RuleStep1: Receiver R sends setup request with nonce
+rule RuleStep1:
+  [ Fr(~n_R), !Pk($S, pk_S) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+// RuleStep2: Sender S responds with commitment and signature
+rule RuleStep2:
+  [ In(<$R, $S, n_R>), !Ltk($S, sk_S), !Pk($S, pk_S) ]
+  --[ Test2() ]->
+  [ Fr(~k_1), Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, sk_S)>), !CachedCommit($R, f(~k_1)) ]
+
+// RuleStep3: Receiver R verifies signature and caches commitment
+rule RuleStep3:
+  [ In(<$S, $R, f_k1, sig_1>), !Pk($S, pk_S) ]
+  --[ Test3() ]->
+  [ !VerifiedCommit($R, f_k1) ]
+
+// RuleStep4: Sender S sends first stream message (Msg 1)
+rule RuleStep4:
+  [ !Ltk($S, sk_S), !VerifiedCommit($R, f_k1) ]
+  --[ Test4() ]->
+  [ Fr(~k_1), Fr(~k_2), Out(<<'payload_1', f(~k_2)>, mac(~k_1, <'payload_1', f(~k_2)>)), !CachedPayload($R, 1, 'payload_1', mac(~k_1, <'payload_1', f(~k_2)>)), !NextKey($S, ~k_2), !PrevKey($S, ~k_1) ]
+
+// RuleStep5: Receiver R receives Msg 1 and caches payload
+rule RuleStep5:
+  [ In(<D_1, mac_1>), !VerifiedCommit($R, f_k1) ]
+  --[ Test5() ]->
+  [ !CachedPayload($R, 1, fst(D_1), mac_1), !CachedCommit($R, snd(D_1)) ]
+
+// RuleStep6: Sender S sends subsequent stream message (Msg n) disclosing k_{n-1}
+rule RuleStep6:
+  [ !PrevKey($S, k_prev), !NextKey($S, k_curr) ]
+  --[ Test6() ]->
+  [ Fr(~k_next), Out(<<'payload_n', f(~k_next), k_prev>, mac(k_curr, <'payload_n', f(~k_next), k_prev>)), !CachedPayload($R, n, 'payload_n', mac(k_curr, <'payload_n', f(~k_next), k_prev>)), !NextKey($S, ~k_next), !PrevKey($S, k_curr) ]
+
+// RuleStep7: Receiver R receives Msg n, verifies commitment, accepts previous payload
+rule RuleStep7:
+  [ In(<D_n, mac_n>), !CachedCommit($R, expected_f_k_prev) ]
+  --[ Test7() ]->
+  [ !CachedCommit($R, snd(D_n)) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 &
+       Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

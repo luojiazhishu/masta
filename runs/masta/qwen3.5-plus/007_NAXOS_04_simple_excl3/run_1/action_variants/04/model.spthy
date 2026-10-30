@@ -1,0 +1,105 @@
+theory SimplifiedNAXOS begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/1, h2/1, com/2
+
+rule GenerateKey:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, 'g'^~ltk)
+  , Out('g'^~ltk)
+  ]
+
+rule RuleStep1:
+  let exI = h1(<~xI, ~lkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~xI)
+  , Fr(~tid)
+  , !Ltk($I, ~lkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1(), Audit($I, $R, com($I, $R)), Honest($I), Honest($R), Create($I, ~tid) ]->
+  [ Out(hkI)
+  , !InitState(~tid, $I, $R, exI, ~lkI)
+  ]
+
+rule RuleStep2:
+  let exR = h1(<~xR, ~lkR>)
+      hkR = 'g'^exR
+      kR = h2(<pkI^exR, hkI^~lkR, $I, $R>)
+  in
+  [ In(hkI)
+  , Fr(~xR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), SessionKey($R, kR), Secret($R, $I, kR), Honest($R), Create($R, ~xR), Running($R, $I, <hkI, hkR>), Commit($R, $I, <hkI, hkR>) ]->
+  [ Out(hkR)
+  ]
+
+rule RuleStep3:
+  let hkI = 'g'^exI
+      kI = h2(<hkR^~lkI, pkR^exI, $I, $R>)
+  in
+  [ In(hkR)
+  , !InitState(~tid, $I, $R, exI, ~lkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3(), SessionKey($I, kI), Secret($I, $R, kI), Honest($I), Commit($I, $R, <hkI, hkR>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

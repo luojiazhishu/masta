@@ -1,0 +1,78 @@
+theory NaxosSimplified
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/1, h2/1
+
+rule Setup_g:
+  [ Fr(~g) ]
+  --[ ]->
+  [ !G(~g) ]
+
+rule Register_pk_I:
+  [ Fr(~ltkI), !G(~g) ]
+  --[ ]->
+  [ !Pk('I', ~g ^ ~ltkI), !Ltk('I', ~ltkI) ]
+
+rule Register_pk_R:
+  [ Fr(~ltkR), !G(~g) ]
+  --[ ]->
+  [ !Pk('R', ~g ^ ~ltkR), !Ltk('R', ~ltkR) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ ]
+
+rule Initiator_Start:
+  [ Fr(~eskI), Fr(~tidI), !Ltk('I', ~ltkI), !G(~g) ]
+  --[ Test1(), Create('I', ~tidI) ]->
+  [ Msg1(~g ^ h1(< ~eskI, ~ltkI >)), St_I_1(~tidI, ~ltkI, ~eskI) ]
+
+rule Responder:
+  [ Msg1(hkI), Fr(~eskR), Fr(~ltkR), Fr(~tidR), !Ltk('R', ~ltkR), !G(~g) ]
+  --[ Test2(), Create('R', ~tidR), Running('R', 'I', <'R', 'I', 'R'>) ]->
+  [ Msg2(~g ^ h1(< ~eskR, ~ltkR >)), St_R_1(~tidR, ~ltkR, ~eskR, hkI) ]
+
+rule Initiator_Finish:
+  [ St_I_1(tidI, ltkI, eskI), Msg2(hkR), !Ltk('R', ltkR) ]
+  --[ Test3(), Commit('I', 'R', <'I', 'I', 'R'>), Honest('I'), Secret('I', 'R', h2(<hkR, 'I', 'R'>)) ]->
+  [ ]
+
+rule Responder_Commit:
+  [ St_R_1(tidR, ltkR, eskR, hkI) ]
+  --[ Test4(), Commit('R', 'I', <'R', 'R', 'I'>), Honest('R'), Secret('R', 'I', h2(<hkI, 'I', 'R'>)) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All I R t #i.
+     Commit(I, R, t) @ i
+   ==>
+       (Ex id #j. Create(R, id) @ j & Running(R, I, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All I R t #i.
+     Commit(I, R, t) @ i
+   ==>
+       (Ex id #j. Create(R, id) @ j & Running(R, I, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

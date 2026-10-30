@@ -1,0 +1,6 @@
+lemma agree_device_noninj:
+  "All a b t #i.
+     Commit(a, b, <'simple', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'simple', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

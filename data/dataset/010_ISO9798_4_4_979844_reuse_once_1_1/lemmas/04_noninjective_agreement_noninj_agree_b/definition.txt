@@ -1,0 +1,6 @@
+lemma noninj_agree_b:
+  "All a b t #i.
+     Commit(a, b, <'b_t', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'b_t', t>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

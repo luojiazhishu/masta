@@ -1,0 +1,5 @@
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j & j < i)"

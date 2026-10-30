@@ -1,0 +1,119 @@
+theory ISO9798_4_Mechanism4_ReuseOnce
+begin
+
+functions: mac/2
+
+// Long-term shared key between A and B
+rule Setup_LTK:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk($A, $B, ~kAB) ]
+
+// Reveal the shared key (models compromise of either party)
+rule Reveal_LTK:
+  [ !Ltk($A, $B, ~kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(~kAB) ]
+
+// Action Block 1: Responder B draws RB and Text1, sends Challenge1
+rule Responder_1:
+  [ Fr(~rb), Fr(~text1), !Ltk($A, $B, ~kAB) ]
+  --[ Test1(), Create($B, ~rb) ]->
+  [ St_B_1($A, $B, ~kAB, ~rb),
+    Out(<~rb, ~text1>) ]
+
+// Action Block 2: Initiator A receives Challenge1, draws fresh RA, sends TokenAB
+rule Initiator_2:
+  [ !Ltk($A, $B, ~kAB),
+    In(<rb, text1>),
+    Fr(~ra), Fr(~nonceA1), Fr(~text2), Fr(~text3) ]
+  --[ Test2(),
+      Create($A, ~ra),
+      Running($A, $B, <'initiator', ~ra, rb>),
+      Running($A, $B, <'responder', ~ra, rb>) ]->
+  [ St_I_2($A, $B, ~kAB, ~ra, rb),
+    Out(<~nonceA1, ~ra, ~text3,
+         <'sid1_mut_cr', ~ra, rb, $B, ~text2>,
+         mac(<'sid1_mut_cr', ~ra, rb, $B>, ~kAB)>),
+    RAReuse(~ra) ]
+
+// Reuse variant: A starts a new session reusing a previous RA (one-shot)
+rule Initiator_2_Reuse:
+  [ !Ltk($A, $B, ~kAB),
+    In(<rb, text1>),
+    RAReuse(~ra),
+    Fr(~nonceA1), Fr(~text2), Fr(~text3) ]
+  --[ Running($A, $B, <'initiator', ~ra, rb>),
+      Running($A, $B, <'responder', ~ra, rb>) ]->
+  [ St_I_2($A, $B, ~kAB, ~ra, rb),
+    Out(<~nonceA1, ~ra, ~text3,
+         <'sid1_mut_cr', ~ra, rb, $B, ~text2>,
+         mac(<'sid1_mut_cr', ~ra, rb, $B>, ~kAB)>) ]
+
+// Action Block 3: Responder B verifies RequestMAC, sends TokenBA
+rule Responder_3:
+  [ St_B_1($A, $B, ~kAB, ~rb),
+    In(<nonceA1, ra, text3,
+        <'sid1_mut_cr', ra, ~rb, $B, text2>,
+        mac(<'sid1_mut_cr', ra, ~rb, $B>, ~kAB)>),
+    Fr(~text5) ]
+  --[ Test3(),
+      Commit($B, $A, <'responder', ra, ~rb>),
+      Running($B, $A, <'initiator', ra, ~rb>),
+      Honest($A), Honest($B) ]->
+  [ Out(<~text5, mac(<'sid2_mut_cr', ~rb, ra>, ~kAB)>) ]
+
+// Action Block 4: Initiator A verifies ResponseMAC, completes authentication
+rule Initiator_4:
+  [ St_I_2($A, $B, ~kAB, ~ra, rb),
+    In(<text5, mac(<'sid2_mut_cr', rb, ~ra>, ~kAB)>) ]
+  --[ Test4(),
+      Commit($A, $B, <'initiator', ~ra, rb>),
+      Honest($A), Honest($B) ]->
+  [ ]
+
+// category: injective_agreement
+lemma injective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'initiator', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_B:
+  "All b a ra rb #i.
+     Commit(b, a, <'responder', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(a, b, <'responder', ra, rb>) @ j
+             & j < i
+             & not (Ex b2 a2 #i2. Commit(b2, a2, <'responder', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_B:
+  "All b a ra rb #i.
+     Commit(b, a, <'responder', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(a, b, <'responder', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

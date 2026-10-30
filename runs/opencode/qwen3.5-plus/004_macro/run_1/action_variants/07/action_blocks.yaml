@@ -1,0 +1,26 @@
+- role: RegisterServer
+  operations:
+  - generate_nonces:
+    - ~S
+    - ~skS
+  - send: []
+- role: ClientInit
+  operations:
+  - generate_nonces:
+    - ~C
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: ServerRespond
+  operations:
+  - receive:
+    - c
+  - send:
+    - h(<adec(c, ~skS), S>)
+- role: ClientVerify
+  operations:
+  - receive:
+    - confirm
+  - assert:
+    - confirm = h(<~k, S>)
+  - send: <END>

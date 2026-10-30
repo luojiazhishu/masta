@@ -1,0 +1,79 @@
+theory BSKTack begin
+
+builtins: asymmetric-encryption, hashing
+
+// RuleSetup: Server long-term key generation
+rule RuleSetup:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Pk($S, pk(~skS)), !Ltk($S, ~skS), Out(pk(~skS)) ]
+
+// RuleReveal: Adversary can reveal server's long-term key
+rule RuleReveal:
+  [ !Ltk($S, ~skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~skS) ]
+
+// RuleStep1: Client generates fresh key k, encrypts it, and sends m1
+// Stores state StC to link to Step3
+rule RuleStep1:
+  let
+    m1 = aenc(~k, pk(~skS))
+  in
+  [ Fr(~k), !Ltk($S, ~skS) ]
+  --[ Secret(~k), Honest($S), Test1() ]->
+  [ Out(m1), StC(~k, $S, ~skS) ]
+
+// RuleStep2: Server receives m1, decrypts, computes hash/ack, sends m2
+rule RuleStep2:
+  let
+    k = adec(m1, ~skS)
+    digest = h(k)
+    m2 = <digest, 'ack'>
+  in
+  [ In(m1), !Ltk($S, ~skS) ]
+  --[ Running($S, 'C', k), Test2() ]->
+  [ Out(m2) ]
+
+// RuleStep3: Client receives m2, verifies tag and digest
+// Consumes state StC to verify m2 against the original ~k
+rule RuleStep3:
+  let
+    expected_digest = h(~k)
+  in
+  [ In(m2), StC(~k, $S, ~skS) ]
+  --[ Commit('C', $S, ~k), Test3() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transported_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_transported_key:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

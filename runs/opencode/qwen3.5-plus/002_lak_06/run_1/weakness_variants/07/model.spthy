@@ -1,0 +1,66 @@
+theory LAK06
+begin
+
+builtins: hashing
+
+// Long-term key as persistent fact
+rule Register:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+// Action Block 1: Reader sends challenge r0
+rule Reader_Challenge:
+  [ Fr(~r0), !Ltk(k) ]
+  --[ Test1(), Running('Reader', ~r0, 'none', k) ]->
+  [ Out(~r0), St_R1(k, ~r0) ]
+
+// Action Block 2: Tag responds with r1 and tag_mac
+rule Tag_Response:
+  [ In(r0), Fr(~r1), !Ltk(k) ]
+  --[ Test2(), Running('Tag', r0, ~r1, k) ]->
+  [ Out(<~r1, h(<r0, ~r1, k>)>), St_T1(k, r0, ~r1) ]
+
+// Action Block 3: Reader sends confirmation with reader_mac and k
+rule Reader_Confirmation:
+  [ St_R1(k, r0), In(<r1, tag_mac>) ]
+  --[ Test3(), Eq(tag_mac, h(<r0, r1, k>)), Commit('Reader', r0, r1, k), Honest('Reader') ]->
+  [ Out(<h(<tag_mac, k, r0>), k>) ]
+
+// Action Block 4: Tag validates reader confirmation
+rule Tag_Verify:
+  [ St_T1(k, r0, r1), In(<reader_mac, k_recv>) ]
+  --[ Test4(), Eq(reader_mac, h(<h(<r0, r1, k>), k_recv, r0>)), Eq(k_recv, k), Commit('Tag', r0, r1, k), Honest('Tag') ]->
+  [ ]
+
+// Ltk reveal rule
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_tag:
+  "All r0 r1 k #i.
+     Commit('Tag', r0, r1, k) @ #i
+   ==>
+       (Ex #j. Running('Reader', r0, r1, k) @ #j)
+     | (Ex #r. LtkReveal(k) @ #r)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_reader:
+  "All r0 r1 k #i.
+     Commit('Reader', r0, r1, k) @ #i
+   ==>
+       (Ex #j. Running('Tag', r0, r1, k) @ #j)
+     | (Ex #r. LtkReveal(k) @ #r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

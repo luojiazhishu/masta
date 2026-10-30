@@ -1,0 +1,18 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(tagmac(r0, ~r1, k))
+- role: Reader_Send_R1
+  operations:
+  - send: <END>

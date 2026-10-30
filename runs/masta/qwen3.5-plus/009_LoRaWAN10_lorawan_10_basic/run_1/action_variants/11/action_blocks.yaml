@@ -1,0 +1,52 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+    - msg = <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, mac(~AppKey, <'JoinRequest',
+      ~DevEUI, ~JoinEUI, ~DevNonce>)>
+  - send:
+    - msg
+- role: RuleStep2
+  operations:
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+    - msg = <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, mac(~AppKey, <'JoinRequest',
+      ~DevEUI, ~JoinEUI, ~DevNonce>)>
+  - send:
+    - msg
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - devEUI
+    - joinEUI
+    - devNonce
+    - reqMAC
+  - generate_nonces:
+    - ~JoinNonce
+    - ~DevAddr
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', devEUI, joinEUI, devNonce>)
+    - respMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+    - joinAcceptBody = <'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <'JoinAccept',
+      ~JoinNonce, ~DevAddr>)>
+    - encJoinAccept = senc(<'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <'JoinAccept',
+      ~JoinNonce, ~DevAddr>)>, ~AppKey)
+  - send:
+    - encJoinAccept
+- role: RuleStep4
+  operations:
+  - receive:
+    - encMsg
+  - compute:
+    - joinAcceptBody = sdec(encMsg, ~AppKey)
+    - joinNonce = fst(snd(sdec(encMsg, ~AppKey)))
+    - devAddr = fst(snd(snd(sdec(encMsg, ~AppKey))))
+    - respMAC = snd(snd(snd(sdec(encMsg, ~AppKey))))
+    - expectedRespMAC = mac(~AppKey, <'JoinAccept', fst(snd(sdec(encMsg, ~AppKey))),
+      fst(snd(snd(sdec(encMsg, ~AppKey))))>)
+    - appSKey = senc(<cst1, ~DevNonce, fst(snd(sdec(encMsg, ~AppKey)))>, ~AppKey)
+    - nwkSKey = senc(<cst2, ~DevNonce, fst(snd(sdec(encMsg, ~AppKey)))>, ~AppKey)
+  - send: <END>

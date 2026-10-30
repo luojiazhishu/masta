@@ -1,0 +1,229 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                       with a Responder Marker
+                       draft-famed-crxor-rmk-00
+
+
+Abstract
+
+   This document specifies CR-XOR-RMK, a two-flow challenge-response
+   authentication protocol between two endpoints that already share
+   a long-term symmetric key.  The responder's flight carries a
+   constant marker octet string in addition to the hash tag and the
+   responder nonce; the initiator matches the marker before
+   accepting the flight for cryptographic verification.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-RMK provides a compact mechanism by which an initiator
+   verifies that a peer holding a pre-shared key is reachable and
+   currently active.  The first flight carries the initiator's
+   challenge nonce, and the second flight contains a hash tag, the
+   responder nonce, and a fixed marker constant declared in this
+   document as "Resp".  The initiator drops any flight whose marker
+   does not match before performing tag verification.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  <a, b>
+   denotes the concatenation of a and b in the order shown.  na is
+   the initiator nonce, nb is the responder nonce, and k is the
+   shared symmetric key.  The role names I and R denote the
+   initiator and the responder.  RMK denotes the constant octet
+   string "Resp", encoded according to Section 4.
+
+
+3.  Protocol Overview
+
+   CR-XOR-RMK runs in a single round trip:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb, "Resp"          |
+          |<-----------------------------------------------|
+          |                                                |
+          |  match marker, then verify H tag               |
+          |                                                |
+
+   The initiator generates a uniformly random nonce na of length
+   L_n and transmits it.  Upon receipt the responder generates a
+   fresh nb of length L_n, computes t = H(na XOR k XOR nb), and
+   transmits <t, nb, RMK>.  The initiator first checks that the
+   trailing marker equals RMK, then recomputes t' = H(na XOR k XOR
+   nb) from the received nb together with its retained na, and
+   compares t' to t.
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+          opaque  marker[L_m];
+      } ResponderFlight;
+
+   The constant RMK consists of the four ASCII octets {0x52, 0x65,
+   0x73, 0x70}, that is, the string "Resp".  L_m is fixed at four.
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band.  k MUST be
+   drawn uniformly at random and MUST be kept secret to both
+   endpoints.
+
+   An implementation in role I performs the following steps.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na in
+       protocol state.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb,
+       marker>:
+
+       a.  Verify that marker equals RMK; otherwise drop the
+           flight.
+
+       b.  Verify that nb has length L_n and is non-zero.
+
+       c.  Compute t' = H(na XOR k XOR nb).
+
+       d.  Compare t' to tag in constant time.
+
+       e.  If t' equals tag, declare the responder authenticated
+           for the current run; otherwise abort.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   MUST verify that na has length L_n and is non-zero, generate a
+   fresh nb of length L_n, compute t = H(na XOR k XOR nb), and
+   transmit ResponderFlight{ tag = t, response_nonce = nb, marker =
+   RMK }.
+
+
+6.  Security Considerations
+
+   CR-XOR-RMK is designed to convince the initiator that the
+   holder of k has reacted to the current challenge.  When the
+   verification at step 5.3.d succeeds, the initiator can conclude
+   that the responder has been active at some point in time and is
+   in possession of k.  This property is sometimes referred to as
+   aliveness of the responder.
+
+   The marker RMK is not part of the cryptographic input to H and
+   does not contribute to the authentication guarantee.  Its only
+   purpose is to provide a transport-layer profile selector for
+   implementations that may receive protocol-shaped traffic of
+   more than one variety on the same endpoint.
+
+   The hash function H provides the cryptographic barrier against
+   forgery of the responder flight.  H MUST be selected so that
+   the work factor of preimage and collision attacks exceeds the
+   lifetime value of k.
+
+   The non-zero check on the nonces removes a degenerate case in
+   which an attacker submits the all-zeros nonce; without the
+   check, the algebraic identity x XOR x = 0 could be exploited to
+   drive the hash input into a state that is independent of one of
+   the nonces.
+
+   Implementers should be aware that the construction H(na XOR k
+   XOR nb) is bilinear with respect to its operands.  An active
+   attacker that observes one valid responder flight <t, nb, RMK>
+   for a challenge na', and that is in a position to reroute
+   traffic, can choose a fresh challenge na for an honest
+   initiator and deliver the crafted response_nonce nb' = na XOR
+   na' XOR nb together with the originally observed tag and the
+   verbatim RMK; under these circumstances the initiator's tag
+   check succeeds even though the responder did not react to na.
+   CR-XOR-RMK therefore does not provide agreement on the
+   per-session parameters; it provides aliveness of the entity
+   holding k, and nothing stronger.
+
+   Deployments that need agreement on session parameters MUST
+   compose CR-XOR-RMK with an additional layer that binds the
+   verified exchange to specific session identifiers.
+
+   Compromise of k breaks all guarantees of CR-XOR-RMK, both for
+   past and for future runs.  Implementations SHOULD provide a
+   mechanism to rotate k.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments operating
+   over open networks SHOULD rate-limit incoming InitiatorFlights
+   at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

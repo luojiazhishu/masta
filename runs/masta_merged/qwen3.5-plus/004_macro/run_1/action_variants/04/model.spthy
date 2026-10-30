@@ -1,0 +1,39 @@
+theory bsktack begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: ack/0
+
+equations: snd(<x, y>) = y, fst(<x, y>) = x
+
+rule Generate_Server_Keys:
+  [ Fr(~sk_S) ]
+  --[ ]->
+  [ !Ltk($S, ~sk_S), !Pk($S, pk(~sk_S)), Out(pk(~sk_S)) ]
+
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pk_S) ]
+  --[ Test1() ]->
+  [ Out(aenc(~k, pk_S)) ]
+
+rule RuleStep2:
+  [ In(aenc(~k, pk(~sk_S))), !Ltk($S, ~sk_S) ]
+  --[ Test2() ]->
+  [ Out(<h(~k), 'ack'>) ]
+
+rule RuleStep3:
+  [ In(<digest, tag>), Fr(~k), !Pk($S, pk_S) ]
+  let m2 = <digest, tag>
+  in
+  [ ]
+  --[ Test3() ]->
+  [ ]
+  where "snd(m2) = 'ack' & fst(m2) = h(~k)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

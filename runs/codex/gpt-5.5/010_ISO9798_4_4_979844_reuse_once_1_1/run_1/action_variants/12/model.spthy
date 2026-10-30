@@ -1,0 +1,90 @@
+theory Iso979844ReuseOnce
+begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Create($A, ~k), Create($B, ~k), Honest($A), Honest($B) ]->
+  [ !SharedKey($A, $B, ~k), !SharedKey($B, $A, ~k) ]
+
+rule Reveal_SharedKey:
+  [ !SharedKey(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Duplicate_RA_Source:
+  [ Fr(~ra) ]
+  --[ ]->
+  [ !DuplicateRA(~ra) ]
+
+rule Responder_Challenge:
+  [ Fr(~rb), Fr(~text1), !SharedKey(B, A, k) ]
+  --[ Test1(), Create(B, <'resp', ~rb>), Running(B, A, <'challenge', ~rb>) ]->
+  [ Out(<~rb, ~text1>), St_B_1(B, A, k, ~rb) ]
+
+rule Initiator_Token:
+  let tagged1 = <'sid1_mut_cr', ra, rb, B, ~text2>
+      mac1 = mac(<'sid1_mut_cr', ra, rb, B>, k)
+      token = <ra, ~text3, tagged1, mac1>
+  in
+  [ !DuplicateRA(ra), Fr(~text2), Fr(~text3), !SharedKey(A, B, k), In(<rb, text1>) ]
+  --[ Test2(), Create(A, <'init', ra, rb>), Running(A, B, <ra, rb>), Secret(A, B, k), Honest(A), Honest(B) ]->
+  [ Out(token), Out(token), St_A_1(A, B, k, ra, rb) ]
+
+rule Responder_Token:
+  let mac2 = mac(<'sid2_mut_cr', rb, ra>, k)
+  in
+  [ Fr(~text4), Fr(~text5), St_B_1(B, A, k, rb), In(<ra, text3, <'sid1_mut_cr', ra, rb, B, text2>, mac(<'sid1_mut_cr', ra, rb, B>, k)>) ]
+  --[ Test3(), Running(B, A, <ra, rb>), Commit(B, A, <ra, rb>), Secret(B, A, k), Honest(B), Honest(A) ]->
+  [ Out(<~text5, mac2>) ]
+
+rule Initiator_Finish:
+  [ St_A_1(A, B, k, ra, rb), In(<text5, mac(<'sid2_mut_cr', rb, ra>, k)>) ]
+  --[ Test4(), Commit(A, B, <ra, rb>), Honest(A), Honest(B) ]->
+  [ ]
+
+// category: secrecy
+lemma long_term_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma initiator_noninjective_agreement:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       (Ex #j. Running(B, A, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma responder_noninjective_agreement:
+  "All B A t #i.
+     Commit(B, A, t) @ i
+   ==>
+       (Ex #j. Running(A, B, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma initiator_injective_agreement:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       ( (Ex #j. Running(B, A, t) @ j
+             & j < i
+             & not (Ex A2 B2 #i2. Commit(A2, B2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,73 @@
+theory NaxosSimpleExcl3
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: H/1
+
+rule Setup:
+  [ Fr(~g) ]
+  --[ ]->
+  [ !FrG(~g) ]
+
+rule Setup_I:
+  [ Fr(~ltkI) ]
+  --[ ]->
+  [ !Ltk(~ltkI), !Pk('I', ~ltkI) ]
+
+rule Setup_R:
+  [ Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk(~ltkR), !Pk('R', ~ltkR) ]
+
+rule Initiator_Start:
+  [ !FrG(~g), Fr(~eskI), !Ltk(~ltkI), !Pk('I', ~ltkI) ]
+  --[ Test1(), Create('I', ~ltkI) ]->
+  [ Out(~g^~eskI), St_I('I', ~ltkI, ~eskI) ]
+
+rule Responder_Receive:
+  [ !FrG(~g), In(hkI), Fr(~eskR), !Ltk(~ltkR), !Pk('R', ~ltkR) ]
+  --[ Test2(), Create('R', ~ltkR), Running('R', 'I', <'responder', hkI, ~ltkR, ~eskR>) ]->
+  [ Out(<~g^~eskR, H(hkI)>), St_R('R', ~ltkR, ~eskR, hkI) ]
+
+rule Initiator_Finish:
+  [ St_I('I', ~ltkI, ~eskI), In(<hkR, kR>) ]
+  --[ Test3(), Running('I', 'R', <'initiator', hkR, ~ltkI, ~eskI>), Commit('I', 'R', <'initiator', hkR, ~ltkI, ~eskI>), Secret('I', 'R', H(hkR)), Honest('I') ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(~ltk) ]
+  --[ LtkReveal(~ltk) ]->
+  [ Out(~ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All I R k #i.
+     Secret(I, R, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex id #j. Create(r, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_initiator:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex t2 #j. Running(r, i, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

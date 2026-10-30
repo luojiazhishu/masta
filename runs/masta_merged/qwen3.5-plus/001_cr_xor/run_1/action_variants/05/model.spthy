@@ -1,0 +1,64 @@
+theory CR_XOR_RAudit begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+// Pre-shared symmetric key generation
+rule GenerateKey:
+  [ Fr(~k) ]
+  --[ KeyGen(~k), Honest($I), Honest($R) ]->
+  [ !Ltk($I, ~k), !Ltk($R, ~k) ]
+
+// Key reveal rule for compromised long-term key
+rule LtkReveal:
+  [ !Ltk(A, k) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+// RuleStep1: Initiator sends challenge nonce na
+rule RuleStep1:
+  [ Fr(~na), !Ltk($I, k) ]
+  --[ Test1(), OutI(~na), Honest($I) ]->
+  [ Out(~na), !StateI($I, ~na, k) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag and response
+rule RuleStep2:
+  let
+      t = h(na ⊕ k ⊕ ~nb)
+      tag_audit_R = bar(~nb)
+  in
+  [ In(na), Fr(~nb), !Ltk($R, k) ]
+  --[ Test2(), AuditR(tag_audit_R), OutR(t, ~nb), Running($R, $I, t), Honest($R) ]->
+  [ Out(<t, ~nb>) ]
+
+// RuleStep3: Initiator receives response, verifies tag
+rule RuleStep3:
+  let
+      t_prime = h(~na ⊕ k ⊕ nb)
+  in
+  [ In(<tag, nb>), !StateI($I, ~na, k) ]
+  --[ Test3(), VerifyI(t_prime, tag), Commit($I, $R, tag) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All I R tag #i.
+     Commit(I, R, tag) @ i
+   ==>
+       (Ex #j. Running(R, I, tag) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag:
+  "All I R tag #i.
+     Commit(I, R, tag) @ i
+   ==>
+       (Ex #j. Running(R, I, tag) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

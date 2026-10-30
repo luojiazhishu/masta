@@ -1,0 +1,41 @@
+- role: Device_Send_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - req_body = <'JoinRequest', D, S, ~devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', D, S, ~devnonce>)
+    - req = <<'JoinRequest', D, S, ~devnonce>, mac(appkey, <'JoinRequest', D, S, ~devnonce>)>
+  - send:
+    - req
+- role: Server_Send_JoinAccept
+  operations:
+  - receive:
+    - req_body
+    - req_mac
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - req_body = <'JoinRequest', D, S, devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', D, S, devnonce>)
+    - resp_payload = <'JoinAccept', ~joinnonce, devaddr>
+    - resp_mac = mac(appkey, <'JoinAccept', ~joinnonce, devaddr>)
+    - accept_body = <<'JoinAccept', ~joinnonce, devaddr>, mac(appkey, <'JoinAccept',
+      ~joinnonce, devaddr>)>
+    - app_s_key = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwk_s_key = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  - send:
+    - senc(accept_body, appkey)
+- role: Device_Receive_JoinAccept
+  operations:
+  - receive:
+    - senc(accept_body, appkey)
+  - compute:
+    - resp_payload = <'JoinAccept', joinnonce, devaddr>
+    - resp_mac = mac(appkey, <'JoinAccept', joinnonce, devaddr>)
+    - accept_body = <<'JoinAccept', joinnonce, devaddr>, mac(appkey, <'JoinAccept',
+      joinnonce, devaddr>)>
+    - nonce_tag = tag(joinnonce)
+    - app_s_key = senc(<'cst1', devnonce, joinnonce>, appkey)
+    - nwk_s_key = senc(<'cst2', devnonce, joinnonce>, appkey)
+  - send: <END>

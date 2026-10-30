@@ -1,0 +1,39 @@
+- role: DeviceSendJoinRequest
+  operations:
+  - compute:
+    - m = mac(~appkey, <'JoinRequest', ~deveui, ~joineui, ~devnonce>)
+  - send:
+    - '''JoinRequest'''
+    - ~deveui
+    - ~joineui
+    - ~devnonce
+    - m
+- role: NetworkRecvJoinRequest
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~deveui
+    - ~joineui
+    - devnonce
+    - m
+  - compute:
+    - appskey = senc(<cst1, devnonce, ~joinnonce, 'channelV1'>, ~appkey)
+    - nwkskey = senc(<cst2, devnonce, ~joinnonce, 'channelV1'>, ~appkey)
+  - assert:
+    - verif_mac(~appkey, <'JoinRequest', ~deveui, ~joineui, devnonce>, m) = true
+  - send:
+    - senc(<'JoinAccept', ~joinnonce, ~devaddr, mac(~appkey, <'JoinAccept', ~joinnonce,
+      ~devaddr>)>, ~appkey)
+- role: DeviceRecvJoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinnonce, devaddr, mm>, ~appkey)
+  - assert:
+    - verif_mac(~appkey, <'JoinAccept', joinnonce, devaddr>, mm) = true
+  - send: []
+- role: DeviceDeriveKeys
+  operations:
+  - compute:
+    - appskey = senc(<cst1, ~devnonce, joinnonce, 'channelV1'>, ~appkey)
+    - nwkskey = senc(<cst2, ~devnonce, joinnonce, 'channelV1'>, ~appkey)
+  - send: <END>

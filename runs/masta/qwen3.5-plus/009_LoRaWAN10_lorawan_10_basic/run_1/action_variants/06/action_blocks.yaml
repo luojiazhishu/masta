@@ -1,0 +1,37 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - RequestMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - RequestMAC
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - RequestMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce>)
+    - encrypted_payload = senc(<'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce, mac(~AppKey,
+      <'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce>)>, ~AppKey)
+  - send:
+    - encrypted_payload
+- role: RuleStep3
+  operations:
+  - receive:
+    - senc(<'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce, ResponseMAC>, ~AppKey)
+  - compute:
+    - AppSKey = senc(<'cst1', ~DevNonce, ~JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<'cst2', ~DevNonce, ~JoinNonce>, ~AppKey)
+    - ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce>)
+  - send: <END>

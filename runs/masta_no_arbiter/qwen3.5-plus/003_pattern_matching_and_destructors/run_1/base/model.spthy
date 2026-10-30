@@ -1,0 +1,38 @@
+theory SK_PMD begin
+
+builtins: symmetric-encryption
+
+functions: encSucc/2, isPair/1, and/2
+
+equations: and(true, true) = true
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(senc(<~sec, ~pub>, ~k))
+  ]
+
+rule RuleStep2:
+  [
+    In(senc(<~sec, ~pub>, ~k)),
+    Fr(~k_res)
+  ]
+  let
+    body = sdec(senc(<~sec, ~pub>, ~k), ~k_res)
+    pub_val = snd(body)
+  in
+  --[ Test2(), Check(and(encSucc(senc(<~sec, ~pub>, ~k), ~k_res), isPair(body))) ]->
+  [
+    Out(pub_val)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

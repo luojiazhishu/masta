@@ -1,0 +1,63 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender
+rule Generate_Keys:
+  [ Fr(~sk_s) ]
+  -->
+  [ !Ltk($S, ~sk_s), !Pk($S, pk(~sk_s)), Out(pk(~sk_s)) ]
+
+// Msg 0a: Receiver sends setup request
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Create($R, ~tid_R), Honest($R) ]->
+  [ Out(<$R, $S, ~n_R, 'init_request'>), !StateR(~tid_R, $R, $S, ~n_R) ]
+
+// Msg 0b: Sender responds with commitment and signature
+rule RuleStep2:
+  [ In(<$R, $S, n_R, 'init_request'>), !Ltk($S, ~sk_s), Fr(~k_1) ]
+  --[ Test2(), Running($S, $R, <f(~k_1), n_R, 'init_request'>), Honest($S) ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R, 'init_request'>, ~sk_s)>), !StateS($S, $R, ~k_1, n_R) ]
+
+// Receiver verifies signature
+rule RuleStep3:
+  [ In(<$S, $R, commitment, signature>), !StateR(~tid_R, $R, $S, n_R), !Pk($S, pk_s) ]
+  --[ Test3(), Commit($R, $S, <commitment, n_R, 'init_request'>) ]->
+  [ Verify(signature, <commitment, n_R, 'init_request'>, pk_s) ]
+
+// Msg 1: Sender sends first data packet
+rule RuleStep4:
+  [ !StateS($S, $R, ~k_1, n_R), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4() ]->
+  [ Out(<<~m_1, f(~k_2)>, MAC(~k_1, <~m_1, f(~k_2)>)>), !StateS($S, $R, ~k_2, n_R) ]
+
+// Receiver receives first data packet
+rule RuleStep5:
+  [ In(<D_1, mac_1>), !StateR(~tid_R, $R, $S, n_R) ]
+  --[ Test5() ]->
+  [ ]
+
+// Reveal rule for long-term key compromise
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: weak_agreement
+lemma weak_agreement_setup_response_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

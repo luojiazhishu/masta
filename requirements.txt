@@ -1,0 +1,15 @@
+# MASTA supplementary — Python runtime requirements.
+#
+# Install with: pip install -r requirements.txt && pip install ./tamarin_infra-0.1.9-py3-none-any.whl
+#
+# The ``tamarin_infra`` wheel is shipped in this archive next to this file
+# (it is our authored Tamarin-Python bridge — ``TamarinClient`` /
+# ``GoalSelector`` — and is not on PyPI).
+
+anthropic>=0.50,<1.0
+openai>=1.50,<3.0
+python-dotenv>=1.0
+matplotlib>=3.8
+numpy>=1.26
+PyYAML>=6.0
+structlog>=24.0

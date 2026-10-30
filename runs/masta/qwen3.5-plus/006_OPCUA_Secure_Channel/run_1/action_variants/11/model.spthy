@@ -1,0 +1,90 @@
+theory OPCUA_SignSign begin
+
+builtins: hashing, signing
+
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Pk($A, pk(~ltk))
+  , !Ltk($A, ~ltk)
+  , Out(pk(~ltk))
+  ]
+
+rule LtkReveal:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+rule RuleStep1:
+  [ ]
+  --[ Test1() ]->
+  [ Out('GEReq') ]
+
+rule RuleStep2:
+  [ In('GEReq')
+  , !Ltk($S, ~ltkS)
+  , !Pk($S, pk(~ltkS))
+  ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', pk(~ltkS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >) ]
+
+rule RuleStep3:
+  [ In(< 'GERes', S_pk, 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  , Fr(~Nc)
+  ]
+  --[ Test3(), Running($C, $S, ~Nc), Honest($C) ]->
+  [ !ClientNonce($C, ~Nc)
+  , Out(< pk(~ltkC), < 'OSCReq', pk(~ltkC), ~Nc >, sign(h(< 'OSCReq', pk(~ltkC), ~Nc >), ~ltkC), h(< 'OSCReq', pk(~ltkC), ~Nc >) >)
+  ]
+
+rule RuleStep4:
+  [ In(< C_pk, < 'OSCReq', C_pk, Nc_in >, ReqSig, ReqDigest >)
+  , !Ltk($S, ~ltkS)
+  , !Pk($S, pk(~ltkS))
+  , Fr(~Ns)
+  ]
+  --[ Test4(), Running($S, $C, ~Ns), Commit($S, $C, Nc_in), Honest($S) ]->
+  [ Out(< pk(~ltkS), < 'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1' >, sign(h(< 'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1' >), ~ltkS), h(< 'OSCRes', ~Ns, 'ST', 'TTL', 'channelV1' >) >)
+  ]
+
+rule RuleStep5:
+  [ In(< S_pk, < 'OSCRes', Ns_in, ST, TTL, 'channelV1' >, RespSig, RespDigest >)
+  , !Ltk($C, ~ltkC)
+  , !Pk($C, pk(~ltkC))
+  , !Pk($S, S_pk)
+  , !ClientNonce($C, Nc_stored)
+  ]
+  --[ Test5(), Commit($C, $S, Ns_in), Honest($C), Secret(h(<Nc_stored, Ns_in>)) ]->
+  [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_session_key_secrecy:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

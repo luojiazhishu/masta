@@ -1,0 +1,72 @@
+- role: Client_Send_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~requestId
+  - send:
+    - '''GEReq'''
+    - ~requestId
+- role: Server_Send_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+    - requestId
+  - send:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_Send_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - securityPolicy
+    - userTokenPolicy
+  - generate_nonces:
+    - ~clientNonce
+  - compute:
+    - requestBody = <'OSCReq', clientCert, ~clientNonce>
+    - requestDigest = h(<'OSCReq', clientCert, ~clientNonce>)
+  - send:
+    - clientCert
+    - requestBody
+    - sign(requestDigest, clientSk)
+    - requestDigest
+- role: Server_Receive_Request_Send_Response
+  operations:
+  - receive:
+    - clientCert
+    - requestBody
+    - requestSignature
+    - requestDigest
+  - generate_nonces:
+    - ~serverNonce
+    - ~securityToken
+  - compute:
+    - requestBody = <'OSCReq', clientCert, clientNonce>
+    - requestDigest = h(<'OSCReq', clientCert, clientNonce>)
+    - responseBody = <'OSCRes', ~serverNonce, ~securityToken, 'TokenLifetime'>
+    - responseDigest = h(<'OSCRes', ~serverNonce, ~securityToken, 'TokenLifetime'>)
+  - assert:
+    - verify(requestSignature, requestDigest, clientCert) = true
+  - send:
+    - serverCert
+    - responseBody
+    - sign(responseDigest, serverSk)
+    - responseDigest
+- role: Client_Receive_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - serverCert
+    - responseBody
+    - responseSignature
+    - responseDigest
+  - compute:
+    - responseBody = <'OSCRes', serverNonce, securityToken, tokenLifetime>
+    - responseDigest = h(<'OSCRes', serverNonce, securityToken, tokenLifetime>)
+    - channelKey = h(<clientNonce, serverNonce>)
+  - assert:
+    - verify(responseSignature, responseDigest, serverCert) = true
+  - send: <END>

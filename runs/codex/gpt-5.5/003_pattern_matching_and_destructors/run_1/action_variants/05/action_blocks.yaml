@@ -1,0 +1,17 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - msg = senc(<~sec, ~pub>, sk)
+    - witness = h(~sec)
+  - send:
+    - msg
+    - witness
+- role: Responder_Receive
+  operations:
+  - receive:
+    - senc(<sec, pub>, sk)
+    - witness
+  - send: <END>

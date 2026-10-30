@@ -1,0 +1,32 @@
+- role: I_1
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(~eskI, ~lkI)
+    - hkI = 'g'^h1(~eskI, ~lkI)
+  - send:
+    - hkI
+- role: R_1
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~eskR
+    - ~sc
+  - compute:
+    - exR = h1(~eskR, ~lkR)
+    - hkR = 'g'^h1(~eskR, ~lkR)
+    - kR = h2(<pkI^h1(~eskR, ~lkR), X^~lkR, $I, $R>)
+  - send:
+    - hkR
+    - ~sc
+- role: I_2
+  operations:
+  - receive:
+    - Y
+    - sc
+  - compute:
+    - exI = h1(~eskI, ~lkI)
+    - kI = h2(<Y^~lkI, pkR^h1(~eskI, ~lkI), $I, $R>)
+  - send: <END>

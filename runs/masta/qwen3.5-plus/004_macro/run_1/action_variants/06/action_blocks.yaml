@@ -1,0 +1,17 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~k
+  - send:
+    - aenc(~k, pk($S))
+- role: RuleStep2
+  operations:
+  - receive:
+    - aenc(~k, pk($S))
+  - send:
+    - h(<~k, 'session'>)
+- role: RuleStep3
+  operations:
+  - receive:
+    - h(<~k, 'session'>)
+  - send: <END>

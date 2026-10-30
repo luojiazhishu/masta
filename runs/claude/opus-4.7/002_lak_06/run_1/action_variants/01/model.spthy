@@ -1,0 +1,102 @@
+theory LakAuth
+begin
+
+builtins: hashing, xor
+
+// Long-term symmetric key shared between a Reader and a Tag at provisioning.
+rule Setup_Ltk:
+    [ Fr(~k) ]
+  --[ KeyGen($R, $T) ]->
+    [ !Ltk($R, $T, ~k) ]
+
+restriction OneKeyPerPair:
+  "All R T #i #j. KeyGen(R, T) @ i & KeyGen(R, T) @ j ==> #i = #j"
+
+// Adversary may reveal the long-term key shared by a pair.
+rule Reveal_Ltk:
+    [ !Ltk(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+    [ Out(k) ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+// Action block 1: Reader draws r0 and r0_aux, sends R0 = (r0, r0_aux).
+rule Reader_Send_R0:
+    [ Fr(~r0), Fr(~r0_aux), !Ltk($R, $T, k) ]
+  --[ Test1(),
+      Create($R, ~r0) ]->
+    [ St_R_1($R, $T, k, ~r0, ~r0_aux),
+      Out(<~r0, ~r0_aux>) ]
+
+// Action block 2: Tag receives R0, draws r1, retains r0_aux, sends T1.
+rule Tag_Recv_R0_Send_T1:
+    let tag_mac = h(r0 XOR ~r1 XOR k)
+    in
+    [ In(<r0, r0_aux>), Fr(~r1), !Ltk($R, $T, k) ]
+  --[ Test2(),
+      Create($T, ~r1),
+      Running($T, $R, <'tag_to_reader', r0, ~r1>) ]->
+    [ St_T_2($R, $T, k, r0, r0_aux, ~r1, tag_mac),
+      Out(<~r1, tag_mac>) ]
+
+// Action block 3: Reader receives T1, verifies tag_mac, sends R1.
+rule Reader_Recv_T1_Send_R1:
+    let expected   = h(~r0 XOR r1 XOR k)
+        reader_mac = h(tag_mac XOR k XOR ~r0)
+    in
+    [ St_R_1($R, $T, k, ~r0, ~r0_aux),
+      In(<r1, tag_mac>) ]
+  --[ Test3(),
+      Eq(tag_mac, expected),
+      Commit($R, $T, <'tag_to_reader', ~r0, r1>),
+      Running($R, $T, <'reader_to_tag', ~r0, r1>),
+      Honest($R), Honest($T),
+      Secret($R, $T, k) ]->
+    [ Out(reader_mac) ]
+
+// Action block 4: Tag receives R1, verifies reader_mac, accepts.
+rule Tag_Recv_R1:
+    let expected = h(tag_mac XOR k XOR r0)
+    in
+    [ St_T_2($R, $T, k, r0, r0_aux, ~r1, tag_mac),
+      In(reader_mac) ]
+  --[ Test4(),
+      Eq(reader_mac, expected),
+      Commit($T, $R, <'reader_to_tag', r0, ~r1>),
+      Honest($R), Honest($T),
+      Secret($T, $R, k) ]->
+    [ ]
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'reader_to_tag', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader_to_tag', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, <'tag_to_reader', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag_to_reader', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & not (Ex X #r. LtkReveal(X) @ r)"
+
+end

@@ -1,0 +1,80 @@
+theory ISO9798_4_4_MutualChallengeResponse
+begin
+
+builtins: hashing
+
+rule Ltk_Registration:
+  [ Fr(~kAB) ]
+  --[ CreateLtk(~kAB) ]->
+  [ !Ltk(~kAB), !Pk(~kAB) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(~kAB) ]
+  --[ LtkReveal(~kAB) ]->
+  [ Out(~kAB) ]
+
+rule B_SendChallenge:
+  [ !Ltk(~kAB), !Pk(~kAB), Fr(~RB), Fr(~Text1) ]
+  --[ Test1() ]->
+  [ Out(<~RB, ~Text1>), St_B_Challenge(~kAB, ~RB) ]
+
+rule A_ReceiveChallenge_SendResponse:
+  [ In(<RB, Text1>), !Ltk(~kAB), !Pk(~kAB), Fr(~RA), Fr(~Text2), Fr(~Text3) ]
+  --[ Test2(), Running('A', 'B', <~RA, RB>), Secret('A', 'B', ~kAB) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, h(<'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>)>), St_A_Response(~kAB, ~RA, RB) ]
+
+rule B_ReceiveResponse_SendMAC2:
+  [ St_B_Challenge(~kAB, RB), In(<RA, Text3, <'sid1_mut_cr', RA, RB, 'IdB', Text2>, mac1>), Fr(~Text5) ]
+  --[ Test3(), Eq(mac1, h(<'sid1_mut_cr', RA, RB, 'IdB', Text2>)), Running('B', 'A', <RA, RB>), Commit('B', 'A', <RA, RB>) ]->
+  [ Out(<~Text5, h(<'sid2_mut_cr', RB, RA>)>), St_B_Complete(~kAB, RA, RB) ]
+
+rule A_ReceiveMAC2_Verify:
+  [ St_A_Response(~kAB, RA, RB), In(<Text5, mac2>) ]
+  --[ Test4(), Eq(mac2, h(<'sid2_mut_cr', RB, RA>)), Commit('A', 'B', <RA, RB>), Honest('A'), Honest('B') ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+lemma injective_agreement_A:
+  // category: injective_agreement
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     ( (Ex #j. Running(b, a, t) @ j
+           & j < i
+           & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                              & not (#i2 = #i))) )
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma injective_agreement_B:
+  // category: injective_agreement
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     ( (Ex #j. Running(b, a, t) @ j
+           & j < i
+           & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                              & not (#i2 = #i))) )
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma noninjective_agreement_A:
+  // category: noninjective_agreement
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma noninjective_agreement_B:
+  // category: noninjective_agreement
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex #j. Running(b, a, t) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,174 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, bar/1, mac/2
+
+rule Generate_key_pair:
+  [
+    Fr(~sk_S)
+  ]
+  -->
+  [
+    !Ltk('S', ~sk_S),
+    !Pk('S', pk(~sk_S)),
+    Out(pk(~sk_S))
+  ]
+
+rule LtkReveal:
+  [
+    !Ltk(A, ltk)
+  ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule RuleStep1:
+  [
+    Fr(~n_R)
+  ]
+  --[ Test1(), Honest('R'), Commit('R', 'S', <'setup', ~n_R>) ]->
+  [
+    Out(< 'R', 'S', ~n_R >)
+  ]
+
+rule RuleStep2:
+  [
+    In(< 'R', 'S', n_R >),
+    !Ltk('S', sk_S),
+    Fr(~k_1)
+  ]
+  --[ Test2(), RequestRecord('S', bar(n_R)), Secret(~k_1), Honest('S'), Running('S', 'R', <'setup', n_R>) ]->
+  [
+    Out(< 'S', 'R', f(~k_1), sign(< f(~k_1), n_R >, sk_S) >),
+    !State_S('S', ~k_1)
+  ]
+
+rule RuleStep3:
+  [
+    !State_S('S', k_1),
+    Fr(~k_2),
+    Fr(~m_1)
+  ]
+  --[ Test3(), Running('S', 'R', <'broadcast', k_1, ~m_1>) ]->
+  [
+    Out(< < ~m_1, f(~k_2) >, mac(< ~m_1, f(~k_2) >, k_1) >)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_mac_key_secrecy:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_broadcast_authenticity:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+    ( (Ex #j. Running(b, a, t) @ j
+          & j < i
+          & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                             & not (#i2 = #i))) )
+    | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_setup_integrity:
+  "All a b t #i.
+    Commit(a, b, t) @ i
+  ==>
+    (Ex #j. Running(b, a, t) @ j)
+    | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/*
+================================================================================
+SECURITY ANALYSIS SUMMARY
+================================================================================
+
+Verification Results:
+---------------------
+| Property                    | Category              | Verdict    |
+|-----------------------------|-----------------------|------------|
+| mac_key_secrecy             | secrecy               | VERIFIED   |
+| broadcast_authenticity      | injective_agreement   | FALSIFIED  |
+| setup_integrity             | noninjective_agreement| FALSIFIED  |
+
+VULNERABILITY 1: Broadcast Authenticity Failure
+-----------------------------------------------
+Lemma: injective_agreement_broadcast_authenticity
+Verdict: FALSIFIED (real counterexample)
+
+Finding: The injective agreement property for broadcast messages does not hold.
+An adversary can replay broadcast messages across different sessions, violating
+the uniqueness guarantee that each Commit by a receiver should correspond to
+exactly one Running by the sender.
+
+Root Cause: The current model lacks receiver-side verification action facts
+that would bind the receiver's acceptance of broadcast messages to a specific
+sender session. RuleStep3 emits Running('S', 'R', ...) but there is no
+corresponding Commit action on the receiver side when accepting broadcast data.
+The protocol's delayed key disclosure mechanism inherently allows replay attacks
+within the disclosure window.
+
+Impact: An adversary can capture valid broadcast messages and replay them to
+receivers, who cannot distinguish replayed messages from fresh ones until the
+MAC key is disclosed.
+
+VULNERABILITY 2: Setup Integrity Failure
+----------------------------------------
+Lemma: noninjective_agreement_setup_integrity
+Verdict: FALSIFIED (real counterexample)
+
+Finding: The non-injective agreement property for setup parameters does not
+hold. A receiver's acceptance of the SetupResponse does not guarantee the
+sender committed to the same f(k_1) and received the same n_R during the
+same session.
+
+Root Cause: The model has a mismatch between Commit and Running action facts:
+- RuleStep1 (Receiver): Commit('R', 'S', <'setup', ~n_R>)
+- RuleStep2 (Sender): Running('S', 'R', <'setup', n_R>)
+
+The Commit is emitted before the sender processes the request, and the terms
+do not match (Commit includes ~n_R as fresh, Running receives n_R as input).
+This structural mismatch allows the adversary to interleave sessions and break
+the agreement property.
+
+Impact: An adversary can manipulate the setup phase to cause sender and
+receiver to disagree on session parameters, potentially enabling downstream
+attacks on the broadcast authentication.
+
+VERIFIED PROPERTY: MAC Key Secrecy
+----------------------------------
+Lemma: secrecy_mac_key_secrecy
+Verdict: VERIFIED
+
+Finding: MAC keys remain secret from the adversary until their scheduled
+disclosure time, assuming no long-term key compromise.
+
+Reason: The Secret(~k_1) action fact in RuleStep2 correctly captures the key
+generation, and the one-way function f(.) prevents the adversary from deriving
+k_1 from f(k_1) before disclosure.
+
+RECOMMENDATIONS:
+----------------
+1. Add receiver-side broadcast verification: Introduce a rule modeling receiver
+   acceptance of broadcast messages with a Commit action fact that matches the
+   sender's Running action.
+
+2. Fix setup phase action fact alignment: Ensure Commit and Running action
+   facts in the setup phase use matching term structures and are emitted at
+   appropriate protocol points (Commit after verification, Running after
+   processing).
+
+3. Consider replay protection: The TESLA protocol's delayed key disclosure
+   inherently permits replay within the disclosure window. Document this as an
+   accepted limitation or add sequence numbers/timestamps to mitigate.
+================================================================================
+*/
+
+end

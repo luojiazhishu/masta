@@ -1,0 +1,122 @@
+theory mutual_cr_auth begin
+
+builtins: hashing
+
+functions: mac/2, sid1_mut_cr/0, sid2_mut_cr/0
+
+// Persistent fact for pre-shared symmetric key between A and B
+rule SetupKey:
+  [ Fr(~kAB) ]
+  --[ Secret('A','B',~kAB), Honest('A'), Honest('B') ]->
+  [ !SharedKey('A', 'B', ~kAB) ]
+
+// RuleStep1: B sends Challenge1 = <RB, Text1>
+// B emits Running with just RB (only value known at this point)
+rule RuleStep1:
+  let
+      msg1 = <~RB, ~Text1>
+  in
+  [ Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Running('B','A',<~RB>) ]->
+  [ Out(msg1), !B_Challenge(~RB) ]
+
+// RuleStep2: A receives Challenge1, generates RA, computes mac1, sends TokenAB
+// A emits Running with <RA,RB> (both values now known)
+rule RuleStep2:
+  let
+      mac1 = mac(<sid1_mut_cr, RB, 'B'>, kAB)
+      tagged1 = <sid1_mut_cr, ~RA, RB, 'B', ~Text2>
+      msg2 = <~RA, ~Text3, tagged1, mac1>
+  in
+  [ In(<RB, Text1>),
+    Fr(~RA), Fr(~Text2), Fr(~Text3),
+    !SharedKey('A', 'B', kAB) ]
+  --[ Test2(), Running('A','B',<~RA,RB>) ]->
+  [ Out(msg2), !A_Challenge(~RA) ]
+
+// RuleStep3: B receives TokenAB, verifies mac1, computes mac2, sends TokenBA
+// B emits Commit with <RA,RB> (Responder's commitment)
+rule RuleStep3:
+  let
+      mac1_expected = mac(<sid1_mut_cr, RB, 'B'>, kAB)
+      mac2 = mac(<sid2_mut_cr, RB, RA>, kAB)
+      msg3 = <~Text5, mac2>
+  in
+  [ In(<RA, Text3, <sid1_mut_cr, RA, RB, 'B', Text2>, mac1>),
+    !B_Challenge(RB),
+    Fr(~Text5),
+    !SharedKey('A', 'B', kAB) ]
+  --[ Test3(), Commit('B','A',<RA,RB>) ]->
+  [ Out(msg3) ]
+
+// RuleStep4: A receives TokenBA, verifies mac2, terminates
+// A emits Commit with <RA,RB> (Initiator's commitment)
+rule RuleStep4:
+  let
+      mac2_expected = mac(<sid2_mut_cr, RB, RA>, kAB)
+  in
+  [ In(<Text5, mac2>),
+    !SharedKey('A', 'B', kAB),
+    !A_Challenge(RA),
+    !B_Challenge(RB) ]
+  --[ Test4(), Commit('A','B',<RA,RB>) ]->
+  [ Out('END') ]
+
+// Long-term key reveal rule for compromise modeling
+rule LtkReveal:
+  [ !SharedKey(A, B, kAB) ]
+  --[ LtkReveal(A) ]->
+  [ Out(kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+// Property 1: Long-term Key Secrecy
+lemma secrecy_kab:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+// Property 2: Injective Agreement at Initiator (A commits, checks B ran)
+lemma injective_agreement_at_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j
+         & j < i
+         & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                            & not (#i2 = #i)))
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+// Property 3: Injective Agreement at Responder (B commits, checks A ran)
+lemma injective_agreement_at_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j
+         & j < i
+         & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                            & not (#i2 = #i)))
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// Property 4: Non-injective Agreement at Initiator (A commits, checks B ran with same term)
+lemma noninjective_agreement_at_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// Property 5: Non-injective Agreement at Responder (B commits, checks A ran with same term)
+lemma noninjective_agreement_at_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

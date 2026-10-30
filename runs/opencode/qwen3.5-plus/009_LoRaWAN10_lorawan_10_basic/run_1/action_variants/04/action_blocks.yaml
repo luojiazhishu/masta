@@ -1,0 +1,26 @@
+- role: Device_Generate
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - send: []
+- role: Device_JoinRequest
+  operations:
+  - send:
+    - '''JoinRequest'''
+    - ~DevNonce
+    - mac(~AppKey, <'JoinRequest', ~DevNonce>)
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - devNonce
+    - mac(~AppKey, <'JoinRequest', devNonce>)
+  - generate_nonces:
+    - ~JoinNonce
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, mac(~AppKey, <'JoinAccept', ~JoinNonce>)>, ~AppKey)
+- role: Device_Finish
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinNonce, mac(~AppKey, <'JoinAccept', joinNonce>)>, ~AppKey)
+  - send: <END>

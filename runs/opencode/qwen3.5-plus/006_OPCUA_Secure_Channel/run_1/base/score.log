@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 006_OPCUA_Secure_Channel --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    006_OPCUA_Secure_Channel
+
+==== Score ====
+ protocol: 006_OPCUA_Secure_Channel
+ M1: 0.679
+ M2: 0.345
+ M3: 1.000
+ M4: 0.000  (no action variants supplied)
+ M5: 1.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/006_OPCUA_Secure_Channel/run_1/base/score.json

@@ -1,0 +1,16 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~peer
+  - compute:
+    - auxv = aux(~sec)
+    - msg = senc(<~sec, ~pub>, ~lk)
+  - send:
+    - msg
+- role: RuleStep2
+  operations:
+  - receive:
+    - msg
+  - send: <END>

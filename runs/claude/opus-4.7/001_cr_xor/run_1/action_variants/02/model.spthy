@@ -1,0 +1,73 @@
+theory CRXORIMK
+begin
+
+builtins: hashing, xor
+
+/* Long-term symmetric key bound to a specific (initiator, responder)
+   role pair so reflection between roles is prevented. */
+rule SetupKey:
+    [ Fr(~k) ]
+  --[ KeyGen($I, $R) ]->
+    [ !Ltk($I, $R, ~k) ]
+
+/* Adversary may compromise the long-term key. */
+rule RevealLtk:
+    [ !Ltk($I, $R, k) ]
+  --[ LtkReveal($I), LtkReveal($R) ]->
+    [ Out(k) ]
+
+/* Action block 1: Initiator generates fresh nonce na and sends <na, IMK> */
+rule I_send:
+    [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+    [ St_I_1($I, $R, k, ~na), Out(<~na, 'Init'>) ]
+
+/* Action block 2: Responder receives <na, IMK>, asserts marker = IMK,
+   generates fresh nb, computes t = h(na XOR k XOR nb), sends <t, nb>. */
+rule R_respond:
+    [ In(<na, 'Init'>), !Ltk($I, $R, k), Fr(~nb) ]
+  --[ Test2()
+    , Create($R, ~nb)
+    , Running($R, $I, <'I', h(na XOR k XOR ~nb)>)
+    ]->
+    [ Out(<h(na XOR k XOR ~nb), ~nb>) ]
+
+/* Action block 3: Initiator receives <t, nb>, verifies tag, accepts. */
+rule I_finish:
+    let tprime = h(~na XOR k XOR nb)
+    in
+    [ St_I_1($I, $R, k, ~na), In(<t, nb>) ]
+  --[ Test3()
+    , Eq(t, tprime)
+    , Commit($I, $R, <'I', t>)
+    , Honest($I)
+    , Honest($R)
+    ]->
+    [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,39 @@
+theory SK_PMD_W01
+begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  let
+    msg = senc(<~sec, ~pub>, $k)
+  in
+  [ Fr(~sec)
+  , Fr(~pub)
+  ]
+  --[ Test1(), Secret(~sec) ]->  
+  [ Out(msg)
+  , Out(~sec)
+  ]
+
+rule RuleStep2:
+  let
+    result = sdec(senc(<sec, pub>, $k), $k)
+  in
+  [ In(senc(<sec, pub>, $k))
+  , In(sec_clear)
+  ]
+  --[ Test2() ]->  
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_of_encapsulated_secret_payload:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

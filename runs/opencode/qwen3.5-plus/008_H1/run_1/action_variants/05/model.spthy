@@ -1,0 +1,81 @@
+theory MutualIdentityAuth
+begin
+
+builtins: signing
+
+functions: bar/1
+
+rule Setup_I:
+  [ Fr(~ltkI) ]
+  --[ ]->
+  [ !Ltk($I, ~ltkI), !Pk($I, pk(~ltkI)), Honest($I) ]
+
+rule Setup_R:
+  [ Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk($R, ~ltkR), !Pk($R, pk(~ltkR)), Honest($R) ]
+
+rule Initiator_Start:
+  [ !Ltk($I, ~ltkI), !Pk($R, pkR), Honest($I) ]
+  --[ Test1(), Create($I, ~ltkI), Running($I, $R, <$I, $R>) ]->
+  [ Out(<sign(<$I, $R>, ~ltkI), bar($I)>), St_I_1($I, $R) ]
+
+rule Responder_Respond:
+  [ In(<sigI, audit>), !Ltk($R, ~ltkR), !Pk(A, pkA), Honest($R) ]
+  --[ Test2(), Create($R, ~ltkR), Running($R, A, <A, $R>) ]->
+  [ Out(sign(<A, $R>, ~ltkR)), St_R_1($R, A) ]
+
+rule Initiator_Finish:
+  [ St_I_1($I, $R), In(sign(<$I, $R>, ~ltkR)), !Ltk($R, ~ltkR), !Pk($R, pkR), Honest($I) ]
+  --[ Test3(), Commit($I, $R, <$I, $R>) ]->
+  [ ]
+
+rule Responder_Commit:
+  [ St_R_1($R, $I), In(sign(<$I, $R>, ~ltkI)), !Ltk($I, ~ltkI), !Pk($I, pkI), Honest($R) ]
+  --[ Commit($R, $I, <$I, $R>) ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk($I, ~ltkI), Honest($I) ]
+  --[ LtkReveal($I) ]->
+  [ Out(~ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk($R, ~ltkR), Honest($R) ]
+  --[ LtkReveal($R) ]->
+  [ Out(~ltkR) ]
+
+// category: weak_agreement
+lemma weak_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+// category: injective_agreement
+lemma injective_agreement_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & r < i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

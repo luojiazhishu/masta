@@ -1,0 +1,18 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~k
+  - compute:
+    - msg = senc(<~sec, ~pub>, ~k)
+    - witness = h(~sec)
+  - send:
+    - msg
+    - witness
+- role: RuleStep2
+  operations:
+  - receive:
+    - msg
+    - witness
+  - send: <END>

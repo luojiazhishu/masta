@@ -1,0 +1,81 @@
+theory LoRaWAN10_Join begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule Register_Device:
+  [ Fr(~appkey) ]
+  --[ Create($D, ~appkey), Create($S, ~appkey) ]->
+  [ !AppKey($D, $S, ~appkey), !DevEUI($D), !JoinEUI($S), !DevAddr($D, $S) ]
+
+rule Reveal_AppKey:
+  [ !AppKey(D, S, appkey) ]
+  --[ LtkReveal(D), LtkReveal(S) ]->
+  [ Out(appkey) ]
+
+rule Device_Send_JoinRequests:
+  let req_body = <'JoinRequest', $D, $S, ~devnonce>
+      req_mac = mac(appkey, req_body)
+      req = <req_body, req_mac>
+  in
+  [ Fr(~devnonce), !AppKey($D, $S, appkey), !DevEUI($D), !JoinEUI($S) ]
+  --[ Test1(), Create($D, ~devnonce), Running($D, $S, <'device_join_request', appkey, ~devnonce>) ]->
+  [ Out(req), Out(req), Device_Waiting($D, $S, appkey, ~devnonce) ]
+
+rule Server_Accept_First_JoinRequest:
+  let accept_body = <'JoinAccept', ~joinnonce, D, mac(appkey, <'JoinAccept', ~joinnonce, D>)>
+      app_skey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwk_skey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  in
+  [ In(<<'JoinRequest', D, S, devnonce>, mac(appkey, <'JoinRequest', D, S, devnonce>)>), Fr(~joinnonce), !AppKey(D, S, appkey), !DevAddr(D, S) ]
+  --[ Test2(), Create(S, ~joinnonce), Running(S, D, <'join_accept', appkey, devnonce, ~joinnonce>), Secret(D, S, app_skey), Secret(D, S, nwk_skey), Honest(D), Honest(S) ]->
+  [ Out(senc(accept_body, appkey)) ]
+
+rule Device_Receive_JoinAccept:
+  let app_skey = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwk_skey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ Device_Waiting(D, S, appkey, devnonce), In(senc(<'JoinAccept', joinnonce, D, mac(appkey, <'JoinAccept', joinnonce, D>)>, appkey)) ]
+  --[ Test3(), Commit(D, S, <'join_accept', appkey, devnonce, joinnonce>), Secret(D, S, app_skey), Secret(D, S, nwk_skey), Honest(D), Honest(S) ]->
+  [ Device_Joined(D, S, app_skey, nwk_skey) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma device_accepts_server_alive:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma device_accepts_server_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma device_accepts_server_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,83 @@
+theory OPCUA_Secure_Channel_SignSign begin
+
+builtins: hashing, signing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Register_Client:
+  [ Fr(~ltkC) ]
+--[ Create('C', pk(~ltkC)), Honest('C') ]->
+  [ !Ltk('C', ~ltkC), !Pk('C', pk(~ltkC)), Out(pk(~ltkC)) ]
+
+rule Register_Server:
+  [ Fr(~ltkS) ]
+--[ Create('S', pk(~ltkS)), Honest('S') ]->
+  [ !Ltk('S', ~ltkS), !Pk('S', pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Client_GetEndpointsRequest:
+  [ !Pk('S', spk) ]
+--[ Test1() ]->
+  [ Out(<'GEReq'>), C_WaitEndpoints('C', 'S') ]
+
+rule Server_GetEndpointsResponse:
+  [ C_WaitEndpoints('C', 'S'), !Ltk('S', ltkS), In(<'GEReq'>) ]
+--[ Test2() ]->
+  [ Out(<'GERes', pk(ltkS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>), S_Discovered('S', pk(ltkS)) ]
+
+rule Client_OpenSecureChannelRequest:
+  let reqbody = <'OSCReq', pk(ltkC), ~Nc>
+      reqdigest = h(reqbody)
+  in
+  [ Fr(~Nc), !Ltk('C', ltkC), In(<'GERes', spk, 'Sign', policy, userpolicy>) ]
+--[ Test3(), Running('C', 'S', 'client_nonce', ~Nc), ClientNonce(~Nc) ]->
+  [ Out(<pk(ltkC), reqbody, sign(reqdigest, ltkC), reqdigest>), C_WaitOSC('C', 'S', spk, ~Nc) ]
+
+rule Server_OpenSecureChannelResponse:
+  let reqbody = <'OSCReq', cpk, Nc>
+      reqdigest = h(reqbody)
+      resbody = <'OSCRes', ~Ns, ~ST, 'TokenLifetime'>
+      resdigest = h(resbody)
+      channel = h(<Nc, ~Ns>)
+  in
+  [ Fr(~Ns), Fr(~ST), !Ltk('S', ltkS), In(<cpk, reqbody, sigC, reqdigest>) ]
+--[ Test4(), Eq(verify(sigC, reqdigest, cpk), true), Commit('S', 'C', 'client_nonce', Nc), Running('S', 'C', 'server_nonce', ~Ns), ServerChannel('S', 'C', Nc, ~Ns, ~ST, channel), Secret('S', 'C', channel) ]->
+  [ Out(<pk(ltkS), resbody, sign(resdigest, ltkS), resdigest>) ]
+
+rule Client_AcceptOpenSecureChannel:
+  let resbody = <'OSCRes', Ns, ST, TTL>
+      resdigest = h(resbody)
+      channel = h(<Nc, Ns>)
+  in
+  [ C_WaitOSC('C', 'S', spk, Nc), In(<spk, resbody, sigS, resdigest>) ]
+--[ Test5(), Eq(verify(sigS, resdigest, spk), true), Commit('C', 'S', 'server_nonce', Ns), ClientChannel('C', 'S', Nc, Ns, ST, channel), Secret('C', 'S', channel) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ #i
+   ==>
+     not (Ex #j. K(x) @ #j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b n #i.
+     Commit(a, b, 'client_nonce', n) @ #i
+   ==>
+     (Ex #j. Running(b, a, 'client_nonce', n) @ #j & #j < #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b n #i.
+     Commit(a, b, 'server_nonce', n) @ #i
+   ==>
+     (Ex #j. Running(b, a, 'server_nonce', n) @ #j & #j < #i)"
+
+end

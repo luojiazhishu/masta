@@ -1,0 +1,28 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: Responder_Respond
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - tag = h(na XOR k XOR ~nb)
+    - audit = bar(~nb)
+  - send:
+    - tag
+    - ~nb
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+  - compute:
+    - expected = h(na XOR k XOR nb)
+  - assert:
+    - tag = expected
+  - send: <END>

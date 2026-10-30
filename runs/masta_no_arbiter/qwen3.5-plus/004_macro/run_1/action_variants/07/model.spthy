@@ -1,0 +1,39 @@
+theory BSKTSB begin
+
+builtins: asymmetric-encryption, hashing
+
+// PKI Setup: Server long-term key pair
+rule Setup_Server:
+  [ Fr(~skS) ]
+  --[ Setup($S) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+// Step 1: Client generates session key, encrypts, sends m1
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(aenc(~k, pkS)) ]
+
+// Step 2: Server receives m1, decrypts, computes hash, sends m2
+rule RuleStep2:
+  [ In(c), !Ltk($S, skS) ]
+  let k = adec(c, skS) in
+  --[ Test2() ]->
+  [ Out(h(<k, $S>)) ]
+
+// Step 3: Client receives m2, verifies hash
+rule RuleStep3:
+  [ In(d), Fr(~k), !Pk($S, pkS) ]
+  let expected = h(<~k, $S>) in
+  [ ]
+  --[ Test3() ]->
+  [ ]
+  where (d = expected)
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

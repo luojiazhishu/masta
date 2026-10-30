@@ -1,0 +1,166 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+              A Simplified NAXOS Authenticated
+                       Key Exchange Protocol
+                      draft-famed-naxos-s-00
+
+
+Abstract
+
+   This document specifies a two-message authenticated key exchange
+   between an Initiator and a Responder using long-term Diffie-
+   Hellman keys and per-session ephemeral exponents.  Once the
+   Initiator has derived its session key it emits the key on the
+   wire so that downstream application components running on the
+   same host can pick it up without sharing memory with the
+   handshake module.  This memo describes the wire-level messages,
+   the processing rules applied by Initiator and Responder, and
+   the security properties that result from the design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+     2.1.  Requirements Language . . . . . . . . . . . . . . . . .  3
+     2.2.  Notation  . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Security Considerations . . . . . . . . . . . . . . . . . .  7
+   7.  References  . . . . . . . . . . . . . . . . . . . . . . . .  9
+
+
+1.  Introduction
+
+   This document describes a two-message authenticated key
+   exchange between an Initiator and a Responder.  After the
+   Initiator finalises a run on receipt of Message 2, it emits
+   the freshly derived session key on the same outbound channel
+   that carried the handshake itself, so that downstream
+   application components running on the same host can pick the
+   key up through a shared transport without negotiating
+   inter-process shared memory with the handshake module.
+
+
+2.  Terminology
+
+2.1.  Requirements Language
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+2.2.  Notation
+
+   g, x^y, lk(P), ~eskI, ~eskR, h1, h2 are as defined for the
+   Diffie-Hellman group.
+
+
+3.  Protocol Overview
+
+         Initiator                                    Responder
+            |                                                |
+            |  hkI = g^h1(~eskI, lk(I))                      |
+            |----------------------------------------------->|
+            |                                                |
+            |              hkR = g^h1(~eskR, lk(R))          |
+            |<-----------------------------------------------|
+            |                                                |
+            |  kI                                            |
+            |---> downstream application components          |
+
+
+4.  Message Format
+
+      struct {
+          opaque  HashedEphemeral;   // hkI
+      } Message1;
+
+      struct {
+          opaque  HashedEphemeral;   // hkR
+      } Message2;
+
+   The Initiator additionally emits the derived session key kI
+   on the outbound wire after the handshake terminates.
+
+
+5.  Processing Rules
+
+   1.  When initiating the exchange, the Initiator SHALL emit
+       Message 1 carrying hkI = g^h1(~eskI, lk(I)).
+
+   2.  Upon receiving Message 1, the Responder SHALL generate a
+       fresh ~eskR, compute hkR = g^h1(~eskR, lk(R)), and emit
+       Message 2 carrying hkR.  The Responder SHALL compute the
+       session key as
+       kR = h2(<g^lk(I)^exR, X^lk(R), I, R>).
+
+   3.  Upon receiving Message 2, the Initiator SHALL compute
+       the session key as
+       kI = h2(<Y^lk(I), g^lk(R)^exI, I, R>) and SHALL emit kI
+       on the same outbound wire that carried Message 1.
+
+
+6.  Security Considerations
+
+   The session key kI emitted at the end of the Initiator side
+   travels in the clear on the same wire that carried the
+   handshake.  Any party that observes the wire learns kI and
+   can decrypt or forge any application traffic protected by
+   that key.  The protocol therefore does not protect the
+   confidentiality of the session key, even when both
+   participants' long-term secrets are uncompromised.
+
+   Implementations that need confidentiality of the session key
+   MUST NOT emit kI on a wire that is reachable by any party
+   other than the intended local consumer; in particular, kI
+   MUST be exchanged through a host-local channel that is not
+   shared with the network.
+
+   This specification deliberately omits the third Diffie-Hellman
+   component that is present in the original NAXOS construction.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [LLM07]    LaMacchia, B., Lauter, K., and Mityagin, A.,
+              "Stronger Security of Authenticated Key Exchange",
+              in Proceedings of ProvSec 2007, Lecture Notes in
+              Computer Science, vol. 4784, Springer, 2007.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Session Key

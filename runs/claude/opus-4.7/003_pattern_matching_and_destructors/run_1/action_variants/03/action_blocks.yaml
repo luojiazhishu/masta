@@ -1,0 +1,16 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - auxv = aux(~sec)
+    - msg = senc(<~sec, ~pub>, ~k)
+  - send:
+    - msg
+- role: Responder_Recv
+  operations:
+  - receive:
+    - senc(<sec, pub>, ~k)
+    - pub
+  - send: <END>

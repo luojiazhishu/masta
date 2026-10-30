@@ -1,0 +1,70 @@
+theory CR_XOR_IRtx begin
+
+builtins: hashing, xor
+
+functions: k/0 [private]
+
+// Long-term key setup - shared symmetric key k is pre-distributed
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ SetupKey() ]->
+  [ !SharedKey(k) ]
+
+// Key reveal rule for long-term key compromise
+rule KeyReveal:
+  [ !SharedKey(k) ]
+  --[ KeyReveal() ]->
+  [ Out(k) ]
+
+// RuleStep1: Initiator generates nonce na and sends first transmission
+rule RuleStep1:
+  [ Fr(~na), !SharedKey(k) ]
+  --[ Test1(), InitiatorSend1(~na), Honest($I) ]->
+  [ Out(~na), !InitState1(~na, $I, $R) ]
+
+// RuleStep2: Initiator sends second transmission (identical copy)
+rule RuleStep2:
+  [ !InitState1(~na, $I, $R) ]
+  --[ Test2(), InitiatorSend2(~na) ]->
+  [ Out(~na), !InitState2(~na, $I, $R) ]
+
+// RuleStep3: Responder receives na, generates nb, computes tag, sends response
+rule RuleStep3:
+  [ In(~na), Fr(~nb), !SharedKey(k) ]
+  --[ Test3(), ResponderRecv(~na), Running($R, $I, h(~na XOR k XOR ~nb)), Create($R, ~nb), ResponderSend(~na, ~nb), Honest($R) ]->
+  [ Out(<h(~na XOR k XOR ~nb), ~nb>), !RespState(~na, ~nb) ]
+
+// RuleStep4: Initiator receives response, verifies tag matches expected computation, completes protocol
+rule RuleStep4:
+  [ In(<h(~na XOR k XOR nb), nb>), !InitState2(~na, $I, $R), !SharedKey(k) ]
+  --[ Test4(), InitiatorVerify(~na, h(~na XOR k XOR nb), nb), Commit($I, $R, h(~na XOR k XOR nb)) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+// Property 1 from threat_model.md: "responder has been active at some point and possesses the key k"
+// Canonical aliveness template: Commit => Create | LtkReveal
+// Adapted to use KeyReveal() since model uses simple key reveal without agent parameter
+lemma aliveness_aliveness_of_the_responder:
+  "All a b x #i.
+     Commit(a, b, x) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex #r. KeyReveal() @ r)"
+
+// category: noninjective_agreement
+// Property 2 from threat_model.md: "responder previously computed that tag for some challenge"
+// Canonical noninjective_agreement template: Commit => Running | LtkReveal
+// Note: Protocol weakness acknowledged in threat model - tag not bound to initiator's specific challenge
+// Adapted to use KeyReveal() since model uses simple key reveal without agent parameter
+lemma noninjective_agreement_noninjective_agreement_on_verification_tag:
+  "All a b tag #i.
+     Commit(a, b, tag) @ i
+   ==>
+       (Ex #j. Running(b, a, tag) @ j)
+     | (Ex #r. KeyReveal() @ r)"
+
+end

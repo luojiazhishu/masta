@@ -1,0 +1,38 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2, aux/1
+
+// Rule 1: Receiver R initiates by sending nonce n_R
+rule RuleStep1:
+  [
+    Fr(~n_R)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<R, S, ~n_R>)
+  ]
+
+// Rule 2: Sender S receives nonce, generates keys, sends commitment and signature
+rule RuleStep2:
+  [
+    In(<R, S, n_R>),
+    Fr(~k_1),
+    Fr(~k_2)
+  ]
+  let
+    f_k1 = f(~k_1)
+    sig = sign(<f_k1, n_R>, ~SK_S)
+  in
+  [
+    Out(<S, R, f_k1, sig>)
+  ]
+  --[ Test2() ]->
+  []
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

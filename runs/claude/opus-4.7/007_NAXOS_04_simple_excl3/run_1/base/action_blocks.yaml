@@ -1,0 +1,32 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~eskI
+  - compute:
+    - exI = h1(~eskI, ~lkI)
+    - hkI = 'g'^h1(~eskI, ~lkI)
+  - send:
+    - $I
+    - $R
+    - hkI
+- role: Responder_Respond
+  operations:
+  - receive:
+    - $I
+    - $R
+    - X
+  - generate_nonces:
+    - ~eskR
+  - compute:
+    - exR = h1(~eskR, ~lkR)
+    - hkR = 'g'^h1(~eskR, ~lkR)
+    - kR = h2(pkI^h1(~eskR, ~lkR), X^~lkR, $I, $R)
+  - send:
+    - hkR
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - Y
+  - compute:
+    - kI = h2(Y^~lkI, pkR^exI, $I, $R)
+  - send: <END>

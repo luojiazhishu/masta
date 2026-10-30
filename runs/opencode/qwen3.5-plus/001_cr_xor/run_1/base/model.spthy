@@ -1,0 +1,53 @@
+theory CR_XOR
+begin
+
+builtins: hashing
+
+rule Setup_Ltk:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !Ltk(~k) ]
+  --[ Test1() ]->
+  [ Out(~na), St_I_1(~k, ~na), !Ltk(~k) ]
+
+rule Responder_Receive:
+  [ In(na), !Ltk(~k), Fr(~nb) ]
+  --[ Test2(), Running(na, ~nb) ]->
+  [ Out(<h(<na, ~k, ~nb>), ~nb>), !Ltk(~k) ]
+
+rule Initiator_Verify:
+  [ St_I_1(~k, ~na), In(<tag, nb>), !Ltk(~k) ]
+  --[ Test3(), Eq(tag, h(<~na, ~k, nb>)), Commit(~na, nb) ]->
+  [ !Ltk(~k) ]
+
+rule Ltk_Reveal:
+  [ !Ltk(~k) ]
+  --[ LtkReveal(~k) ]->
+  [ !Ltk(~k), Out(~k) ]
+
+// category: aliveness
+lemma aliveness:
+  "All na nb #i.
+     Commit(na, nb) @ i
+   ==>
+       (Ex na2 nb2 #j. Running(na2, nb2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All na nb #i.
+     Commit(na, nb) @ i
+   ==>
+       (Ex #j. Running(na, nb) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

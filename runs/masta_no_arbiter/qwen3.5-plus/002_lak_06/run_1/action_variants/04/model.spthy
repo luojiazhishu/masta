@@ -1,0 +1,39 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+/* Long-term symmetric key shared between Reader and Tag */
+rule Setup:
+  [ Fr(~k) ]
+  --[ Setup() ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+/* RuleStep1: Reader generates r0 and sends R0 = ('INIT', r0) */
+rule RuleStep1:
+  [ !SharedKey($R, $T, k), Fr(~r0) ]
+  --[ Test1() ]->
+  [ Out(< 'INIT', ~r0 >), !ReaderState($R, ~r0) ]
+
+/* RuleStep2: Tag receives R0, generates r1, computes tag_mac, sends T1 */
+rule RuleStep2:
+  [ !SharedKey($R, $T, k), In(< 'INIT', r0 >), Fr(~r1) ]
+  --[ Test2() ]->
+  [ Out(< ~r1, h(r0 XOR ~r1 XOR k) >), !TagState($T, r0, ~r1) ]
+
+/* RuleStep3: Reader receives T1, verifies tag_mac, computes and sends R1 */
+rule RuleStep3:
+  [ !SharedKey($R, $T, k), !ReaderState($R, r0), In(< r1, tag_mac >) ]
+  --[ Test3() ]->
+  [ Out( h(tag_mac XOR k XOR r0) ) ]
+
+/* RuleStep4: Tag receives R1, verifies reader_mac, terminates */
+rule RuleStep4:
+  [ !SharedKey($R, $T, k), !TagState($T, r0, r1), In( reader_mac ) ]
+  --[ Test4() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

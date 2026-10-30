@@ -1,0 +1,61 @@
+theory BSKTStatic begin
+
+builtins: asymmetric-encryption, hashing
+
+// RuleStep1: Client sends m1 = aenc(k_fixed, pk(S))
+rule RuleStep1:
+  [
+    Fr(~tid),
+    Fr(~skS)
+  ]
+  --[ Test1(), Secret('k_fixed'), Honest('S') ]->
+  [
+    Out(aenc('k_fixed', pk(~skS))),
+    !StateC(~tid, 'S', 'k_fixed'),
+    !Ltk('S', ~skS),
+    !Pk('S', pk(~skS))
+  ]
+
+// RuleStep2: Server receives m1, decrypts, computes hash, sends m2
+rule RuleStep2:
+  [
+    In(aenc('k_fixed', pk(~skS))),
+    !Ltk('S', ~skS),
+    !Pk('S', pk(~skS)),
+    Fr(~tidS)
+  ]
+  --[ Test2(), Running('S', 'C', 'k_fixed') ]->
+  [
+    Out(h('k_fixed')),
+    !StateS(~tidS, 'S', 'k_fixed')
+  ]
+
+// RuleStep3: Client receives m2, verifies hash
+rule RuleStep3:
+  [
+    In(h('k_fixed')),
+    !StateC(~tid, 'S', 'k_fixed')
+  ]
+  --[ Test3(), Commit('C', 'S', 'k_fixed') ]->
+  [
+  ]
+
+// Reveal rule for long-term key compromise
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_secrecy_of_k_fixed:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

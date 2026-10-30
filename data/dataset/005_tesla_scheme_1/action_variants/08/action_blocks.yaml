@@ -1,0 +1,77 @@
+- role: Sender_Setup
+  operations:
+  - generate_nonces:
+    - ~k1
+  - send: []
+- role: Receiver0a
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: Sender0a
+  operations:
+  - receive:
+    - R
+    - S
+    - nR
+  - send:
+    - S
+    - R
+    - f(k1)
+    - sign(<f(k1), nR>, ltkS)
+- role: Receiver0b
+  operations:
+  - receive:
+    - S
+    - R
+    - commit_k1
+    - signature
+  - generate_nonces:
+    - ~rid
+  - send: []
+- role: Receiver0b_check
+  operations:
+  - generate_nonces:
+    - ~rid
+  - send: []
+- role: Send1
+  operations:
+  - generate_nonces:
+    - ~m1
+    - ~k2
+  - compute:
+    - data1 = <~m1, f(~k2)>
+  - send:
+    - data1
+    - MAC(<data1>, ~k1)
+- role: Recv1
+  operations:
+  - receive:
+    - data1
+    - mac1
+  - compute:
+    - data1 = <m1, commit_k2>
+  - send: []
+- role: SendN
+  operations:
+  - generate_nonces:
+    - ~m
+    - ~kNew
+  - compute:
+    - data = <~m, f(~kNew), ~kOld>
+  - send:
+    - data
+    - MAC(<data>, ~k)
+    - $tag
+- role: RecvN
+  operations:
+  - receive:
+    - data
+    - mac
+    - tag
+  - compute:
+    - data = <m, commit_kNew, kOld>
+  - send: <END>

@@ -1,0 +1,18 @@
+- role: Device_Init
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - send:
+    - DevEUI
+    - JoinEUI
+    - ~DevNonce
+    - h(<AppKey, DevEUI, JoinEUI, ~DevNonce>)
+- role: Server_Receive_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~JoinNonce
+  - send:
+    - senc(<~JoinNonce, DevAddr, h(<AppKey, ~JoinNonce, DevAddr>)>, AppKey)
+- role: Device_Receive_JoinAccept
+  operations:
+  - send: <END>

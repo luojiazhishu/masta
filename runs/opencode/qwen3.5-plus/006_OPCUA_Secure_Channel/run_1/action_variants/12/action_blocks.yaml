@@ -1,0 +1,70 @@
+- role: Client_Send_GEReq_1
+  operations:
+  - generate_nonces:
+    - ~tidC
+  - send:
+    - '''GEReq'''
+- role: Client_Send_GEReq_2
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_Receive_GEReq_Send_GERes
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~tidS
+    - ~skS
+  - send:
+    - '''GERes'''
+    - pk(~skS)
+    - '''Sign'''
+    - '''policy'''
+    - '''token'''
+- role: Client_Receive_GERes_Send_OSCReq
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - policy
+    - token
+  - generate_nonces:
+    - ~skC
+    - ~Nc
+  - send:
+    - pk(~skC)
+    - <'OSCReq', pk(~skC), ~Nc>
+    - sign(h(<'OSCReq', pk(~skC), ~Nc>), ~skC)
+    - h(<'OSCReq', pk(~skC), ~Nc>)
+- role: Server_Receive_OSCReq_Send_OSCRes
+  operations:
+  - receive:
+    - ClientCert
+    - <'OSCReq', ClientPub, ClientNonce>
+    - sig
+    - digest
+  - generate_nonces:
+    - ~Ns
+    - ~tokenST
+    - ~TTL
+    - ~skS
+  - assert:
+    - digest = h(<'OSCReq', ClientPub, ClientNonce>)
+    - verify(sig, digest, ClientCert) = true
+  - send:
+    - ServerCert
+    - <'OSCRes', ~Ns, ~tokenST, ~TTL>
+    - sign(h(<'OSCRes', ~Ns, ~tokenST, ~TTL>), ~skS)
+    - h(<'OSCRes', ~Ns, ~tokenST, ~TTL>)
+- role: Client_Receive_OSCRes_Verify
+  operations:
+  - receive:
+    - ServerCert
+    - <'OSCRes', ServerNonce, SecurityToken, TokenLifetime>
+    - sig
+    - digest
+  - assert:
+    - digest = h(<'OSCRes', ServerNonce, SecurityToken, TokenLifetime>)
+    - verify(sig, digest, ServerCert) = true
+  - send: <END>

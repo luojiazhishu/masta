@@ -1,0 +1,63 @@
+theory KeyTransport begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Server_KeyGen:
+  [ Fr(~ltkS) ]
+  --[ Create('S', ~ltkS) ]->
+  [ !Ltk('S', ~ltkS), !Pk('S', pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_Server_Ltk:
+  [ !Ltk('S', ltkS) ]
+  --[ LtkReveal('S') ]->
+  [ Out(ltkS) ]
+
+rule Client_Initiate:
+  [ Fr(~k), !Pk('S', pkS) ]
+  --[ Test1(), Create('C', ~k), Secret('C', 'S', ~k), Honest('S') ]->
+  [ Out(aenc(~k, pkS)), St_C_1('C', 'S', ~k) ]
+
+rule Server_Respond:
+  [ !Ltk('S', ltkS), In(ciphertext) ]
+  --[ Test2(), Running('S', 'C', <'client', 'transported_key', adec(ciphertext, ltkS)>), Honest('S') ]->
+  [ Out(<adec(ciphertext, ltkS), h(adec(ciphertext, ltkS))>) ]
+
+rule Client_Accept:
+  [ St_C_1('C', 'S', k), In(<v, h(v)>) ]
+  --[ Test3(), Commit('C', 'S', <'client', 'transported_key', k>), Honest('S') ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_transport_key:
+  "All A B x #i.
+     Secret(A, B, x) @ #i
+   ==>
+       not (Ex #j. K(x) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: injective_agreement
+lemma injective_agreement_transport_key:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ #j
+             & #j < #i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ #i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+end

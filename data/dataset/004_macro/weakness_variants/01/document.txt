@@ -1,0 +1,192 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 27, 2026                                         FAMED
+                                                         April 25, 2026
+
+
+   Public-Key Session Key Transport with Static Shared Secret
+                       draft-famed-bsktstatic-00
+
+Abstract
+
+   This document specifies a public-key session key transport
+   protocol in which the client conveys a fixed, deployment-wide
+   shared secret to a server using the server's long-term public
+   key, and the server confirms successful receipt by returning a
+   one-way hash of the transported secret.  The shared secret is
+   the same octet string for every run of the protocol and for
+   every client; it is selected at deployment time and is not
+   refreshed during the lifetime of the deployment.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 27, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ................................................. 2
+   2. Conventions and Definitions .................................. 2
+   3. Protocol Overview ............................................ 3
+   4. Message Format ............................................... 4
+   5. Processing Rules ............................................. 5
+   6. Security Considerations ...................................... 5
+   7. References ................................................... 7
+
+1. Introduction
+
+   This document defines a minimal public-key session key transport
+   exchange in which the value transported is a fixed, deployment-
+   scoped shared secret rather than a freshly generated per-run key.
+   The shared secret is provisioned out of band, is the same for
+   every run of the protocol, and is not refreshed during the
+   lifetime of the deployment.
+
+   The protocol is intended for environments in which the cost of
+   generating fresh session keys at the client side is to be
+   avoided and in which the calling application accepts that all
+   runs of the protocol share the same key material.
+
+2. Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   The following notation is used throughout this document.
+
+      C, S         The client and the server.
+      sk(S), pk(S) The long-term private and public key of S.
+      k_fixed      The fixed deployment-wide shared secret carried
+                   by every run of the protocol.
+      aenc, adec   Asymmetric encryption and decryption.
+      h(x)         A one-way hash function applied to x.
+
+3. Protocol Overview
+
+   The protocol consists of two messages exchanged between C and S.
+   C is assumed to have obtained an authentic copy of pk(S) and to
+   share with S a fixed octet string k_fixed prior to the exchange.
+
+         Client                                       Server
+         ------                                       ------
+         m1 = aenc(k_fixed, pk(S))
+                          ----- m1 ----->
+                                                k = adec(.,sk(S))
+                                                m2 = h(k)
+                          <---- m2 ------
+         verify m2 == h(k_fixed)
+
+   On successful completion both parties hold the same shared
+   secret k_fixed.  The same k_fixed is used in every subsequent
+   run.
+
+4. Message Format
+
+   The KeyTransport message m1 is the asymmetric encryption of the
+   shared secret under pk(S).
+
+      struct {
+          opaque ciphertext<1..2^16-1>;
+      } KeyTransport;
+
+   The KeyConfirm message m2 is a one-way hash of the recovered
+   shared secret.
+
+      struct {
+          opaque digest<1..2^8-1>;
+      } KeyConfirm;
+
+5. Processing Rules
+
+   On initiation of a new run, C computes m1 = aenc(k_fixed, pk(S))
+   and transmits m1 to S.
+
+   On receipt of m1, S computes k = adec(ciphertext, sk(S)) and
+   transmits m2 = h(k) to C.
+
+   On receipt of m2, C compares m2 with the locally computed
+   h(k_fixed).  If the values match, C MAY consider the run as
+   completed.  Otherwise C MUST discard the run.
+
+6. Security Considerations
+
+   This protocol carries a fixed, deployment-wide shared secret
+   under the server's public key.  The shared secret is identical
+   across every run and across every client of the deployment.
+   Implementations should be aware that this design has consequences
+   for the cryptographic properties that the protocol can provide.
+
+   The protocol does not protect the confidentiality of the
+   transported value against any party that has access to the
+   deployment-wide shared secret k_fixed.  Because k_fixed is fixed
+   at provisioning time and is the same for every run, any party
+   that has ever been provisioned with k_fixed (including any
+   former participant whose access has been revoked at the
+   application layer) holds the value used by every subsequent run
+   of the protocol.  Operators that intend to use the transported
+   value as a confidential session key SHOULD NOT deploy this
+   protocol.
+
+   The protocol does not authenticate the server.  Receipt of a
+   well-formed KeyConfirm message demonstrates only that some party
+   has computed h(k_fixed); because k_fixed is shared across the
+   deployment, any party in possession of k_fixed is able to
+   construct a valid KeyConfirm message without holding sk(S).  An
+   adversary that has obtained k_fixed by any means is therefore
+   able to impersonate S in the eyes of C with no further
+   capability required, and the success of the digest comparison
+   at C does not provide any evidence that S has actually
+   processed the corresponding KeyTransport.
+
+   The protocol does not provide replay protection.  Successive
+   runs of the protocol share the same shared secret and therefore
+   the same KeyConfirm digest; an adversary that records a single
+   KeyConfirm message and replays it in answer to a later
+   KeyTransport from C causes C to accept the run despite S not
+   having processed the request.  Because the digest comparison at
+   C reduces to comparing two computations of h(k_fixed) on the
+   same fixed input, no fresh value is available to distinguish
+   one run from another.
+
+   The protocol does not provide forward secrecy with respect to
+   compromise of either sk(S) or k_fixed.  An adversary that
+   records protocol traffic and later obtains either secret is
+   able to recover the transported value used in every prior run.
+
+   Implementations should be aware that, in this design, the
+   security of the protocol reduces entirely to the confidentiality
+   of k_fixed at every party that is ever provisioned with it, and
+   that no cryptographic mechanism in the protocol itself
+   compensates for the loss of that confidentiality.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2. Informative References
+
+   [RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
+              Protocol Version 1.3", RFC 8446, August 2018.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Transported Session Key
+8.2 Non-injective Agreement on the Transported Key
+8.3 Injective Agreement on the Transported Key

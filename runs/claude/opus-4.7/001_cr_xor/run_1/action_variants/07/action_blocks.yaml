@@ -1,0 +1,30 @@
+- role: I_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: R_Respond_First
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(na XOR k XOR ~nb)
+  - send:
+    - t
+    - ~nb
+- role: R_Respond_Second
+  operations:
+  - send:
+    - t
+    - ~nb
+- role: I_Finish
+  operations:
+  - receive:
+    - t
+    - nb
+  - compute:
+    - t = h(~na XOR k XOR nb)
+  - send: <END>

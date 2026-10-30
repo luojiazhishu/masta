@@ -1,0 +1,70 @@
+theory NAXOS_Simple
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule Generate_DH_key_pair:
+  [ Fr(~x) ]
+  -->
+  [ !Pk($A, 'g'^~x)
+  , Out('g'^~x)
+  , !Ltk($A, ~x)
+  ]
+
+rule Ltk_Reveal:
+  [ !Ltk(X, ~ltk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(~ltk) ]
+
+rule Initiator_Start:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI), Fr(~tidI), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1(), Create($I, ~tidI), Running($I, $R, <'initiator', ~tidI, $I, $R>) ]->
+  [ Out(hkI), St_I_1(~tidI, $I, $R, ~lkI, ~eskI) ]
+
+rule Responder_Receive:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^exR, X^~lkR, X^exR, $I, $R>)
+  in
+  [ In(X), Fr(~eskR), Fr(~SessionCorrelator), Fr(~tidR), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Create($R, ~tidR), Running($R, $I, <'responder', ~tidR, $R, $I, ~SessionCorrelator>) ]->
+  [ Out(<hkR, ~SessionCorrelator>), St_R_1(~tidR, $R, $I, ~lkR, ~eskR, X, ~SessionCorrelator) ]
+
+rule Initiator_Finish:
+  let
+    kI = h2(<Y^~lkI, pkR^~eskI, Y^~eskI, $I, $R>)
+  in
+  [ St_I_1(~tidI, $I, $R, ~lkI, ~eskI), In(<Y, SessionCorrelator>), !Pk($R, pkR) ]
+  --[ Test3(), Commit($I, $R, <'initiator', ~tidI, $I, $R>), Secret($I, $R, kI), Honest($I) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All I R k #i.
+       Secret(I, R, k) @ i
+     ==>
+         not (Ex #j. K(k) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All i r t #i.
+       Commit(i, r, t) @ i
+     ==>
+         (Ex id #j. Create(r, id) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

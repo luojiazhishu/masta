@@ -1,0 +1,55 @@
+- role: Server_Setup
+  operations:
+  - generate_nonces:
+    - ~skS
+  - send: []
+- role: Client_Setup
+  operations:
+  - generate_nonces:
+    - ~skC
+  - send: []
+- role: Client_GetEndpoints
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpoints
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pkS
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannel
+  operations:
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - pkC
+    - <'OSCReq', pkC, ~Nc>
+    - sign(h(<'OSCReq', pkC, ~Nc>), ~skC)
+    - h(<'OSCReq', pkC, ~Nc>)
+- role: Server_OpenSecureChannel
+  operations:
+  - receive:
+    - pkC
+    - <'OSCReq', pkC, Nc>
+    - sig
+    - digest
+  - generate_nonces:
+    - ~Ns
+  - send:
+    - pkS
+    - <'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>
+    - sign(h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>), ~skS)
+    - h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>)
+- role: Client_VerifyResponse
+  operations:
+  - receive:
+    - pkS
+    - <'OSCRes', Ns, ST, TTL>
+    - sig
+    - digest
+  - send: <END>

@@ -1,0 +1,25 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - sign(<$I, $R>, ltkI)
+- role: Responder_Reply
+  operations:
+  - receive:
+    - sig
+  - generate_nonces:
+    - ~tid
+  - assert:
+    - verify(sig, <$I, $R>, pkI) = true
+  - send:
+    - sign(<$I, $R>, ltkR)
+    - '''resp'''
+- role: Initiator_Accept
+  operations:
+  - receive:
+    - s
+    - '''resp'''
+  - assert:
+    - verify(s, <$I, $R>, pkR) = true
+  - send: <END>

@@ -1,0 +1,61 @@
+theory SimplifiedNAXOS
+begin
+
+builtins: diffie-hellman
+
+functions: h1/2, h2/4
+
+rule Register_Ltk:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($P, ~lk), !Pk($P, 'g'^~lk), Out('g'^~lk) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($P, ~lk) ]
+  --[ LtkReveal($P) ]->
+  [ Out(~lk) ]
+
+/* Action Block 1: Initiator generates ephemeral and sends hkI */
+rule Initiator_Send:
+  let exI = h1(~eskI, ~lkI)
+      hkI = 'g'^exI
+  in
+  [ !Ltk($I, ~lkI), Fr(~eskI) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ St_I_1($I, $R, ~eskI, exI, ~lkI), Out(<$I, $R, hkI>) ]
+
+/* Action Block 2: Responder receives hkI, generates hkR, computes kR */
+rule Responder_Respond:
+  let exR = h1(~eskR, ~lkR)
+      hkR = 'g'^exR
+      kR  = h2(pkI^exR, X^~lkR, $I, $R)
+  in
+  [ !Ltk($R, ~lkR), !Pk($I, pkI), Fr(~eskR), In(<$I, $R, X>) ]
+  --[ Test2(), Create($R, ~eskR),
+      Secret($I, $R, kR), Honest($I), Honest($R) ]->
+  [ Out(hkR) ]
+
+/* Action Block 3: Initiator receives hkR and computes kI */
+rule Initiator_Finish:
+  let kI = h2(Y^~lkI, pkR^exI, $I, $R)
+  in
+  [ St_I_1($I, $R, ~eskI, exI, ~lkI), !Pk($R, pkR), In(Y) ]
+  --[ Test3(),
+      Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_protocol --run-dir runs/masta/qwen3.5-plus/004_macro/run_1 --dataset-dir data/dataset --protocol-id 004_macro --tamarin-timeout 300 --force
+
+==== MASTA score_protocol ====
+ run_dir:     /root/project/llm-tamarin/masta/supplementary_material/runs/masta/qwen3.5-plus/004_macro/run_1
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    004_macro
+
+==== Score ====
+ protocol: 004_macro
+ M1: 0.625
+ M2: 0.360
+ M3: 0.000
+ M4: 0.805  (7/7 action variants present)
+ M5: 1.000  (3/3 weakness variants present)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/masta/qwen3.5-plus/004_macro/run_1/score.json

@@ -1,0 +1,65 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, mac/2
+
+rule RuleStep1:
+  [ Fr(~n_R) ]
+  --[ Test1() ]->
+  [ Out(<$R, $S, ~n_R>) ]
+
+rule RuleStep2:
+  [
+    In(<$R, $S, ~n_R>),
+    Fr(~k_1)
+  ]
+  --[ Test2() ]->
+  [ Out(<$S, $R, f(~k_1), sign(<f(~k_1), ~n_R>, sk($S))>) ]
+
+rule RuleStep3:
+  [
+    In(<$S, $R, f_k1, sig>)
+  ]
+  --[ Test3() ]->
+  [ !Verified($R, $S, f_k1) ]
+
+rule RuleStep4:
+  [
+    Fr(~k_2),
+    !Verified($R, $S, f(~k_1))
+  ]
+  --[ Test4() ]->
+  [ Out(<<m_1, f(~k_2)>, mac(~k_1, <<m_1, f(~k_2)>, 'stream'>)>) ]
+
+rule RuleStep5:
+  [
+    In(<D_1, mac_1>)
+  ]
+  --[ Test5() ]->
+  [ !Cached($R, D_1, mac_1) ]
+
+rule RuleStep6:
+  [
+    Fr(~k_n),
+    Fr(~k_prev),
+    !Verified($R, $S, f(~k_prev))
+  ]
+  --[ Test6() ]->
+  [ Out(<<m_n, f(~k_n), ~k_prev>, mac(~k_prev, <<m_n, f(~k_n), ~k_prev>, 'stream'>)>) ]
+
+rule RuleStep7:
+  [
+    In(<D_n, mac_n>)
+  ]
+  --[ Test7() ]->
+  [ !Cached($R, D_n, mac_n) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 &
+       Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

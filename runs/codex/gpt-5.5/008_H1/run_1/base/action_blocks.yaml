@@ -1,0 +1,38 @@
+- role: Long_Term_Key_Setup
+  operations:
+  - generate_nonces:
+    - ~ltkI
+    - ~ltkR
+  - send:
+    - pk(~ltkI)
+    - pk(~ltkR)
+- role: Initiator_Initialization
+  operations:
+  - generate_nonces:
+    - ~sidI
+  - send: []
+- role: Initiator_Transmission
+  operations:
+  - compute:
+    - mI = sign(<'I', 'R'>, ltkI)
+  - send:
+    - mI
+- role: Responder_Validation_And_Reply
+  operations:
+  - receive:
+    - s
+  - generate_nonces:
+    - ~sidR
+  - compute:
+    - mR = sign(<'I', 'R'>, ltkR)
+  - assert:
+    - verify(s, <'I', 'R'>, pkI) = true
+  - send:
+    - mR
+- role: Initiator_Completion
+  operations:
+  - receive:
+    - s
+  - assert:
+    - verify(s, <'I', 'R'>, pkR) = true
+  - send: <END>

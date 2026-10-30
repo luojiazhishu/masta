@@ -1,0 +1,49 @@
+theory BSKTCN begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: pk/1
+
+// PKI: Server long-term key pair
+rule Generate_Server_Keys:
+  [ Fr(~sk_s) ]
+  --[ Create('S', ~sk_s) ]->
+  [ !Ltk('S', ~sk_s), !Pk('S', pk(~sk_s)), Out(pk(~sk_s)) ]
+
+// RuleStep1: Client sends m1 = <aenc(k, pk(S)), rc>
+rule RuleStep1:
+  let
+    m1_ciphertext = aenc(~k, pk(~sk_s))
+    m1 = <m1_ciphertext, ~rc>
+  in
+  [ Fr(~k), Fr(~rc), !Pk('S', pk(~sk_s)) ]
+  --[ Test1(), Secret('C', 'S', ~k), Honest('C') ]->
+  [ Out(m1) ]
+
+// RuleStep2: Server receives m1, decrypts, sends m2 = <h(k), rc>
+rule RuleStep2:
+  let
+    k = adec(ciphertext, ~sk_s)
+    digest = h(k)
+    m2 = <digest, rc>
+  in
+  [ In(<ciphertext, rc>), !Ltk('S', ~sk_s) ]
+  --[ Test2(), Running('S', 'C', k), Honest('S') ]->
+  [ Out(m2) ]
+
+// Client confirmation rule to trigger Commit
+rule RuleStep3:
+  let
+    expected_digest = h(k)
+  in
+  [ In(<digest, rc>), Fr(~k), Fr(~rc), !Pk('S', pk(~sk_s)) ]
+  --[ Test3(), Commit('C', 'S', k) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

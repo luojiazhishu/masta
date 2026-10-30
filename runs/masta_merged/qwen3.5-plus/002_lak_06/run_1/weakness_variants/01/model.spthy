@@ -1,0 +1,80 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+functions: k/0 [private]
+
+rule RuleStep1:
+  [
+    Fr(~r0)
+  ]
+  --[ Test1(), Honest('Reader'), Secret('Reader', 'Tag', k) ]->
+  [
+    Out(~r0),
+    !StR(~r0),
+    !Ltk('Reader', k)
+  ]
+
+rule RuleStep2:
+  [
+    In(~r0),
+    Fr(~r1)
+  ]
+  --[ Test2(), Honest('Tag'), Running('Tag', 'Reader', <~r0, ~r1>) ]->
+  [
+    Out(<~r1, h(~r0 XOR k)>)
+  ]
+
+rule RuleStep3:
+  [
+    In(<r1, tag_mac>),
+    !StR(~r0)
+  ]
+  --[ Test3(), Running('Reader', 'Tag', <~r0, r1>), Commit('Reader', 'Tag', <~r0, r1>) ]->
+  [
+    Out(h(tag_mac XOR k XOR ~r0))
+  ]
+
+rule RuleStep4:
+  [
+    In(reader_mac),
+    !StR(~r0)
+  ]
+  --[ Test4(), Commit('Tag', 'Reader', <~r0, reader_mac>) ]->
+  [
+  ]
+
+rule LtkReveal:
+  [ !Ltk('Reader', k) ]
+  --[ LtkReveal('Reader') ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_secrecy_long_term_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All tag reader session #i.
+     Commit(tag, reader, session) @ i
+   ==>
+       (Ex #j. Running(reader, tag, session) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All reader tag session #i.
+     Commit(reader, tag, session) @ i
+   ==>
+       (Ex #j. Running(tag, reader, session) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

@@ -1,0 +1,83 @@
+theory ISO9798_4_4_PublicRegistration begin
+
+functions: mac/2
+
+rule Provision_Association:
+  [ Fr(~kAB) ]
+  --[ Test1(), Create($A, <'association', $B>), Create($B, <'association', $A>) ]->
+  [ !Shared($A, $B, ~kAB), Out(<$A, $B, ~kAB>) ]
+
+rule Reveal_Shared_Key:
+  [ !Shared($A, $B, kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(kAB) ]
+
+rule Responder_Send_Challenge:
+  [ !Shared($A, $B, kAB), Fr(~RB), Fr(~Text1) ]
+  --[ Test2(), Create($B, <'responder', $A, ~RB>) ]->
+  [ RespState($A, $B, kAB, ~RB), Out(<~RB, ~Text1>) ]
+
+rule Initiator_Send_TokenAB:
+  let mac1 = mac(<'sid1_mut_cr', ~RA, RB, $B>, kAB) in
+  [ !Shared($A, $B, kAB), In(<RB, Text1>), Fr(~RA), Fr(~Text2), Fr(~Text3) ]
+  --[ Test3(), Create($A, <'initiator', $B, ~RA>), Running($A, $B, <'B', ~RA, RB>) ]->
+  [ InitState($A, $B, kAB, ~RA, RB), Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, $B, ~Text2>, mac1>) ]
+
+rule Responder_Verify_TokenAB_Send_TokenBA:
+  let mac1 = mac(<'sid1_mut_cr', RA, RB, $B>, kAB)
+      mac2 = mac(<'sid2_mut_cr', RB, RA>, kAB) in
+  [ RespState($A, $B, kAB, RB), In(<RA, Text3, <'sid1_mut_cr', RA, RB, $B, Text2>, mac1>), Fr(~Text4), Fr(~Text5) ]
+  --[ Test4(), Running($B, $A, <'A', RA, RB>), Commit($B, $A, <'B', RA, RB>), Honest($A), Honest($B) ]->
+  [ Out(<~Text5, mac2>) ]
+
+rule Initiator_Verify_TokenBA_Commit:
+  let mac2 = mac(<'sid2_mut_cr', RB, RA>, kAB) in
+  [ InitState($A, $B, kAB, RA, RB), In(<Text5, mac2>) ]
+  --[ Test5(), Commit($A, $B, <'A', RA, RB>), Honest($A), Honest($B) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'A', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'A', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'B', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'B', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'A', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'A', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'A', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'B', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'B', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'B', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

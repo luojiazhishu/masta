@@ -1,0 +1,40 @@
+theory SK_PMD_W01
+begin
+
+builtins: symmetric-encryption
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Initiator:
+  [ Fr(~sec), Fr(~pub), !Ltk(k) ]
+  --[ Test1(), Create('I', ~sec), Secret('I', 'R', ~sec), Honest('I') ]->
+  [ Out(senc(<~sec, ~pub>, k)), Out(~sec), !Ltk(k) ]
+
+rule Responder:
+  [ In(c), !Ltk(k) ]
+  --[ Test2(), Test3(), Commit('R', 'I', <'responder', fst(sdec(c, k)), snd(sdec(c, k))>), Running('I', 'R', <'initiator', fst(sdec(c, k)), snd(sdec(c, k))>) ]->
+  [ Out(snd(sdec(c, k))), !Ltk(k) ]
+
+rule Ltk_Reveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k), !Ltk(k) ]
+
+lemma secrecy_sec:
+  // category: secrecy
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

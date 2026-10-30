@@ -1,0 +1,68 @@
+theory ISO979844_Weakness04
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2
+
+rule Setup:
+  [ Fr(~A), Fr(~B), Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk(~A, ~B, ~kAB), !Pk(~A), !Pk(~B) ]
+
+rule Responder_Start:
+  [ Fr(~RB), Fr(~Text1), !Ltk(A, B, kAB), !Pk(B) ]
+  --[ Test1(), Create(B, ~RB) ]->
+  [ Out(<~RB, ~Text1>), St_B(B, ~RB, kAB, A) ]
+
+rule Initiator_Respond:
+  [ In(<rb, text1>), !Ltk(A, B, kAB), !Pk(A), Fr(~RA), Fr(~Text2), Fr(~Text3) ]
+  --[ Test2(), Running(A, B, ~RA, rb), Secret(A, B, kAB) ]->
+  [ Out(<~RA, ~Text3, mac(<~RA, rb, B>, kAB)>), St_A(A, B, ~RA, rb, kAB) ]
+
+rule Responder_Verify:
+  [ St_B(B, rb, kAB, A), In(<ra, text3, mac(<ra, rb, B>, kAB)>), Fr(~Text5) ]
+  --[ Test3(), Running(B, A, ra, rb), Honest(B) ]->
+  [ Out(<~Text5>), St_B2(B, A, ra, rb, kAB) ]
+
+rule Initiator_Accept:
+  [ St_A(A, B, ra, rb, kAB), In(text5) ]
+  --[ Test4(), Commit(A, B, ra, rb) ]->
+  [ ]
+
+rule Responder_Commit:
+  [ St_B2(B, A, ra, rb, kAB) ]
+  --[ Commit(B, A, ra, rb), Honest(B) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(a, b, k) ]
+  --[ LtkReveal(a), LtkReveal(b) ]->
+  [ Out(k) ]
+
+lemma noninjective_agreement_A:
+  // category: noninjective_agreement
+  "All a b ra rb #i.
+     Commit(a, b, ra, rb) @ i
+   ==>
+     ( (Ex #j. Running(b, a, ra, rb) @ j) )
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma injective_agreement_B:
+  // category: injective_agreement
+  "All a b ra rb #i.
+     Commit(a, b, ra, rb) @ i
+   ==>
+     ( (Ex #j. Running(b, a, ra, rb) @ j
+           & j < i
+           & not (Ex a2 b2 #i2. Commit(a2, b2, ra, rb) @ i2
+                              & not (#i2 = #i))) )
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,98 @@
+theory TeslaScheme1
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+/* Long-term signing key setup for sender */
+rule Gen_Ltk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+/* Adversary can reveal any party's long-term key */
+rule Reveal_Ltk:
+  [ !Ltk($A, ~sk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~sk) ]
+
+/* Block 1: Sender initializes a fresh stream with MAC key k1 */
+rule Sender_Init:
+  [ Fr(~k1) ]
+  --[ Test1() ]->
+  [ St_S_0($S, ~k1) ]
+
+/* Block 2: Receiver selects nonce and sends setup request Msg 0a */
+rule Receiver_Setup_Request:
+  [ Fr(~nR) ]
+  --[ Test2() ]->
+  [ Out(<$R, $S, ~nR>), St_R_1($R, $S, ~nR) ]
+
+/* Block 3: Sender signs f(k1) with nR and sends setup response Msg 0b */
+rule Sender_Setup_Response:
+  [ St_S_0($S, ~k1), !Ltk($S, ~sk), In(<r, $S, nR>) ]
+  --[ Test3() ]->
+  [ Out(<$S, r, h(~k1), sign(<h(~k1), nR>, ~sk)>),
+    St_S_1($S, r, ~k1) ]
+
+/* Block 4: Receiver verifies signature and records commitment f(k1) */
+rule Receiver_Process_Setup:
+  [ St_R_1($R, $S, ~nR), !Pk($S, pkS), In(<$S, $R, commit, sig>) ]
+  --[ Test4(), Eq(verify(sig, <commit, ~nR>, pkS), true) ]->
+  [ St_R_2($R, $S, commit) ]
+
+/* Block 5: Sender broadcasts Msg 1: payload m1, f(k2), MAC(k1, D1) */
+rule Sender_Broadcast_Msg1:
+  [ St_S_1($S, r, ~k1), Fr(~k2), Fr(~m1) ]
+  --[ Test5(), Running($S, r, <'msg1', ~k1, ~m1>) ]->
+  [ Out(<~m1, h(~k2), mac(~k1, <~m1, h(~k2)>)>),
+    St_S_2($S, r, ~k1, ~k2, ~m1) ]
+
+/* Block 6: Receiver caches Msg 1 without authenticating yet */
+rule Receiver_Cache_Msg1:
+  [ St_R_2($R, $S, commit_k1), In(<m1, fk2, mac1>) ]
+  --[ Test6(), Cached() ]->
+  [ St_R_3($R, $S, commit_k1, m1, fk2, mac1) ]
+
+/* Block 7: Sender broadcasts Msg 2: m2, f(k3), discloses k1, MAC(k2, D2) */
+rule Sender_Broadcast_Msg2:
+  [ St_S_2($S, r, ~k1, ~k2, ~m1), Fr(~k3), Fr(~m2) ]
+  --[ Test7(), Disclose() ]->
+  [ Out(<~m2, h(~k3), ~k1, mac(~k2, <~m2, h(~k3), ~k1>)>) ]
+
+/* Block 8: Receiver verifies commitment then MAC on cached Msg 1, accepts m1 */
+rule Receiver_Verify_Msg1:
+  [ St_R_3($R, $S, commit_k1, m1, fk2, mac1),
+    In(<m2, fk3, k1_disc, mac2>) ]
+  --[ Test8(),
+      Eq(h(k1_disc), commit_k1),
+      Eq(mac(k1_disc, <m1, fk2>), mac1),
+      Commit($R, $S, <'msg1', k1_disc, m1>),
+      Honest($S) ]->
+  [ ]
+
+restriction Eq_check:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* TESLA timing assumption: receiver caches Msg1 before sender discloses k1 */
+restriction timing_assumption:
+  "All #i #j. Cached() @ i & Disclose() @ j ==> #i < #j"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex r2 #j. Running(s, r2, t) @ j)
+     | (Ex X #rv. LtkReveal(X) @ rv & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7 #t8.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7 & Test8() @ #t8
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6 & #t6 < #t7 & #t7 < #t8"
+
+end

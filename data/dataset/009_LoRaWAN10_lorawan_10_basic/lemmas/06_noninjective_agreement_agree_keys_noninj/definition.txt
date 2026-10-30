@@ -1,0 +1,6 @@
+lemma agree_keys_noninj:
+  "All a b t #i.
+     Commit(a, b, <'keys', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'keys', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

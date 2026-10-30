@@ -1,0 +1,47 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+    - ~tidR
+  - send:
+    - ~RB
+    - ~Text1
+- role: RuleStep2
+  operations:
+  - receive:
+    - RB
+    - Text1
+  - generate_nonces:
+    - ~RA
+    - ~Text2
+    - ~Text3
+    - ~tidI
+  - send:
+    - ~RA
+    - ~Text3
+    - <sid1_mut_cr(), ~RA, RB, $B, ~Text2>
+    - mac1(~RA, RB, $B, ~kAB)
+- role: RuleStep3
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - <sid1_mut_cr(), RA, RB, IdB, Text2>
+    - ExpectedMAC
+  - generate_nonces:
+    - ~Text5
+    - ~tidR2
+  - compute:
+    - ExpectedMAC = mac1(RA, RB, IdB, ~kAB)
+  - send:
+    - ~Text5
+    - mac2(RB, RA, ~kAB)
+- role: RuleStep4
+  operations:
+  - receive:
+    - Text5
+    - ExpectedMAC
+  - compute:
+    - ExpectedMAC = mac2(RB, RA, ~kAB)
+  - send: <END>

@@ -1,0 +1,60 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+// Action block 1: Reader sends R0
+rule Reader_Start:
+  [ Fr(~k), Fr(~r0), Fr(~r0_aux) ]
+  --[ Test1(), Create(~k), Running('Reader', 'Tag', <~k, ~r0>) ]->
+  [ Out(<~r0, ~r0_aux>), St_R(~k, ~r0), !Ltk(~k) ]
+
+// Action block 2: Tag responds with T1
+rule Tag_Respond:
+  [ !Ltk(k), In(<r0, r0_aux>), Fr(~r1) ]
+  --[ Test2(), Running('Tag', 'Reader', <k, r0>) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR k)>), St_T(k, r0, ~r1) ]
+
+// Action block 3: Reader verifies and sends R1
+rule Reader_Verify:
+  [ St_R(k, r0), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit('Reader', 'Tag', <k, r0, r1>) ]->
+  [ Out(h(tag_mac XOR k XOR r0)) ]
+
+// Action block 4: Tag verifies R1
+rule Tag_Verify:
+  [ St_T(k, r0, r1), In(reader_mac) ]
+  --[ Test4(), Commit('Tag', 'Reader', <k, r0, r1>) ]->
+  [ ]
+
+// Secrecy of long-term key
+// category: secrecy
+lemma secrecy_k:
+  "All k #i.
+     Create(k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// Non-injective agreement at Tag: Tag commits to Reader on <k, r0, r1>
+// category: noninjective_agreement
+lemma ni_agreement_tag:
+  "All b k r0 r1 #i.
+     Commit('Tag', b, <k, r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, 'Tag', <k, r0>) @ j)"
+
+// Non-injective agreement at Reader: Reader commits to Tag on <k, r0, r1>
+// category: noninjective_agreement
+lemma ni_agreement_reader:
+  "All b k r0 r1 #i.
+     Commit('Reader', b, <k, r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, 'Reader', <k, r0>) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

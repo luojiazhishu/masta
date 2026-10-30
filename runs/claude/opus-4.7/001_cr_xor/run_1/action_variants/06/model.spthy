@@ -1,0 +1,66 @@
+theory CRXORDSep
+begin
+
+builtins: hashing, xor
+
+// Long-term symmetric shared key between initiator I and responder R.
+rule Setup_Key:
+    [ Fr(~k) ]
+  -->
+    [ !Shared($I, $R, ~k) ]
+
+// Adversary can compromise a shared key, marking both endpoints revealed.
+rule Reveal_Ltk:
+    [ !Shared(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+    [ Out(k) ]
+
+// Action block 1: Initiator generates na and transmits it.
+rule Init_1:
+    [ Fr(~na) ]
+  --[ Test1(), Create($I, ~na) ]->
+    [ Out(~na), St_I_1($I, $R, ~na) ]
+
+// Action block 2: Responder receives na, generates nb, computes tag, sends <t, nb>.
+rule Resp_1:
+    let t = h(<na XOR ~k XOR ~nb, 'Init'>)
+    in
+    [ In(na), Fr(~nb), !Shared($I, $R, ~k) ]
+  --[ Test2(), Create($R, ~nb), Running($R, $I, <'I', 'R', t>) ]->
+    [ Out(<t, ~nb>) ]
+
+// Action block 3: Initiator receives <t, nb>, recomputes tag and verifies.
+rule Init_2:
+    let t_check = h(<~na XOR ~k XOR nb, 'Init'>)
+    in
+    [ St_I_1($I, $R, ~na), !Shared($I, $R, ~k), In(<t, nb>) ]
+  --[ Test3(), Eq(t, t_check), Commit($I, $R, <'I', 'R', t>),
+      Honest($I), Honest($R) ]->
+    [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

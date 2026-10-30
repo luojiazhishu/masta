@@ -1,0 +1,25 @@
+- role: Initiator_Send
+  operations:
+  - send:
+    - sign(<'I', 'R'>, ltkI)
+- role: Responder_Receive_Verify
+  operations:
+  - receive:
+    - mI
+  - assert:
+    - verify(mI, <'I', 'R'>, pkI) = true
+  - send: []
+- role: Responder_Send
+  operations:
+  - send:
+    - sign(<'I', 'R'>, ltkR)
+    - '''resp'''
+- role: Initiator_Receive_Verify
+  operations:
+  - receive:
+    - s
+    - t
+  - assert:
+    - verify(s, <'I', 'R'>, pkR) = true
+    - t = 'resp'
+  - send: <END>

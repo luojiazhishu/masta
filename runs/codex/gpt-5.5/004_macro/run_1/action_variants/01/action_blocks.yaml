@@ -1,0 +1,24 @@
+- role: Client_Send_KeyTransport
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~rc
+  - send:
+    - aenc(~k, pkS)
+    - ~rc
+- role: Server_Send_KeyConfirm
+  operations:
+  - receive:
+    - ciphertext
+    - rc
+  - compute:
+    - k = adec(ciphertext, ltkS)
+  - send:
+    - h(k)
+    - rc
+- role: Client_Accept_KeyConfirm
+  operations:
+  - receive:
+    - h(k)
+    - rc
+  - send: <END>

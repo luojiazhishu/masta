@@ -1,0 +1,33 @@
+- role: Provision_Shared_Key
+  operations:
+  - generate_nonces:
+    - ~k
+  - send: []
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tm = h(tag_mac(r0, ~r1, k, 'TAG_TAG'))
+  - send:
+    - ~r1
+    - tm
+- role: Reader_Send_R1
+  operations:
+  - compute:
+    - tm = h(tag_mac(r0, r1, k, 'TAG_TAG'))
+    - rm = h(reader_mac(h(tag_mac(r0, r1, k, 'TAG_TAG')), k, r0))
+  - send:
+    - rm
+- role: Tag_Accept_R1
+  operations:
+  - compute:
+    - tm = h(tag_mac(r0, r1, k, 'TAG_TAG'))
+    - rm = h(reader_mac(h(tag_mac(r0, r1, k, 'TAG_TAG')), k, r0))
+  - send: <END>

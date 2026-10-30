@@ -1,0 +1,73 @@
+theory NAXOS_04_simple_excl3
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1
+functions: h2/1
+
+/* Generate long-term keypair */
+rule generate_ltk:
+   let pkA = 'g'^~lkA
+   in
+   [ Fr(~lkA) ]
+   -->
+   [ !Ltk( $A, ~lkA ), !Pk( $A, pkA ), Out( pkA ) ]
+
+/* Initiator - Action Block 1 */
+rule Init_1:
+  let exI = h1(<~eskI, ~lkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk($I, ~lkI) ]
+  --[ Test1() ]->
+  [ Init_1(~eskI, $I, $R, ~lkI, hkI), Out(hkI) ]
+
+/* Responder - Action Block 2 */
+rule Resp_1:
+  let pkI = 'g'^~lkI
+      exR = h1(<~eskR, ~lkR>)
+      hkr = 'g'^exR
+      kR  = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ Fr(~eskR), !Ltk($R, ~lkR), !Pk($I, pkI), In(X) ]
+  --[ Accept(~eskR, $R, $I, kR),
+      Secret($R, $I, kR),
+      Honest($I),
+      Honest($R),
+      Test2() ]->
+  [ Out(<hkr, 'NAXOS-v1'>) ]
+
+/* Initiator - Action Block 3 */
+rule Init_2:
+  let pkR = 'g'^~lkR
+      exI = h1(<~eskI, ~lkI>)
+      kI  = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ Init_1(~eskI, $I, $R, ~lkI, hkI), !Pk($R, pkR), In(<Y, 'NAXOS-v1'>) ]
+  --[ Accept(~eskI, $I, $R, kI),
+      Secret($I, $R, kI),
+      Honest($I),
+      Honest($R),
+      Test3() ]->
+  []
+
+/* Key Reveals */
+rule Ltk_reveal:
+  [ !Ltk($A, lkA) ] --[ LtkRev($A), LtkReveal($A) ]-> [ Out(lkA) ]
+
+// category: secrecy
+lemma key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

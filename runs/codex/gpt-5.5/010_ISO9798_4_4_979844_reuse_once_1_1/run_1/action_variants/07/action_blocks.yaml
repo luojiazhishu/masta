@@ -1,0 +1,51 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - compute:
+    - auxB1 = aux1(~text1)
+  - send:
+    - ~rb
+    - ~text1
+- role: Initiator_Send_Token
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - compute:
+    - tagged1 = <'sid1_mut_cr', ra, rb, 'IdB', ~text2>
+    - mac1 = h(<'sid1_mut_cr', ra, rb, 'IdB', kAB>)
+  - send:
+    - ra
+    - ~text3
+    - tagged1
+    - mac1
+- role: Responder_Verify_Token
+  operations:
+  - receive:
+    - ra
+    - text3
+    - tagged1
+    - mac1
+  - generate_nonces:
+    - ~text4
+    - ~text5
+  - compute:
+    - tagged1 = <'sid1_mut_cr', ra, rb, 'IdB', text2>
+    - mac1 = h(<'sid1_mut_cr', ra, rb, 'IdB', kAB>)
+    - mac2 = h(<'sid2_mut_cr', rb, ra, kAB>)
+  - send:
+    - ~text5
+    - mac2
+- role: Initiator_Verify_Token
+  operations:
+  - receive:
+    - text5
+    - mac2
+  - compute:
+    - mac2 = h(<'sid2_mut_cr', rb, ra, kAB>)
+  - send: <END>

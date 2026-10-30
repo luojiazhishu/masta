@@ -1,0 +1,90 @@
+theory TeslaScheme1W02
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ i ==> x = y"
+
+/* Long-term key registration */
+rule Register_S:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule LtkReveal:
+  [ !Ltk($X, ~skX) ]
+  --[ LtkReveal($X) ]->
+  [ Out(~skX) ]
+
+/* Block 1: R generates nonce and sends setup request (Msg 0a) */
+rule R_SetupRequest:
+  [ Fr(~nR) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR>), St_R_0($R, $S, ~nR) ]
+
+/* Block 2: S receives setup request and sends signed setup response (Msg 0b) */
+rule S_SetupResponse:
+  [ In(<r, $S, nR>), Fr(~k1), !Ltk($S, ~skS) ]
+  --[ Test2() ]->
+  [ Out(<$S, r, h(~k1), sign(<h(~k1), nR>, ~skS)>),
+    St_S_0($S, r, ~k1) ]
+
+/* Block 3: R receives setup response and verifies signature */
+rule R_ReceiveSetupResponse:
+  [ St_R_0($R, $S, ~nR), !Pk($S, pkS),
+    In(<$S, $R, fk1, sig>) ]
+  --[ Test3(), Eq(verify(sig, <fk1, ~nR>, pkS), true) ]->
+  [ St_R_1($R, $S, ~nR, fk1) ]
+
+/* Block 4: S sends first stream message: D1 = (m1, f(k2)), MAC(k1, D1) */
+rule S_SendMsg1:
+  [ St_S_0($S, r, ~k1), Fr(~m1), Fr(~k2) ]
+  --[ Test4(), Running($S, r, <'sender', 'msg1', <~m1, h(~k2)>>) ]->
+  [ Out(<<~m1, h(~k2)>, mac(~k1, <~m1, h(~k2)>)>),
+    St_S_1($S, r, ~k1, ~k2, ~m1) ]
+
+/* Block 5: R receives and caches first stream message without verification */
+rule R_CacheMsg1:
+  [ St_R_1($R, $S, ~nR, fk1), In(<d1, mac1>) ]
+  --[ Test5() ]->
+  [ St_R_2($R, $S, ~nR, fk1, d1, mac1) ]
+
+/* Block 6: S sends second stream message disclosing k1: D2 = (m2, f(k3), k1) */
+rule S_SendMsg2:
+  [ St_S_1($S, r, ~k1, ~k2, ~m1), Fr(~m2), Fr(~k3) ]
+  --[ Test6() ]->
+  [ Out(<<~m2, h(~k3), ~k1>, mac(~k2, <~m2, h(~k3), ~k1>)>),
+    St_S_done($S, r) ]
+
+/* Block 7: R processes second message - WEAK: only checks f(k1)=commitment,
+   does NOT recompute MAC(k1, cached_d1) before accepting d1 as authentic */
+rule R_ProcessMsg2:
+  [ St_R_2($R, $S, ~nR, fk1, d1, mac1),
+    In(<<m2, fk3, k1disclosed>, mac2>) ]
+  --[ Test7(),
+      Eq(h(k1disclosed), fk1),
+      Commit($R, $S, <'receiver', 'msg1', d1>),
+      Honest($S), Honest($R) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma authenticity_msg1:
+  "All R S d1 #i.
+     Commit(R, S, <'receiver', 'msg1', d1>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'sender', 'msg1', d1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5
+     & #t5 < #t6 & #t6 < #t7"
+
+end

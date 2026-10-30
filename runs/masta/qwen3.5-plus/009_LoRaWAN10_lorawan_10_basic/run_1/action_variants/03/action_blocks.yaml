@@ -1,0 +1,38 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - RequestMAC
+  - compute:
+    - req = <'JoinRequest', DevEUI, JoinEUI, ~DevNonce, RequestMAC>
+  - send:
+    - req
+- role: RuleStep2
+  operations:
+  - receive:
+    - req
+  - generate_nonces:
+    - ~JoinNonce
+    - ~ResponseMAC
+  - compute:
+    - req = <'JoinRequest', DevEUI, JoinEUI, DevNonce, RequestMAC>
+    - joinNonce = ~JoinNonce
+    - responseMAC = ~ResponseMAC
+    - acceptBody = <~JoinNonce, ~ResponseMAC>
+    - encryptedBody = senc(<~JoinNonce, ~ResponseMAC>, AppKey)
+    - joinAccept = <senc(<~JoinNonce, ~ResponseMAC>, AppKey), 'LoRa-1.0'>
+    - AppSKey = senc(<cst1, DevNonce, ~JoinNonce>, AppKey)
+    - NwkSKey = senc(<cst2, DevNonce, ~JoinNonce>, AppKey)
+  - send:
+    - joinAccept
+- role: RuleStep3
+  operations:
+  - receive:
+    - joinAccept
+  - compute:
+    - joinAccept = <encryptedBody, WireFormatVersion>
+    - acceptBody = sdec(encryptedBody, AppKey)
+    - joinNonce = fst(sdec(encryptedBody, AppKey))
+    - AppSKey = senc(<cst1, DevNonce, fst(sdec(encryptedBody, AppKey))>, AppKey)
+    - NwkSKey = senc(<cst2, DevNonce, fst(sdec(encryptedBody, AppKey))>, AppKey)
+  - send: <END>

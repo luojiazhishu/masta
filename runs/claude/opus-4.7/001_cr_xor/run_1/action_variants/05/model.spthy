@@ -1,0 +1,87 @@
+theory CRXORRAudit
+begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+// Pre-shared symmetric key setup. The fact is role-oriented: $I is
+// the initiator role, $R is the responder role. The same pair of
+// principals may share a separate key for the reverse role assignment
+// via an additional Setup_PSK firing.
+rule Setup_PSK:
+    [ Fr(~k) ]
+  --[ KeyGen($I, $R) ]->
+    [ !Ltk($I, $R, ~k) ]
+
+// Long-term key compromise. Reveals the key for both endpoints.
+rule Reveal_Ltk:
+    [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+    [ Out(k) ]
+
+// Action block 1: Initiator generates fresh nonce na and sends it.
+rule I_Send_Challenge:
+    [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1()
+    , Create($I, ~na)
+    , Honest($I)
+    , Honest($R)
+    ]->
+    [ Out(~na), St_I_1($I, $R, ~na, k) ]
+
+// Action block 2: Responder receives na, generates nb, computes
+// audit tag bar(nb) (stored locally, not transmitted), computes
+// t = H(na XOR k XOR nb), and sends <t, nb>.
+rule R_Reply:
+    let t = h(na XOR k XOR ~nb)
+        tag_audit = bar(~nb)
+    in
+    [ In(na), Fr(~nb), !Ltk($I, $R, k) ]
+  --[ Test2()
+    , Create($R, ~nb)
+    , AuditLog($R, tag_audit)
+    , Running($R, $I, <'R', na, ~nb, t>)
+    , Honest($I)
+    , Honest($R)
+    ]->
+    [ Out(<t, ~nb>) ]
+
+// Action block 3: Initiator receives <tag, nb>, verifies the tag
+// equals H(na XOR k XOR nb), and commits.
+rule I_Finish:
+    [ St_I_1($I, $R, ~na, k), In(<tag, nb>) ]
+  --[ Test3()
+    , Eq(tag, h(~na XOR k XOR nb))
+    , Commit($I, $R, <'R', ~na, nb, tag>)
+    , Honest($I)
+    , Honest($R)
+    ]->
+    [ ]
+
+restriction Equality:
+    "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: aliveness
+lemma aliveness_responder:
+    "All a b t #i.
+       Commit(a, b, t) @ i
+     ==>
+         (Ex id #j. Create(b, id) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+    "All a b t #i.
+       Commit(a, b, t) @ i
+     ==>
+         (Ex #j. Running(b, a, t) @ j)
+       | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

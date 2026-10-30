@@ -1,0 +1,35 @@
+- role: Device_Send_JoinRequests
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - req_body = <'JoinRequest', $D, $S, ~devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', $D, $S, ~devnonce>)
+    - req = <<'JoinRequest', $D, $S, ~devnonce>, mac(appkey, <'JoinRequest', $D, $S,
+      ~devnonce>)>
+  - send:
+    - req
+    - req
+- role: Server_Accept_First_JoinRequest
+  operations:
+  - receive:
+    - <'JoinRequest', D, S, devnonce>
+    - mac(appkey, <'JoinRequest', D, S, devnonce>)
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - accept_body = <'JoinAccept', ~joinnonce, D, mac(appkey, <'JoinAccept', ~joinnonce,
+      D>)>
+    - app_skey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwk_skey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  - send:
+    - senc(accept_body, appkey)
+- role: Device_Receive_JoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinnonce, D, mac(appkey, <'JoinAccept', joinnonce, D>)>,
+      appkey)
+  - compute:
+    - app_skey = senc(<'cst1', devnonce, joinnonce>, appkey)
+    - nwk_skey = senc(<'cst2', devnonce, joinnonce>, appkey)
+  - send: <END>

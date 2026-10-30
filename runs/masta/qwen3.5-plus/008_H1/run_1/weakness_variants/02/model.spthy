@@ -1,0 +1,98 @@
+theory FAMED_SBR begin
+
+builtins: signing
+
+// Key generation: each agent has a long-term signing key pair
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  , Honest($A)
+  ]
+
+// RuleStep1: Initiator constructs and sends mI = sign(<I, R>, ltkI)
+// Emits Running action for Initiator's perspective
+rule RuleStep1:
+  [ Fr(~tid)
+  , !Ltk($I, ~ltkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1()
+    , Running($I, $R, <$I, $R>)
+    , Honest($I)
+    ]->
+  [ Out(sign(<$I, $R>, ~ltkI))
+  , !InitState(~tid, $I, $R)
+  ]
+
+// RuleStep2: Responder receives mI, verifies signature, sends mR = sign(R, ltkR)
+// PROTOCOL FLAW: mR is NOT bound to Initiator identity
+// Responder only knows their own identity in the reply
+rule RuleStep2:
+  [ In(mI)
+  , !Ltk($R, ~ltkR)
+  ]
+  --[ Test2()
+    , Running($R, 'any', <$R>)
+    , Honest($R)
+    ]->
+  [ Out(sign($R, ~ltkR))
+  ]
+
+// RuleStep3: Initiator receives mR and terminates
+// Emits Commit action - Initiator believes they completed run with R
+rule RuleStep3:
+  [ In(mR)
+  , !InitState(~tid, $I, $R)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3()
+    , Commit($I, $R, <$I, $R>)
+    , Honest($I)
+    ]->
+  [ Out('<END>')
+  ]
+
+// LtkReveal rule for long-term key compromise
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+// Property 1 from threat_model.md
+lemma weak_agreement_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// Property 2 from threat_model.md
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+// Property 3 from threat_model.md
+lemma injective_agreement_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

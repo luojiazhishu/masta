@@ -1,0 +1,89 @@
+theory SimpleNaxosClearKey
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule Generate_DH_key_pair:
+  [ Fr(~lk) ]
+  -->
+  [ !Ltk($A, ~lk)
+  , !Pk($A, 'g'^~lk)
+  , Out('g'^~lk)
+  ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, lk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(lk) ]
+
+rule Initiator_Send_Message1:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tidI)
+  , !Ltk($I, ~lkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1()
+    , Create($I, ~tidI)
+    ]->
+  [ Out(hkI)
+  , St_I_1(~tidI, $I, $R, ~lkI, exI, hkI, pkR)
+  ]
+
+rule Responder_Send_Message2:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI, hkI, hkR, $I, $R>)
+  in
+  [ In(hkI)
+  , Fr(~eskR)
+  , Fr(~tidR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2()
+    , Create($R, ~tidR)
+    , Running($R, $I, <'responder', hkI, hkR, kR, $I, $R>)
+    , Secret($I, $R, kR)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(<hkR, kR>)
+  ]
+
+rule Initiator_Receive_Message2:
+  let
+    kI = h2(<pkR, hkI, hkR, $I, $R>)
+  in
+  [ St_I_1(~tidI, $I, $R, ~lkI, exI, hkI, pkR)
+  , In(<hkR, receivedKey>)
+  ]
+  --[ Test3()
+    , Commit($I, $R, <'initiator', hkI, hkR, kI, $I, $R>)
+    , Secret($I, $R, kI)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

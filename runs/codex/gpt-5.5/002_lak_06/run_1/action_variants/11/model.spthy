@@ -1,0 +1,77 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Create($Reader, ~k), Create($Tag, ~k) ]->
+  [ !SharedKey($Reader, $Tag, ~k) ]
+
+rule Reveal_Reader_Key:
+  [ !SharedKey(Reader, Tag, k) ]
+  --[ LtkReveal(Reader) ]->
+  [ Out(k) ]
+
+rule Reveal_Tag_Key:
+  [ !SharedKey(Reader, Tag, k) ]
+  --[ LtkReveal(Tag) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ !SharedKey(Reader, Tag, k), Fr(~r0) ]
+  --[ Test1(), Create(Reader, ~r0), Running(Reader, Tag, <'reader', ~r0>), Secret(Reader, Tag, k), Honest(Reader), Honest(Tag) ]->
+  [ ReaderState(Reader, Tag, k, ~r0), Out(<~r0, ~r0>) ]
+
+rule Tag_Send_T1:
+  let tag_mac = h(<r0, ~r1, k>) in
+  [ !SharedKey(Reader, Tag, k), In(<r0, r0>), Fr(~r1) ]
+  --[ Test2(), Create(Tag, ~r1), Running(Tag, Reader, <'tag', r0, ~r1>), Running(Tag, Reader, <'reader', r0, ~r1>) ]->
+  [ TagState(Tag, Reader, k, r0, ~r1, tag_mac), Out(<~r1, tag_mac>) ]
+
+rule Reader_Send_R1:
+  let tag_mac = h(<r0, r1, k>)
+      reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ ReaderState(Reader, Tag, k, r0), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit(Reader, Tag, <'tag', r0, r1>), Honest(Reader), Honest(Tag), Running(Reader, Tag, <'reader', r0, r1>) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Accept_R1:
+  let tag_mac = h(<r0, r1, k>)
+      reader_mac = h(<tag_mac, k, r0>)
+  in
+  [ TagState(Tag, Reader, k, r0, r1, tag_mac), In(reader_mac) ]
+  --[ Test4(), Commit(Tag, Reader, <'reader', r0, r1>), Honest(Tag), Honest(Reader) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_authenticates_reader:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma reader_authenticates_tag_pair:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag', r0, r1>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

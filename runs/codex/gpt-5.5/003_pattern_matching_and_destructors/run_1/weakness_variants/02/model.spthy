@@ -1,0 +1,39 @@
+theory SK_PMD_W02 begin
+
+builtins: symmetric-encryption
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+--[ Honest('I'), Honest('R') ]->
+  [ !SharedKey('I', 'R', ~k) ]
+
+rule Initiator_Send:
+  let payload = <~sec, ~pub>
+      msg = senc(payload, k)
+  in
+  [ !SharedKey('I', 'R', k), Fr(~sec), Fr(~pub) ]
+--[ Test1(), Secret('I', 'R', ~sec), Running('I', 'R', <~sec, ~pub>) ]->
+  [ Out(msg), Out(payload), Sent('I', 'R', ~sec, ~pub, msg) ]
+
+rule Responder_Accept:
+  let payload = <sec, pub>
+  in
+  [ !SharedKey('I', 'R', k), In(senc(payload, k)) ]
+--[ Test2(), Commit('R', 'I', payload) ]->
+  [ Out(pub), Accepted('R', 'I', sec, pub) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B sec #i.
+     Secret(A, B, sec) @ #i
+   ==>
+     not (Ex #j. K(sec) @ #j)"
+
+
+end

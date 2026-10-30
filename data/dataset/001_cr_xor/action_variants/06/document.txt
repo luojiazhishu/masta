@@ -1,0 +1,234 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                       with a Domain Separator
+                       draft-famed-crxor-dsep-00
+
+
+Abstract
+
+   This document specifies CR-XOR-DSep, a two-flow challenge-response
+   authentication protocol between two endpoints that already share
+   a long-term symmetric key.  The hash input combines the
+   exclusive-or of the two protocol nonces and the shared key with a
+   constant domain separator, ensuring that the same hash function
+   does not collide with hash inputs produced by other protocols
+   that use a similar key derivation pattern.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-DSep provides a compact mechanism by which an initiator
+   verifies that a peer holding a pre-shared key is reachable and
+   currently active.  Both endpoints construct a hash input by
+   prepending the exclusive-or combination of the nonces and the
+   shared key to a constant domain separator declared in this
+   document as "Init", and then applying the cryptographic hash
+   function H.  Domain separation prevents the value produced by
+   this protocol from colliding with values produced by other
+   protocols that use a related construction over the same key
+   material.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  <a, b>
+   denotes the concatenation of a and b in the order shown.  na is
+   the initiator nonce, nb is the responder nonce, and k is the
+   shared symmetric key.  DSEP denotes the constant octet string
+   "Init", encoded according to Section 4.  The role names I and R
+   denote the initiator and the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-DSep runs in a single round trip:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |     H(<na XOR k XOR nb, "Init">), nb           |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify H tag                                  |
+          |                                                |
+
+   The initiator generates a uniformly random nonce na of length
+   L_n and transmits it.  Upon receipt the responder generates a
+   fresh nonce nb of length L_n and computes
+
+         t = H(<na XOR k XOR nb, DSEP>)
+
+   The responder transmits <t, nb>.  The initiator recomputes
+
+         t' = H(<na XOR k XOR nb, DSEP>)
+
+   and compares t' to t.
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+      } ResponderFlight;
+
+   The constant DSEP consists of the four ASCII octets {0x49, 0x6e,
+   0x69, 0x74}, that is, the string "Init".  Implementations MUST
+   prepend the XOR combination to DSEP within a single concatenated
+   buffer of length L_n + L_d before applying H, where L_d is the
+   length of DSEP in octets.
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band.  k MUST be
+   drawn uniformly at random and MUST be kept secret to both
+   endpoints.
+
+   An implementation in role I performs the following steps.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(<na XOR k XOR nb, DSEP>).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  If t' equals tag, declare the responder authenticated;
+           otherwise abort.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   MUST verify that na has length L_n and is non-zero, generate a
+   fresh nb of length L_n, compute t = H(<na XOR k XOR nb, DSEP>),
+   and transmit <t, nb>.
+
+
+6.  Security Considerations
+
+   CR-XOR-DSep is designed to convince the initiator that the
+   holder of k has reacted to the current challenge.  When the
+   verification at step 5.3.c succeeds, the initiator can conclude
+   that the responder has been active at some point in time and is
+   in possession of k.  This property is sometimes referred to as
+   aliveness of the responder.
+
+   The presence of DSEP inside the hash input prevents a value of
+   t produced by this protocol from being substituted for a value
+   produced by any other protocol whose hash construction uses the
+   same key material but a different separator.  Implementations
+   that re-use k across multiple protocols MUST therefore choose a
+   separator distinct from the ones used by those other protocols;
+   this document fixes "Init" only for CR-XOR-DSep itself.
+
+   The hash function H provides the cryptographic barrier against
+   forgery of the responder flight.  H MUST be selected so that
+   the work factor of preimage and collision attacks exceeds the
+   lifetime value of k.
+
+   The non-zero check on the nonces removes a degenerate case in
+   which an attacker submits the all-zeros nonce; without the
+   check, the algebraic identity x XOR x = 0 could be exploited to
+   drive the XOR-component of the hash input into a state that is
+   independent of one of the nonces.
+
+   Implementers should be aware that the XOR component of the hash
+   input is bilinear with respect to its operands, even though the
+   complete hash input is constructed by concatenation with DSEP.
+   An active attacker that observes one valid responder flight for
+   a challenge na', and that is in a position to reroute traffic,
+   can choose a fresh challenge na for an honest initiator and
+   deliver a crafted response_nonce nb' = na XOR na' XOR nb
+   together with the originally observed tag; under these
+   circumstances the initiator's tag check succeeds even though
+   the responder did not react to na.  Domain separation does not
+   protect against this attack because the same DSEP value is used
+   on both sides of the substitution.  CR-XOR-DSep therefore does
+   not provide agreement on the per-session parameters; it
+   provides aliveness of the entity holding k, and nothing
+   stronger.
+
+   Compromise of k breaks all guarantees of CR-XOR-DSep, both for
+   past and for future runs.  Implementations SHOULD provide a
+   mechanism to rotate k.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments operating
+   over open networks SHOULD rate-limit incoming InitiatorFlights
+   at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

@@ -1,0 +1,33 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tidI
+  - compute:
+    - exI = h1(<~eskI, ~lkI>)
+    - hkI = 'g'^h1(<~eskI, ~lkI>)
+  - send:
+    - hkI
+- role: Responder_Receive_Send_Accept
+  operations:
+  - receive:
+    - hkI
+  - generate_nonces:
+    - ~eskR
+    - ~tidR
+  - compute:
+    - exR = h1(<~eskR, ~lkR>)
+    - hkR = 'g'^h1(<~eskR, ~lkR>)
+    - kR = h2(<exI, h1(<~eskR, ~lkR>), $I, $R>)
+    - params = <'responder', hkI, 'g'^h1(<~eskR, ~lkR>), h2(<exI, h1(<~eskR, ~lkR>),
+      $I, $R>), $I, $R>
+  - send:
+    - hkR
+- role: Initiator_Receive_Accept
+  operations:
+  - receive:
+    - hkR
+  - compute:
+    - kI = h2(<exI, exR, $I, $R>)
+    - params = <'initiator', hkI, hkR, h2(<exI, exR, $I, $R>), $I, $R>
+  - send: <END>

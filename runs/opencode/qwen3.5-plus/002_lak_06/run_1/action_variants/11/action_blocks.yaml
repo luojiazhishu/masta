@@ -1,0 +1,30 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~k
+  - send:
+    - ~r0
+    - ~r0
+- role: Tag_Receive_R0_Send_T1
+  operations:
+  - receive:
+    - r0
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(<k, r0, ~r1>)
+- role: Reader_Receive_T1_Send_R1
+  operations:
+  - receive:
+    - r1
+    - h(<k, r0, r1>)
+  - send:
+    - h(<h(<k, r0, r1>), k, r0>)
+- role: Tag_Receive_R1
+  operations:
+  - receive:
+    - h(<h(<k, r0, r1>), k, r0>)
+  - send: <END>

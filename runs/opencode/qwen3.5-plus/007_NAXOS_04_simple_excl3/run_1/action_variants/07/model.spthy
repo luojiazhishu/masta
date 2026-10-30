@@ -1,0 +1,65 @@
+theory NaxosSimple
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule Generate_Ltk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, 'g'^~ltk), Out('g'^~ltk) ]
+
+rule Initiator_Start:
+  let
+      exI = h1(<~eskI, ~lkI, 'protoV1'>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), Fr(~tidI), !Ltk($I, ~lkI) ]
+  --[ Test1(), Create($I, ~tidI), Running($I, $R, <'init', ~tidI, $I, $R, hkI>), Honest($I) ]->
+  [ St_I_1(~tidI, $I, $R, ~lkI, exI), Out(hkI) ]
+
+rule Responder_Respond:
+  let
+      exR = h1(<~eskR, ~lkR, 'protoV1'>)
+      hkR = 'g'^exR
+      kR = h2(<pkI^exR, hkI^~lkR, $I, $R>)
+  in
+  [ In(hkI), Fr(~eskR), Fr(~tidR), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Create($R, ~tidR), Running($R, $I, <'resp', ~tidR, $R, $I, hkI, hkR>), Secret($R, $I, kR), Honest($R) ]->
+  [ St_R_Done(~tidR, $R, $I, hkI, kR), Out(hkR) ]
+
+rule Initiator_Finish:
+  let
+      kI = h2(<hkR^~lkI, 'g'^(~lkR * exI), $I, $R>)
+  in
+  [ St_I_1(~tidI, $I, $R, ~lkI, exI), In(hkR), !Ltk($R, ~lkR) ]
+  --[ Test3(), Commit($I, $R, <'init', ~tidI, $I, $R, hkR>), Secret($I, $R, kI) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out('g'^~ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_initiator:
+  "All I R k #i.
+     Secret(I, R, k) @ i & Honest(I) @ i & Honest(R) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+// category: secrecy
+lemma secrecy_responder:
+  "All R I k #i.
+     Secret(R, I, k) @ i & Honest(R) @ i & Honest(I) @ i
+   ==>
+       not (Ex #j. K(k) @ j)"
+
+end

@@ -1,0 +1,10 @@
+Subset aggregation from archived artifacts; no new prover invocation.
+M4 recomputed from archived action-block files for the three selected action variants; M1-M3 and M5 retained from the original score because the baseline and all weakness variants are unchanged.
+{
+  "protocol_id": "003_pattern_matching_and_destructors",
+  "m1": 1.0,
+  "m2": 0.6785714285714286,
+  "m3": 0.625,
+  "m4": 1.0,
+  "m5": 1.0
+}

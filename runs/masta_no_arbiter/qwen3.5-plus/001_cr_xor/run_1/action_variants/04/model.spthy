@@ -1,0 +1,44 @@
+theory CR_XOR_IAudit begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [
+    Fr(~na),
+    !K(k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~na),
+    St_I(~na, k)
+  ]
+
+rule RuleStep2:
+  [
+    In(~na),
+    !K(k),
+    Fr(~nb)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<H(xor(xor(~na, k), ~nb)), ~nb>),
+    St_R(~na, ~nb, k)
+  ]
+
+rule RuleStep3:
+  [
+    In(<H(xor(xor(~na, k), ~nb)), ~nb>),
+    St_I(~na, k)
+  ]
+  --[ Test3() ]->
+  [
+    Verified()
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1 @ #t1 & Test2 @ #t2 & Test3 @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

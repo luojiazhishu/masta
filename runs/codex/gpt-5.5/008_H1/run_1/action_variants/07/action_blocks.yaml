@@ -1,0 +1,27 @@
+- role: Initiator_Send_First
+  operations:
+  - generate_nonces:
+    - ~sidI
+  - compute:
+    - mI = sign(<$I, $R>, ltkI)
+  - send:
+    - mI
+- role: Initiator_Send_Second
+  operations:
+  - send:
+    - mI
+- role: Responder_Process_First
+  operations:
+  - receive:
+    - sign(<$I, $R>, ltkI)
+  - generate_nonces:
+    - ~sidR
+  - compute:
+    - mR = sign(<$I, $R>, ltkR)
+  - send:
+    - mR
+- role: Initiator_Verify_Response
+  operations:
+  - receive:
+    - sign(<$I, $R>, ltkR)
+  - send: <END>

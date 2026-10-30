@@ -1,0 +1,94 @@
+theory FamedTwoMessageAuth
+begin
+
+builtins: signing
+
+// Long-term key registration
+rule RegisterKey:
+  [ Fr(~ltk) ]
+  --[ Create(pk(~ltk)) ]->
+  [ !Ltk(pk(~ltk), ~ltk), !Pk(pk(~ltk)) ]
+
+// Adversary can reveal long-term keys
+rule LtkReveal:
+  [ !Ltk(pkX, ~ltkX) ]
+  --[ LtkReveal(pkX) ]->
+  [ Out(~ltkX) ]
+
+// Action block 1: Initiator constructs and sends mI = sign(<I, R>, ltkI)
+rule Initiator_Send:
+  [ !Ltk(pkI, ~ltkI), !Pk(pkR) ]
+  --[ Test1(), Running(pkI, pkR, <pkI, pkR>) ]->
+  [ Out(sign(<pkI, pkR>, ~ltkI)), St_I(pkI, pkR) ]
+
+// Action block 2: Responder verifies mI and sends mR = sign(<I, R>, ltkR)
+// The key insight: Running is emitted when Responder USES their key to sign
+// This happens in THIS rule, so Running fires when the signature is produced
+rule Responder_Reply:
+  [ !Ltk(pkR, ~ltkR), !Pk(pkI), In(sigI) ]
+  --[ Test2(), Running(pkR, pkI, <pkI, pkR>), Eq(verify(sigI, <pkI, pkR>, pkI), true) ]->
+  [ Out(sign(<pkI, pkR>, ~ltkR)), St_R(pkI, pkR) ]
+
+// Action block 3: Initiator receives mR, verifies, accepts
+// Commit fires only if the signature verifies under pkR
+rule Initiator_Complete:
+  [ St_I(pkI, pkR), In(sigR) ]
+  --[ Test3(), Commit(pkI, pkR, <pkI, pkR>), Eq(verify(sigR, <pkI, pkR>, pkR), true) ]->
+  [ ]
+
+// Protocol security analysis per specification (section 6 and 8):
+// 
+// The protocol provides IDENTITY-LEVEL mutual authentication:
+// - Each party obtains evidence that the other party participated in SOME run
+// - This is "weak agreement" in authentication taxonomy
+//
+// The protocol does NOT provide SESSION-LEVEL binding:
+// - No nonces, no ephemeral keys, no session identifiers
+// - Same signatures are valid across multiple runs with same identities
+// - Replay attacks are possible: attacker can replay messages from one run
+//   to elicit acceptance in another run
+//
+// Expected security properties:
+// - weak_agreement: SHOULD BE VERIFIED (per spec: "constitutes weak agreement")
+// - noninjective_agreement: SHOULD BE FALSIFIED (per spec: "does not provide 
+//   non-injective agreement on any session-level parameters")
+// - injective_agreement: SHOULD BE FALSIFIED (per spec: no session binding)
+//
+// Note: The Tamarin model may show different verdicts due to modeling
+// assumptions about attacker capabilities with self-created keys.
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement  
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Executable lemma - witnesses one complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

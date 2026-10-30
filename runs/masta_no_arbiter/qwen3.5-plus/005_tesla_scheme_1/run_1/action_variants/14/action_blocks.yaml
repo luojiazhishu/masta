@@ -1,0 +1,42 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid_R
+  - compute:
+    - n_R = ~n_R
+  - send:
+    - $R
+    - $S
+    - n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+    - ~tid_S
+  - compute:
+    - k_1 = ~k_1
+    - f_k1 = f(~k_1)
+    - sig_1 = sign(<f(~k_1), n_R>, 'SK_S')
+    - payload = <$S, $R, f(~k_1), sign(<f(~k_1), n_R>, 'SK_S')>
+    - dup_payload = <<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, 'SK_S')>, <$S, $R, f(~k_1),
+      sign(<f(~k_1), n_R>, 'SK_S')>>
+  - send:
+    - dup_payload
+- role: RuleStep3
+  operations:
+  - receive:
+    - received_msg
+  - compute:
+    - payload1 = <$S1, $R1, f_k1_a, sig_1_a>
+    - payload2 = <$S2, $R2, f_k1_b, sig_1_b>
+    - received_msg = <<$S1, $R1, f_k1_a, sig_1_a>, <$S2, $R2, f_k1_b, sig_1_b>>
+    - commitment = f_k1_a
+    - signature = sig_1_a
+    - signed_data = <f_k1_a, n_R>
+    - pk_S = pk('SK_S')
+  - send: <END>

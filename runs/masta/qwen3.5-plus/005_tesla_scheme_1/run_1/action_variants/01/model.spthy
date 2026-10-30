@@ -1,0 +1,141 @@
+theory TESLA_Scheme1 begin
+
+builtins: hashing, signing
+
+functions: f/1, MAC/2
+
+rule GenerateKey_S:
+  [
+    Fr(~sk_S)
+  ]
+  --[ ]->
+  [
+    !Ltk_S($S, ~sk_S),
+    !Pk_S($S, pk(~sk_S)),
+    Out(pk(~sk_S))
+  ]
+
+rule Ltk_S_Reveal:
+  [
+    !Ltk_S($S, sk_S)
+  ]
+  --[ LtkReveal($S) ]->
+  [
+    Out(sk_S)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~n_R),
+    Fr(~tag_R)
+  ]
+  --[ Test1(), Honest($R) ]->
+  [
+    Out(<$R, $S, ~n_R, ~tag_R>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<$R, $S, ~n_R, ~tag_R>),
+    Fr(~k_1),
+    !Ltk_S($S, ~sk_S)
+  ]
+  --[ Test2(), Running($S, $R, <f(~k_1), ~n_R, ~tag_R>), Honest($S) ]->
+  [
+    !KeyState_S($S, ~k_1, ~k_1),
+    !Commitment_S($S, f(~k_1)),
+    Out(<$S, $R, f(~k_1), sign(<f(~k_1), ~n_R, ~tag_R>, ~sk_S)>)
+  ]
+
+rule RuleStep3:
+  [
+    !KeyState_S($S, ~k_prev, ~k_cur),
+    !Commitment_S($S, f(~k_cur)),
+    Fr(~k_next),
+    Fr(~m_1)
+  ]
+  --[ Test3(), Running($S, $R, <~m_1, f(~k_next)>), Commit($S, $R, <~m_1, f(~k_next)>) ]->
+  [
+    !KeyState_S($S, ~k_cur, ~k_next),
+    !Commitment_S($S, f(~k_next)),
+    Out(< <~m_1, f(~k_next)>, MAC(~k_cur, <~m_1, f(~k_next)>) >)
+  ]
+
+rule RuleStep4:
+  [
+    !KeyState_S($S, ~k_prev, ~k_cur),
+    !Commitment_S($S, f(~k_cur)),
+    Fr(~k_next),
+    Fr(~m_n)
+  ]
+  --[ Test4(), Running($S, $R, <~m_n, f(~k_next), ~k_prev>), Commit($S, $R, <~m_n, f(~k_next), ~k_prev>) ]->
+  [
+    !KeyState_S($S, ~k_cur, ~k_next),
+    !Commitment_S($S, f(~k_next)),
+    Out(< <~m_n, f(~k_next), ~k_prev>, MAC(~k_cur, <~m_n, f(~k_next), ~k_prev>) >)
+  ]
+
+rule R_ReceiveSetup:
+  [
+    In(<sender, receiver, commitment, signature>),
+    Fr(~n_R),
+    Fr(~tag_R),
+    !Pk_S(sender, pk_S)
+  ]
+  --[ R_VerifiedSetup(receiver, sender, commitment, ~n_R, ~tag_R), Honest(receiver), Commit(receiver, sender, <~n_R, ~tag_R>) ]->
+  [
+    !SetupVerified(receiver, sender, commitment)
+  ]
+
+rule R_ReceiveStream1:
+  [
+    In(< <payload, next_commitment>, mac >),
+    !SetupVerified($R, $S, K1)
+  ]
+  --[ Commit($R, $S, <payload, next_commitment>), Honest($R) ]->
+  [
+    !CachedMsg($R, <payload, next_commitment>, mac)
+  ]
+
+rule R_ReceiveStreamN:
+  [
+    In(< <payload, next_commitment, disclosed_key>, mac >),
+    !CachedMsg($R, <prev_payload, prev_commitment>, prev_mac)
+  ]
+  --[ Commit($R, $S, <payload, next_commitment, disclosed_key>), Honest($R) ]->
+  [
+    !CachedMsg($R, <payload, next_commitment>, mac)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_broadcast_authenticity:
+  "All a b t #i.
+    Commit(a, b, t) @i
+   ==>
+       (Ex #j. Running(b, a, t) @j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_setup_replay_protection:
+  "All a b t #i.
+    Commit(a, b, t) @i
+   ==>
+       ( (Ex #j. Running(b, a, t) @j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_key_commitment_integrity:
+  "All a b t #i.
+    Commit(a, b, t) @i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

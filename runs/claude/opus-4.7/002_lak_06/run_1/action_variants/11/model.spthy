@@ -1,0 +1,104 @@
+theory LAK06_action_variant_11
+begin
+
+builtins: xor, hashing
+
+/*
+  Action variant of LAK06: the Reader transmits its session nonce r0 twice
+  in immediate succession inside R0. The Tag accepts R0 only when the two
+  copies are bitwise equal.
+
+  R -> T: r0, r0
+  T -> R: r1, h(r0 XOR r1 XOR k)
+  R -> T: h(h(r0 XOR r1 XOR k) XOR k XOR r0)
+*/
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ Setup($R, $T, ~k) ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+rule Reveal_Key:
+  [ !SharedKey(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+  [ Out(k) ]
+
+// Action block 1: Reader draws r0 and sends (r0, r0)
+rule Reader_Init:
+  [ !SharedKey($R, $T, ~k), Fr(~r0) ]
+  --[ Test1(), Create($R, ~r0) ]->
+  [ St_R_1($R, $T, ~k, ~r0), Out(<~r0, ~r0>) ]
+
+// Action block 2: Tag receives (r0, r0), draws r1, replies with (r1, tag_mac)
+rule Tag_Resp:
+  let tag_mac = h(r0 XOR ~r1 XOR ~k) in
+  [ !SharedKey($R, $T, ~k), In(<r0, r0>), Fr(~r1) ]
+  --[ Test2()
+    , Create($T, ~r1)
+    , Running($T, $R, <'tag', ~k, r0, ~r1>)
+    , Secret($T, $R, ~k)
+    , Honest($T), Honest($R)
+    ]->
+  [ St_T_1($R, $T, ~k, r0, ~r1, tag_mac), Out(<~r1, tag_mac>) ]
+
+// Action block 3: Reader receives (r1, tag_mac), verifies, sends reader_mac
+rule Reader_Verify:
+  [ St_R_1($R, $T, ~k, ~r0)
+  , In(<r1, h(~r0 XOR r1 XOR ~k)>)
+  ]
+  --[ Test3()
+    , Commit($R, $T, <'tag', ~k, ~r0, r1>)
+    , Running($R, $T, <'reader', ~k, ~r0, r1>)
+    , Secret($R, $T, ~k)
+    , Honest($R), Honest($T)
+    ]->
+  [ Out(h(h(~r0 XOR r1 XOR ~k) XOR ~k XOR ~r0)) ]
+
+// Action block 4: Tag receives reader_mac, verifies, accepts session
+rule Tag_Verify:
+  [ St_T_1($R, $T, ~k, r0, ~r1, tag_mac)
+  , In(h(tag_mac XOR ~k XOR r0))
+  ]
+  --[ Test4()
+    , Commit($T, $R, <'reader', ~k, r0, ~r1>)
+    , Honest($T), Honest($R)
+    ]->
+  [ ]
+
+
+// ---------- Safety properties ----------
+
+// category: secrecy
+lemma secrecy_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       (not (Ex #j. K(x) @ j))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'reader', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, <'tag', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+
+// ---------- Executable lemma ----------
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

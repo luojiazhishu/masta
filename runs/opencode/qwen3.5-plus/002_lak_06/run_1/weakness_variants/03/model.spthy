@@ -1,0 +1,75 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+// Long-term key setup
+rule Setup:
+  [ Fr(~k) ]
+  --[ Create($T, ~k), Ltk($T, ~k) ]->
+  [ !Ltk($T, ~k), !Pk($T) ]
+
+// Action block 1: Reader sends r0
+rule Reader_Challenge:
+  [ Fr(~r0), !Pk($T) ]
+  --[ Test1(), Running($R, $T, <'reader', ~r0>) ]->
+  [ Out(~r0), St_R1($R, $T, ~r0) ]
+
+// Action block 2: Tag responds with r1 and tag_mac
+rule Tag_Response:
+  [ Fr(~r1), In(r0), !Ltk($T, k) ]
+  --[ Test2(), Running($T, $R, <'tag', r0, ~r1>), Secret($T, $R, k) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR k)>), St_T1($T, $R, r0, ~r1, k) ]
+
+// Action block 3: Reader verifies and sends reader_mac
+rule Reader_Confirm:
+  [ St_R1($R, $T, ~r0), !Ltk($T, k), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit($R, $T, <'reader', ~r0, r1>) ]->
+  [ Out(h(tag_mac XOR k)) ]
+
+// Action block 4: Tag verifies reader_mac
+rule Tag_Verify:
+  [ St_T1($T, $R, r0, ~r1, k), In(reader_mac) ]
+  --[ Test4(), Commit($T, $R, <'tag', r0, ~r1>) ]->
+  [ ]
+
+// Ltk reveal rule for compromise
+rule Ltk_Reveal:
+  [ !Ltk($T, k) ]
+  --[ LtkReveal($T) ]->
+  [ Out(k) ]
+
+// Secrecy of long-term key
+// category: secrecy
+lemma secrecy_ltk:
+  "All T k #i.
+     Ltk(T, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(T) @ r)"
+
+// Non-injective agreement at Tag
+// category: noninjective_agreement
+lemma noninjective_tag:
+  "All t r r0 r1 #i.
+     Commit(t, r, <'tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(r, t, <'reader', r0>) @ j)
+     | (Ex #r2. LtkReveal(t) @ r2)"
+
+// Non-injective agreement at Reader
+// category: noninjective_agreement
+lemma noninjective_reader:
+  "All r t r0 r1 #i.
+     Commit(r, t, <'reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(t, r, <'tag', r0, r1>) @ j)
+     | (Ex #r2. LtkReveal(t) @ r2)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

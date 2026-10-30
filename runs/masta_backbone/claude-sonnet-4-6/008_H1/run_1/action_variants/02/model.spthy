@@ -1,0 +1,67 @@
+theory MutualAuthSignature
+begin
+
+builtins: signing
+
+rule RuleStep1:
+  [ Fr(~ltkI) ]
+  --[ Test1(), Create($I, ~ltkI), Honest($I) ]->  
+  [ !Ltk($I, ~ltkI)
+  , !Pk($I, pk(~ltkI))
+  , Out(sign(<$I, $R>, ~ltkI)) ]
+
+rule RuleStep2:
+  [ In(sigI)
+  , !Ltk($R, ~ltkR)
+  , !Pk($I, pkI)
+  , Fr(~rn) ]
+  --[ Test2(), Create($R, ~ltkR), Honest($R), Running($R, $I, <$I, $R>) ]->  
+  [ !Pk($R, pk(~ltkR))
+  , Out(<sign(<$I, $R>, ~ltkR), ~rn>) ]
+
+rule RuleStep3:
+  [ In(<sigR, rn>)
+  , !Pk($R, pkR)
+  , !Pk($I, pkI) ]
+  --[ Test3(), Commit($I, $R, <$I, $R>), Honest($I), Honest($R) ]->  
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->  
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_protocol_participation:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_participant_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_participant_identities_and_run_uniqueness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

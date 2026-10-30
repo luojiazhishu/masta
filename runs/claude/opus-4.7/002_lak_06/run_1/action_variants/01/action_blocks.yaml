@@ -1,0 +1,41 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~r0_aux
+  - send:
+    - ~r0
+    - ~r0_aux
+- role: Tag_Recv_R0_Send_T1
+  operations:
+  - receive:
+    - r0
+    - r0_aux
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR k)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Recv_T1_Send_R1
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - compute:
+    - expected = h(~r0 XOR r1 XOR k)
+    - reader_mac = h(tag_mac XOR k XOR ~r0)
+  - assert:
+    - tag_mac = expected
+  - send:
+    - reader_mac
+- role: Tag_Recv_R1
+  operations:
+  - receive:
+    - reader_mac
+  - compute:
+    - expected = h(tag_mac XOR k XOR r0)
+  - assert:
+    - reader_mac = expected
+  - send: <END>

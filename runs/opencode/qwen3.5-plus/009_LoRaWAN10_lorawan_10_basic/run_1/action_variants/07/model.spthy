@@ -1,0 +1,58 @@
+theory LoRaWAN10Join
+begin
+
+builtins: symmetric-encryption, hashing
+
+functions: mac/2
+
+rule Device_Send_JoinRequest:
+  [ Fr(~AppKey), Fr(~DevEUI), Fr(~JoinEUI), Fr(~DevNonce) ]
+  --[ Test1(), Create(~DevEUI, <'init', ~DevNonce>) ]->
+  [ Out(< 'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>) >), St_Dev_Wait(~DevNonce, ~AppKey, ~DevEUI, ~JoinEUI), !Ltk_D(~DevEUI, ~AppKey) ]
+
+rule Server_Receive_And_Respond:
+  [ !Ltk_D(DevEUI, AppKey), Fr(~JoinNonce), Fr(~DevAddr), In(< 'JoinRequest', DevEUI, JoinEUI, DevNonce, mac(AppKey, <'JoinRequest', DevEUI, JoinEUI, DevNonce>) >) ]
+  --[ Test2(), Running('server', 'device', <'server', DevEUI, JoinEUI, DevNonce, ~JoinNonce, ~DevAddr>) ]->
+  [ Out(senc(< 'JoinAccept', ~JoinNonce, ~DevAddr >, AppKey)), St_Srv_Done(DevEUI, JoinEUI, DevNonce, ~JoinNonce, ~DevAddr, AppKey) ]
+
+rule Device_Receive_JoinAccept:
+  [ St_Dev_Wait(DevNonce, AppKey, DevEUI, JoinEUI), In(senc(< 'JoinAccept', JoinNonce, DevAddr >, AppKey)) ]
+  --[ Test3(), Running('device', 'server', <'device', DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr>), Commit('device', 'server', <'device', DevEUI, JoinEUI, DevNonce, JoinNonce, DevAddr>), Honest('device') ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk_D(DevEUI, AppKey) ]
+  --[ LtkReveal(DevEUI) ]->
+  [ Out(AppKey) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_AppSKey:
+  "All A B k #i.
+     Commit(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

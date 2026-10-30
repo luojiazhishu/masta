@@ -1,0 +1,95 @@
+theory TeslaScheme1 begin
+
+builtins: signing
+
+functions: f/1, bar/1, mac/2
+
+rule Register_Sender:
+  [ Fr(~ltkS) ]
+--[ Create($S, ~ltkS) ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)), Out(pk(~ltkS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(S, ltkS) ]
+--[ LtkReveal(S) ]->
+  [ Out(ltkS) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR) ]
+--[ Test1() ]->
+  [ Out(<'msg0a', $R, $S, ~nR>), ReceiverWaitResponse($R, $S, ~nR) ]
+
+rule Sender_Setup_Response_And_Log:
+  let commitment = f(~k1)
+      signature = sign(<commitment, nR>, ltkS)
+      request_record = bar(nR)
+  in
+  [ !Ltk(S, ltkS), In(<'msg0a', R, S, nR>), Fr(~k1) ]
+--[ Test2(), Running(S, R, <'setup', commitment, nR>), RequestLogged(S, R, request_record) ]->
+  [ Out(<'msg0b', S, R, commitment, signature>), SenderStream(S, R, ~k1, commitment) ]
+
+rule Receiver_Verifies_Setup_Response:
+  [ !Pk(S, pkS), ReceiverWaitResponse(R, S, nR), In(<'msg0b', S, R, commitment, signature>) ]
+--[ Test3(), Eq(verify(signature, <commitment, nR>, pkS), true), SetupComplete(R, S, commitment, nR) ]->
+  [ ReceiverReady(R, S, commitment) ]
+
+rule Sender_Broadcast_Data:
+  let next_commitment = f(~k2)
+      data = <~m, next_commitment>
+      tag = mac(k1, data)
+  in
+  [ SenderStream(S, R, k1, commitment), Fr(~k2), Fr(~m) ]
+--[ Test4(), Broadcast(S, R, ~m, commitment) ]->
+  [ Out(<'msg1', S, R, data, tag>), SenderRevealKey(S, R, k1, data, tag, commitment) ]
+
+rule Receiver_Stores_Data:
+  [ ReceiverReady(R, S, commitment), In(<'msg1', S, R, data, tag>) ]
+--[ Test5(), StoreData(R, S, commitment, data, tag) ]->
+  [ ReceiverAwaitKey(R, S, commitment, data, tag) ]
+
+rule Sender_Discloses_Key:
+  [ SenderRevealKey(S, R, k1, data, tag, commitment) ]
+--[ Test6(), KeyDisclosed(S, R, k1, commitment) ]->
+  [ Out(<'msgn', S, R, k1>) ]
+
+rule Receiver_Accepts_Data:
+  [ ReceiverAwaitKey(R, S, commitment, <m, next_commitment>, tag), In(<'msgn', S, R, k1>) ]
+--[ Test7(), Commit(R, S, <m, commitment>), Accept(R, S, m, commitment, next_commitment, tag, k1) ]->
+  [ ]
+
+restriction Accept_Only_Valid_Key_And_MAC:
+  "All R S m commitment next_commitment tag k1 #i.
+     Accept(R, S, m, commitment, next_commitment, tag, k1) @ #i
+   ==> commitment = f(k1) & tag = mac(k1, <m, next_commitment>)"
+
+restriction Stored_Data_Was_Broadcast:
+  "All R S m next_commitment commitment tag #i.
+     StoreData(R, S, commitment, <m, next_commitment>, tag) @ #i
+   ==> Ex #j. Broadcast(S, R, m, commitment) @ #j & #j < #i"
+
+restriction Equality:
+  "All x y #i.
+     Eq(x, y) @ #i
+   ==> x = y"
+
+restriction Refuse_Data_After_Key_Disclosure:
+  "All R S commitment data tag k1 #i #j.
+     StoreData(R, S, commitment, data, tag) @ #i
+   & KeyDisclosed(S, R, k1, commitment) @ #j
+   ==> not (#j < #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All R S m commitment #i.
+     Commit(R, S, <m, commitment>) @ #i
+   ==> (Ex #j. Broadcast(S, R, m, commitment) @ #j & #j < #i)
+     | (Ex nR #r #c. LtkReveal(S) @ #r & SetupComplete(R, S, commitment, nR) @ #c & #r < #c)"
+
+end

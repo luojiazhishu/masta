@@ -1,0 +1,78 @@
+theory CRXORRRtx
+begin
+
+builtins: hashing, xor
+
+/* Setup of a long-term shared symmetric key between two endpoints.
+   The first position is the initiator role I, the second is the
+   responder role R. */
+rule SetupKey:
+  [ Fr(~k) ]
+  -->
+  [ !Ltk($I, $R, ~k) ]
+
+/* Long-term key compromise (Dolev-Yao plus key reveal). Reveals both
+   endpoints sharing the key. */
+rule LtkReveal:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+/* Block 1: Initiator generates fresh na and transmits the InitiatorFlight */
+rule I_Start:
+  [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ Out(~na), St_I_1($I, $R, k, ~na) ]
+
+/* Block 2: Responder receives na, generates nb, computes t, sends first copy */
+rule R_Respond_First:
+  let t = h(na XOR k XOR ~nb)
+  in
+  [ In(na), !Ltk($I, $R, k), Fr(~nb) ]
+  --[ Test2()
+    , Create($R, ~nb)
+    , Running($R, $I, <'responder', t>)
+    , Honest($I), Honest($R)
+    ]->
+  [ Out(<t, ~nb>), St_R_2($I, $R, k, na, ~nb, t) ]
+
+/* Block 3: Responder retransmits the same flight in immediate succession */
+rule R_Respond_Second:
+  [ St_R_2($I, $R, k, na, ~nb, t) ]
+  --[ Test3() ]->
+  [ Out(<t, ~nb>) ]
+
+/* Block 4: Initiator receives the responder flight, verifies tag, commits */
+rule I_Finish:
+  let t = h(~na XOR k XOR nb)
+  in
+  [ St_I_1($I, $R, k, ~na), In(<t, nb>) ]
+  --[ Test4()
+    , Commit($I, $R, <'responder', t>)
+    , Honest($I), Honest($R)
+    ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, <'responder', t>) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, <'responder', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'responder', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

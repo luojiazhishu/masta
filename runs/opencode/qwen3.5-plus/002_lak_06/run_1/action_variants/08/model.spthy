@@ -1,0 +1,70 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ Secret(~k) ]->
+  [ !Ltk(~k) ]
+
+rule Reader_Start:
+  [ Fr(~r0), !Ltk(~k) ]
+  --[ Test1() ]->
+  [ Out(~r0), St_R1(~k, ~r0) ]
+
+rule Tag_Respond:
+  [ In(r0), Fr(~r1), !Ltk(~k) ]
+  --[ Test2(), Running('tag', r0, ~r1) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR ~k)>), St_T1(~k, r0, ~r1, h(r0 XOR ~r1 XOR ~k)) ]
+
+rule Reader_Verify:
+  let tag_mac_check = h(r0 XOR r1 XOR ~k)
+  in
+  [ St_R1(~k, r0), In(<r1, tag_mac>) ]
+  --[ Test3(), Eq(tag_mac, tag_mac_check), Running('reader', r0, r1), Commit('reader', r0, r1) ]->
+  [ Out(h(tag_mac XOR ~k XOR r0)) ]
+
+rule Tag_Verify:
+  let reader_mac_check = h(tag_mac XOR ~k XOR r0)
+  in
+  [ St_T1(~k, r0, r1, tag_mac), In(reader_mac) ]
+  --[ Test4(), Eq(reader_mac, reader_mac_check), Commit('tag', r0, r1) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(~k) ]
+  --[ LtkReveal(~k) ]->
+  [ Out(~k) ]
+
+// category: secrecy
+lemma secrecy_k:
+  "All k #i.
+     Secret(k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(k) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All r0 r1 #i.
+     Commit('tag', r0, r1) @ i
+   ==>
+       (Ex #j. Running('reader', r0, r1) @ j)
+     | (Ex k #r. LtkReveal(k) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All r0 r1 #i.
+     Commit('reader', r0, r1) @ i
+   ==>
+       (Ex #j. Running('tag', r0, r1) @ j)
+     | (Ex k #r. LtkReveal(k) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,68 @@
+theory CR_XOR begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+restriction Verified_Tag_Source:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+restriction Running_Has_Create:
+  "All a b t #i.
+     Running(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(a, id) @ j & #j = #i)"
+
+rule Key_Setup:
+  [ Fr(~k) ]
+--[ Test1() ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(A, B, k) ]
+--[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Initiator_Start:
+  [ !SharedKey(I, R, k), Fr(~na), Fr(~sid) ]
+--[ Test2(), Create(I, ~sid) ]->
+  [ Out(~na), InitState(I, R, k, ~na, ~sid) ]
+
+rule Responder_Reply:
+  [ !SharedKey(I, R, k), In(na), Fr(~nb), Fr(~sid) ]
+--[ Test3(), Create(R, ~sid), Running(R, I, <'tag', h(na XOR k XOR ~nb)>) ]->
+  [ Out(<h(na XOR k XOR ~nb), ~nb>) ]
+
+rule Initiator_Verify:
+  [ InitState(I, R, k, na, sid), In(<tag, nb>) ]
+--[ Test4(), Eq(tag, h(na XOR k XOR nb)), Commit(I, R, <'tag', tag>), Honest(I), Honest(R) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

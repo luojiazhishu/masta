@@ -1,0 +1,95 @@
+theory OpcUaSecureChannelSignSign
+begin
+
+builtins: hashing, signing
+
+functions: com/2, bar/1
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Setup:
+  [ Fr(~skC), Fr(~skS) ]
+  --[ Create('Client', pk(~skC)), Create('Server', pk(~skS)), Honest('Client'), Honest('Server') ]->
+  [ !Ltk('Client', ~skC), !Ltk('Server', ~skS), !Pk('Client', pk(~skC)), !Pk('Server', pk(~skS)), !Certified(pk(~skC)), !Certified(pk(~skS)),
+    Out(pk(~skC)), Out(pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Client_GetEndpointsRequest:
+  [ !Pk('Client', pkC) ]
+  --[ Test1() ]->
+  [ Out(<'GEReq', 'Client'>), St_C_Discovery(pkC) ]
+
+rule Server_GetEndpointsResponse:
+  [ In(<'GEReq', 'Client'>), !Pk('Server', pkS) ]
+  --[ Test2(), Running('Server', 'Client', <'endpoint', pkS>) ]->
+  [ Out(<'GERes', 'Server', pkS, 'Sign', 'Policy', 'UserToken'>) ]
+
+rule Client_OpenSecureChannelRequest:
+  let request_body = <'OSCReq', pkC, ~Nc>
+      request_digest = h(request_body)
+      audit_commitment = com(pkC, ~Nc)
+      key_fingerprint = bar(pkS)
+  in
+  [ St_C_Discovery(pkC), !Ltk('Client', skC), In(<'GERes', 'Server', pkS, 'Sign', policy, usertoken>), Fr(~Nc) ]
+  --[ Test3(), Running('Client', 'Server', <'client_nonce', ~Nc>), Audit('Client', audit_commitment, key_fingerprint) ]->
+  [ Out(<pkC, request_body, sign(request_digest, skC), request_digest>),
+    OSC_Request(pkC, pkS, ~Nc, sign(request_digest, skC), request_digest),
+    St_C_WaitResponse(pkC, pkS, ~Nc) ]
+
+rule Server_OpenSecureChannelResponse:
+  let request_body = <'OSCReq', pkC, Nc>
+      request_digest = h(request_body)
+      response_body = <'OSCRes', ~Ns, ~ST, ~TTL>
+      response_digest = h(response_body)
+      channel_binding = h(<Nc, ~Ns>)
+  in
+  [ !Ltk('Server', skS), !Certified(pkC), OSC_Request(pkC, pkS, Nc, request_signature, request_digest), Fr(~Ns), Fr(~ST), Fr(~TTL) ]
+  --[ Test4(), Eq(verify(request_signature, request_digest, pkC), true), Running('Server', 'Client', <'server_nonce', ~Ns>), Commit('Server', 'Client', <'client_nonce', Nc>), Secret('Server', 'Client', channel_binding) ]->
+  [ Out(<'Server', response_body, sign(response_digest, skS), response_digest>),
+    OSC_Response(pkS, Nc, ~Ns, ~ST, ~TTL, sign(response_digest, skS), response_digest) ]
+
+rule Client_AcceptOpenSecureChannelResponse:
+  let response_body = <'OSCRes', Ns, ST, TTL>
+      response_digest = h(response_body)
+      channel_binding = h(<Nc, Ns>)
+  in
+  [ St_C_WaitResponse(pkC, pkS, Nc), OSC_Response(pkS, Nc, Ns, ST, TTL, response_signature, response_digest) ]
+  --[ Test5(), Eq(verify(response_signature, response_digest, pkS), true), Commit('Client', 'Server', <'server_nonce', Ns>), Secret('Client', 'Server', channel_binding) ]->
+  [ SecureChannel('Client', 'Server', channel_binding, ST) ]
+
+// category: secrecy
+lemma channel_binding_secrecy:
+  "All A B key #i.
+     Secret(A, B, key) @ #i
+   ==>
+       not (Ex #j. K(key) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All s c nc #i.
+     Commit(s, c, <'client_nonce', nc>) @ #i
+   ==>
+       (Ex #j. Running(c, s, <'client_nonce', nc>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All c s ns #i.
+     Commit(c, s, <'server_nonce', ns>) @ #i
+   ==>
+       (Ex #j. Running(s, c, <'server_nonce', ns>) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

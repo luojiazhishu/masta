@@ -1,0 +1,42 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - send:
+    - ~rb
+    - ~text1
+    - '''init_b'''
+- role: Initiator_Respond_Fresh
+  operations:
+  - receive:
+    - rb
+    - text1
+    - '''init_b'''
+  - generate_nonces:
+    - ~ra
+    - ~text2
+    - ~text3
+  - send:
+    - ~ra
+    - ~text3
+    - <'sid1_mut_cr', ~ra, rb, 'B', ~text2>
+    - mac(<'sid1_mut_cr', ~ra, rb, 'B'>, kAB)
+- role: Responder_Finish
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, rb, 'B', text2>
+    - mac(<'sid1_mut_cr', ra, rb, 'B'>, kAB)
+  - generate_nonces:
+    - ~text5
+  - send:
+    - ~text5
+    - mac(<'sid2_mut_cr', rb, ra>, kAB)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - text5
+    - mac(<'sid2_mut_cr', rb, ra>, kAB)
+  - send: <END>

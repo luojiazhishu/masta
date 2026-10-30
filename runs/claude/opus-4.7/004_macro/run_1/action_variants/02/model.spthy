@@ -1,0 +1,69 @@
+theory KeyTransportServerNonce
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Register_Keypair:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)) ]
+
+rule LtkReveal:
+  [ !Ltk($S, ~ltk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~ltk) ]
+
+/* Action Block 1: Client generates session key k, encrypts it, sends to server */
+rule Client_Init:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Running($C, $S, <'client', ~k>), Honest($C), Honest($S) ]->
+  [ Out(aenc(~k, pkS)), St_Client_1($C, $S, ~k) ]
+
+/* Action Block 2: Server decrypts ciphertext, generates response nonce, sends confirmation */
+rule Server_Respond:
+  let k = adec(m1, ~ltk)
+  in
+  [ !Ltk($S, ~ltk), In(m1), Fr(~rs) ]
+  --[ Test2(), Running($S, $S, <'server', k>) ]->
+  [ Out(<h(k), ~rs>) ]
+
+/* Action Block 3: Client verifies h(k) matches, accepts session key */
+rule Client_Finish:
+  [ St_Client_1($C, $S, ~k), In(<h(~k), rs>) ]
+  --[ Test3(), Commit($C, $S, <'client', ~k>), Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+     not (Ex #j. K(x) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+     (Ex B #j. Running(s, B, <'server', k>) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All c s k #i.
+     Commit(c, s, <'client', k>) @ i
+   ==>
+     ( (Ex B #j. Running(s, B, <'server', k>) @ j
+           & j < i
+           & not (Ex c2 s2 #i2. Commit(c2, s2, <'client', k>) @ i2
+                              & not (#i2 = #i))) )
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

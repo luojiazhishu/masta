@@ -1,0 +1,50 @@
+theory BSKT_I begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Setup_Server:
+  [
+    Fr(~skS)
+  ]
+  -->
+  [
+    !Ltk($S, ~skS),
+    !Pk($S, pk(~skS)),
+    Out(pk(~skS))
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~k),
+    !Pk($S, pkS)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<aenc(~k, pkS), 'init'>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<ciphertext, 'init'>),
+    !Ltk($S, skS)
+  ]
+  --[ Test2() ]->
+  [
+    Out(h(adec(ciphertext, skS)))
+  ]
+
+rule RuleStep3:
+  [
+    In(digest),
+    Fr(~k),
+    !Pk($S, pkS)
+  ]
+  --[ Test3() ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

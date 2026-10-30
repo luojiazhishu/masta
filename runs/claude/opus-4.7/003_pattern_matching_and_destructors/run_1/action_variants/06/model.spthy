@@ -1,0 +1,57 @@
+theory SymKeyEncapRepeated
+begin
+
+builtins: symmetric-encryption
+
+// Setup: establish a shared symmetric key between initiator and responder
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+// Block 1: Initiator generates sec, pub and sends msg (transmission 1a)
+rule I_Send_First:
+  [ Fr(~sec), Fr(~pub), !SharedKey($I, $R, k) ]
+  --[ Test1(),
+      Secret($I, $R, ~sec),
+      OutMsg(senc(<~sec, ~pub>, k)) ]->
+  [ Out(senc(<~sec, ~pub>, k)),
+    StI($I, $R, ~sec, ~pub, k) ]
+
+// Block 2: Initiator sends msg again (transmission 1b) with identical contents
+rule I_Send_Second:
+  [ StI($I, $R, ~sec, ~pub, k) ]
+  --[ Test2(),
+      OutMsg(senc(<~sec, ~pub>, k)) ]->
+  [ Out(senc(<~sec, ~pub>, k)) ]
+
+// Block 3: Responder receives valid msg and releases pub to the network
+rule R_Receive:
+  [ !SharedKey($I, $R, k),
+    In(senc(<sec, pub>, k)) ]
+  --[ Test3(),
+      InMsg(senc(<sec, pub>, k), pub) ]->
+  [ Out(pub) ]
+
+// Sources lemma: pub seen at responder either is already known to the
+// adversary, or originated from a previous OutMsg with the same ciphertext.
+lemma sources [sources]:
+  "All m x #i.
+     InMsg(m, x) @ i
+   ==>
+       (Ex #j. KU(x) @ j & j < i)
+     | (Ex #j. OutMsg(m) @ j & j < i)"
+
+// category: secrecy
+lemma secret_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==> not (Ex #j. K(x) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

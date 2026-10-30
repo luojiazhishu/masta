@@ -1,0 +1,145 @@
+theory ISO9798_4_4_ReUseOnce begin
+
+builtins: hashing
+
+functions: mac/2, aux2/2, sid1_mut_cr/0, sid2_mut_cr/0
+
+rule Provision:
+  [ Fr(~kAB) ]
+--[ Create($A, $B), Honest($A), Honest($B) ]->
+  [ !SharedKey($A, $B, ~kAB) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(A, B, k) ]
+--[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Initiator_Random_Source_Reuse_Once:
+  [ Fr(~RA) ]
+--[ RandomSourceValue(~RA) ]->
+  [ OneRA(~RA), OneRA(~RA) ]
+
+rule Responder_Challenge:
+  [ Fr(~RB), Fr(~Text1), !SharedKey(A, B, k) ]
+--[ Test1(), RunningChallenge(B, A, <'challenge', ~RB>) ]->
+  [ Out(<~RB, ~Text1>), ResponderState(A, B, k, ~RB) ]
+
+rule Initiator_TokenAB:
+  let auxA2 = aux2(~Text2, ~Text3)
+      mac1 = mac(<sid1_mut_cr, RA, RB, B>, k)
+  in
+  [ OneRA(RA), Fr(~Text2), Fr(~Text3), In(<RB, Text1>), !SharedKey(A, B, k) ]
+--[ Test2(), InitLog(A, B, auxA2), RunningI(A, B, <A, B, RA, RB>), Secret(A, B, k) ]->
+  [ Out(<RA, ~Text3, <sid1_mut_cr, RA, RB, B, ~Text2>, mac1>), InitiatorState(A, B, k, RA, RB) ]
+
+rule Responder_TokenBA:
+  let mac1 = mac(<sid1_mut_cr, RA, RB, B>, k)
+      mac2 = mac(<sid2_mut_cr, RB, RA>, k)
+  in
+  [ Fr(~Text4), Fr(~Text5), ResponderState(A, B, k, RB), In(<RA, Text3, <sid1_mut_cr, RA, RB, B, Text2>, mac1>) ]
+--[ Test3(), CommitR(B, A, <A, B, RA, RB>), RunningR(B, A, <A, B, RA, RB>), Secret(A, B, k) ]->
+  [ Out(<~Text5, mac2>) ]
+
+rule Initiator_Verify:
+  let mac2 = mac(<sid2_mut_cr, RB, RA>, k)
+  in
+  [ InitiatorState(A, B, k, RA, RB), In(<Text5, mac2>) ]
+--[ Test4(), CommitI(A, B, <A, B, RA, RB>), Secret(A, B, k) ]->
+  [ Authenticated(A, B, RA, RB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: aliveness
+lemma initiator_aliveness:
+  "All A B t #i.
+     CommitI(A, B, t) @ #i
+   ==>
+       (Ex C #j. Create(B, C) @ #j)
+     | (Ex C #j. Create(C, B) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: weak_agreement
+lemma initiator_weak_agreement:
+  "All A B t #i.
+     CommitI(A, B, t) @ #i
+   ==>
+       (Ex t2 #j. RunningR(B, A, t2) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: noninjective_agreement
+lemma initiator_noninjective_agreement:
+  "All A B t #i.
+     CommitI(A, B, t) @ #i
+   ==>
+       (Ex #j. RunningR(B, A, t) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: injective_agreement
+lemma initiator_injective_agreement:
+  "All A B t #i.
+     CommitI(A, B, t) @ #i
+   ==>
+       ( (Ex #j. RunningR(B, A, t) @ #j
+             & #j < #i
+             & not (Ex A2 B2 #i2. CommitI(A2, B2, t) @ #i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All B A t #i.
+     CommitR(B, A, t) @ #i
+   ==>
+       (Ex C #j. Create(A, C) @ #j)
+     | (Ex C #j. Create(C, A) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: weak_agreement
+lemma responder_weak_agreement:
+  "All B A t #i.
+     CommitR(B, A, t) @ #i
+   ==>
+       (Ex t2 #j. RunningI(A, B, t2) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: noninjective_agreement
+lemma responder_noninjective_agreement:
+  "All B A t #i.
+     CommitR(B, A, t) @ #i
+   ==>
+       (Ex #j. RunningI(A, B, t) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+// category: injective_agreement
+lemma responder_injective_agreement:
+  "All B A t #i.
+     CommitR(B, A, t) @ #i
+   ==>
+       ( (Ex #j. RunningI(A, B, t) @ #j
+             & #j < #i
+             & not (Ex B2 A2 #i2. CommitR(B2, A2, t) @ #i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+end

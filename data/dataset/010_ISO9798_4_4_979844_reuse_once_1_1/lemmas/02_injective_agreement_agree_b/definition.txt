@@ -1,0 +1,9 @@
+lemma agree_b:
+  "All a b t #i.
+     Commit(a, b, <'b_t', t>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'b_t', t>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'b_t', t>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

@@ -1,0 +1,15 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~k
+  - send:
+    - senc(<~sec, ~pub>, ~k)
+    - '''pmd'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - msg
+    - tag
+  - send: <END>

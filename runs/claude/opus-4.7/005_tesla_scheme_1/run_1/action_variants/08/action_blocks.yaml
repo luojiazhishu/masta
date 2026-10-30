@@ -1,0 +1,65 @@
+- role: R_Setup_Send
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: S_Setup_Respond
+  operations:
+  - receive:
+    - $R
+    - $S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+  - send:
+    - $S
+    - $R
+    - h(~k1)
+    - sign(<h(~k1), nR>, ~ltk)
+- role: R_Verify_Setup
+  operations:
+  - receive:
+    - $S
+    - $R
+    - fk1
+    - sig
+  - assert:
+    - verify(sig, <fk1, ~nR>, pkS) = true
+  - send: []
+- role: S_Send_Msg1
+  operations:
+  - generate_nonces:
+    - ~m1
+    - ~k3
+  - send:
+    - <~m1, h(~k2)>
+    - mac(~k1, <~m1, h(~k2)>)
+- role: R_Recv_Msg1
+  operations:
+  - receive:
+    - D1
+    - mac1
+  - send: []
+- role: S_Send_Msg2
+  operations:
+  - generate_nonces:
+    - ~m2
+    - ~k4
+  - send:
+    - <~m2, h(~k3), ~k1>
+    - mac(~k2, <~m2, h(~k3), ~k1>)
+    - $channel_tag
+- role: R_Recv_Msg2
+  operations:
+  - receive:
+    - <m2, fk3, k1disc>
+    - mac2
+    - channel_tag
+  - assert:
+    - h(k1disc) = fk1
+    - mac(k1disc, <m1, fk2>) = mac1
+  - send: <END>

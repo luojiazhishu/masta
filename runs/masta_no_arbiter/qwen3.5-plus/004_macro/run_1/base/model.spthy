@@ -1,0 +1,20 @@
+theory BSKT begin
+
+builtins: asymmetric-encryption, hashing
+
+rule RuleStep1:
+  [
+    Fr(~k),
+    !Pk('S', pkS)
+  ]
+  --[ Test1() ]->
+  [
+    Out(aenc(~k, pkS)),
+    !Pk('S', pkS)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1. Test1() @ #t1"
+
+end

@@ -1,0 +1,92 @@
+theory LAK06
+begin
+
+builtins: hashing, xor
+
+/* Reader R and Tag T share long-term symmetric key k */
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !SharedKey($R, $T, ~k) ]
+
+rule LtkReveal:
+  [ !SharedKey($R, $T, ~k) ]
+  --[ LtkReveal($R), LtkReveal($T) ]->
+  [ Out(~k) ]
+
+/* Block 1: Reader draws r0, sends R0 */
+rule Reader_1:
+  [ Fr(~r0), !SharedKey($R, $T, ~k) ]
+  --[ Test1() ]->
+  [ Out(~r0), St_R_1($R, $T, ~r0, ~k) ]
+
+/* Block 2: Tag receives r0, draws r1, computes tag_mac = h(r0 XOR r1 XOR k), sends T1 */
+rule Tag_1:
+  [ !SharedKey($R, $T, ~k), In(r0), Fr(~r1) ]
+  --[ Test2(), Running($T, $R, <'Tag', r0, ~r1, ~k>) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR ~k)>),
+    St_T_1($R, $T, r0, ~r1, ~k) ]
+
+/* Block 3: Reader receives (r1, tag_mac), verifies MAC, computes and sends reader_mac.
+   reader_mac = h(<tag_mac, k, r0, 'CONFIRM'>) models h(tag_mac XOR k XOR r0 XOR 'CONFIRM');
+   the outer combination uses tuple to keep XOR reasoning only in the inner MAC. */
+rule Reader_2:
+  let expected_tag_mac = h(~r0 XOR r1 XOR ~k)
+      reader_mac       = h(<recv_tag_mac, ~k, ~r0, 'CONFIRM'>)
+  in
+  [ St_R_1($R, $T, ~r0, ~k), In(<r1, recv_tag_mac>) ]
+  --[ Test3(),
+      Eq(recv_tag_mac, expected_tag_mac),
+      Commit($R, $T, <'Tag', ~r0, r1, ~k>),
+      Running($R, $T, <'Reader', ~r0, r1, ~k>),
+      Secret($R, $T, ~k),
+      Honest($R), Honest($T) ]->
+  [ Out(reader_mac) ]
+
+/* Block 4: Tag receives reader_mac, verifies it matches expected confirmation */
+rule Tag_2:
+  let tag_mac             = h(r0 XOR ~r1 XOR ~k)
+      expected_reader_mac = h(<tag_mac, ~k, r0, 'CONFIRM'>)
+  in
+  [ St_T_1($R, $T, r0, ~r1, ~k), In(recv_reader_mac) ]
+  --[ Test4(),
+      Eq(recv_reader_mac, expected_reader_mac),
+      Commit($T, $R, <'Reader', r0, ~r1, ~k>),
+      Secret($T, $R, ~k),
+      Honest($R), Honest($T) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b params #i.
+     Commit(a, b, <'Reader', params>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'Reader', params>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b params #i.
+     Commit(a, b, <'Tag', params>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'Tag', params>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

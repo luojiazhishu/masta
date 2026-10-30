@@ -1,0 +1,43 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~sid
+  - send:
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+    - ~sid
+  - compute:
+    - tag_mac = lak_mac(r0, ~r1, k)
+  - send:
+    - ~r1
+    - ~r1
+    - tag_mac
+- role: Reader_Send_R1
+  operations:
+  - receive:
+    - r1_a
+    - r1_b
+    - tag_mac
+  - compute:
+    - expected = lak_mac(r0, r1_a, k)
+    - confirmation = reader_mac(tag_mac, k, r0)
+  - assert:
+    - r1_a = r1_b
+    - tag_mac = expected
+  - send:
+    - confirmation
+- role: Tag_Accept_R1
+  operations:
+  - receive:
+    - confirmation
+  - compute:
+    - expected = reader_mac(tag_mac, k, r0)
+  - assert:
+    - confirmation = expected
+  - send: <END>

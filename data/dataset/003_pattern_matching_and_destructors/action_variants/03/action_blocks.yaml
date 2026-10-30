@@ -1,0 +1,19 @@
+- role: Initiator
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - compute:
+    - msg = senc(<~sec, ~pub>, k)
+    - auxv = aux(~sec)
+  - send:
+    - msg
+- role: Responder
+  operations:
+  - receive:
+    - msg
+  - compute:
+    - body = sdec(<msg>, key)
+    - sec = fst(sdec(<msg>, key))
+    - pub = snd(sdec(<msg>, key))
+  - send: <END>

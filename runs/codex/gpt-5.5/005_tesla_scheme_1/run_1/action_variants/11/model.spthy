@@ -1,0 +1,81 @@
+theory TeslaSchemeOne
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Generate_Signing_Key:
+  [ Fr(~ltk) ]
+  --[ Create('S', ~ltk) ]->
+  [ !Ltk('S', ~ltk), !Pk('S', pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Signing_Key:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Send_SetupRequest:
+  [ Fr(~nR), Fr(~rid) ]
+  --[ Test1(), Create('R', ~rid) ]->
+  [ Out(<'R', 'S', ~nR>), St_R_Setup_1('R', 'S', ~rid, ~nR) ]
+
+rule Sender_Send_SetupResponse:
+  let commitment = h(~k1)
+      signed = sign(<commitment, nR, 'init'>, ltk)
+  in
+  [ In(<'R', 'S', nR>), !Ltk('S', ltk), Fr(~sid), Fr(~k1), Fr(~k2), Fr(~m1) ]
+  --[ Test2(), Create('S', ~sid), Running('S', 'R', <'setup', commitment, nR>) ]->
+  [ Out(<'S', 'R', commitment, signed>),
+    St_S_Stream_1('S', 'R', ~sid, ~k1, ~k2, ~m1) ]
+
+rule Receiver_Verify_SetupResponse:
+  [ St_R_Setup_1('R', 'S', rid, nR),
+    !Pk('S', pkS),
+    In(<'S', 'R', commitment, signature>) ]
+  --[ Test3(), Eq(verify(signature, <commitment, nR, 'init'>, pkS), true),
+      Commit('R', 'S', <'setup', commitment, nR>), Honest('S') ]->
+  [ St_R_Setup_2('R', 'S', rid, nR, commitment) ]
+
+rule Sender_Broadcast_Data:
+  let d1 = <m1, h(k2)>
+      tag1 = mac(k1, d1)
+  in
+  [ St_S_Stream_1('S', 'R', sid, k1, k2, m1) ]
+  --[ Test4(), Running('S', 'R', <'broadcast', m1, h(k1)>) ]->
+  [ Out(<d1, tag1>), !DisclosedKey(h(k1), k1), St_S_Done('S', 'R', sid, m1) ]
+
+rule Receiver_Accept_Broadcast:
+  let d1 = <m, nextCommitment>
+      tag1 = mac(k1, d1)
+  in
+  [ St_R_Setup_2('R', 'S', rid, nR, h(k1)), In(<d1, tag1>), !DisclosedKey(h(k1), k1) ]
+  --[ Test5(), Commit('R', 'S', <'broadcast', m, h(k1)>), Honest('S') ]->
+  [ St_R_Done('R', 'S', rid, m) ]
+
+// category: noninjective_agreement
+lemma setup_authentication:
+  "All commitment nR #i.
+     Commit('R', 'S', <'setup', commitment, nR>) @ i
+   ==>
+       (Ex #j. Running('S', 'R', <'setup', commitment, nR>) @ j)
+     | (Ex #r. LtkReveal('S') @ r & Honest('S') @ i)"
+
+// category: noninjective_agreement
+lemma broadcast_authentication:
+  "All m c #i.
+     Commit('R', 'S', <'broadcast', m, c>) @ i
+   ==>
+       (Ex #j. Running('S', 'R', <'broadcast', m, c>) @ j)
+     | (Ex #r. LtkReveal('S') @ r & Honest('S') @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

@@ -1,0 +1,37 @@
+theory SKPMD
+begin
+
+builtins: symmetric-encryption
+
+rule Initiator_Send:
+  [ Fr(~k)
+  , Fr(~sec)
+  , Fr(~pub)
+  ]
+  --[ Test1()
+    , Secret(~sec)
+    ]->
+  [ Out(senc(<~sec, ~pub>, ~k))
+  , !Shk(~k)
+  ]
+
+rule Responder_Receive:
+  [ In(senc(<sec, pub>, k))
+  , !Shk(k)
+  ]
+  --[ Test2() ]->
+  [ Out(pub)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "not (Ex sec k #i #j.
+         Secret(sec) @ i & !Shk(k) @ i & K(sec) @ j)"
+
+end

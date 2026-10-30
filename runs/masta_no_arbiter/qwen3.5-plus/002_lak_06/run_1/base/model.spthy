@@ -1,0 +1,63 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule RuleSetup:
+  [
+    Fr(k)
+  ]
+  --[ Setup() ]->
+  [
+    !SharedKey(k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~r0),
+    !SharedKey(k)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0),
+    ReaderState(k, ~r0)
+  ]
+
+rule RuleStep2:
+  [
+    In(r0),
+    Fr(~r1),
+    !SharedKey(k)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<~r1, h(r0 XOR ~r1 XOR k)>),
+    TagState(k, r0, ~r1)
+  ]
+
+rule RuleStep3:
+  [
+    In(<r1, tag_mac>),
+    ReaderState(k, r0),
+    Fr(~reader_mac)
+  ]
+  --[ Test3() ]->
+  [
+    Out(~reader_mac),
+    ReaderState2(k, r0, r1, tag_mac)
+  ]
+
+rule RuleStep4:
+  [
+    In(reader_mac),
+    TagState(k, r0, r1)
+  ]
+  --[ Test4() ]->
+  [
+    End()
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

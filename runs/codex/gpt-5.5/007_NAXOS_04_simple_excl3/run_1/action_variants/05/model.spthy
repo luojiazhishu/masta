@@ -1,0 +1,96 @@
+theory SimpleNaxosAudit
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1, com/2, bar/1
+
+rule Generate_DH_key_pair:
+  [ Fr(~lk) ]
+  --[ Create($A) ]->
+  [ !Ltk($A, ~lk), !Pk($A, 'g'^~lk), Out('g'^~lk) ]
+
+rule Reveal_long_term_key:
+  [ !Ltk(A, ~lk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(~lk) ]
+
+rule Initiator_Emit_Message1:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI), Fr(~tid), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1(), Running($I, $R, <'init', hkI, pkR>) ]->
+  [ Out(hkI), Init_1(~tid, $I, $R, ~lkI, exI, hkI, pkR) ]
+
+rule Responder_Process_Message1_Audit:
+  let
+    auditCommitment = com($I, $R)
+    keyFingerprint = bar(pkI)
+  in
+  [ In(X), Fr(~tid), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Audit($R, $I, auditCommitment, keyFingerprint) ]->
+  [ Resp_1(~tid, $R, $I, ~lkR, X, pkI) ]
+
+rule Responder_Emit_Message2_Key:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ Resp_1(~tid, $R, $I, ~lkR, X, pkI), Fr(~eskR), Fr(~kR) ]
+  --[ Test3(), Running($R, $I, <'resp', $R, $I>), Commit($R, $I, <'resp', $R, $I>), Secret($R, $I, ~kR) ]->
+  [ Out(hkR) ]
+
+rule Initiator_Receive_Message2_Key:
+  let
+    kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ Init_1(~tid, $I, $R, ~lkI, exI, hkI, pkR), In(Y), Fr(~kI) ]
+  --[ Test4(), Commit($I, $R, <'init', $I, $R>), Secret($I, $R, ~kI) ]->
+  [ ]
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(A) @ r)
+     | (Ex #r. LtkReveal(B) @ r)"
+
+// category: aliveness
+lemma aliveness:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       (Ex #j. Create(B) @ j)
+     | (Ex #r. LtkReveal(A) @ r)
+     | (Ex #r. LtkReveal(B) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       (Ex t2 #j. Running(B, A, t2) @ j)
+     | (Ex #r. LtkReveal(A) @ r)
+     | (Ex #r. LtkReveal(B) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       (Ex #j. Running(B, A, t) @ j)
+     | (Ex #r. LtkReveal(A) @ r)
+     | (Ex #r. LtkReveal(B) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

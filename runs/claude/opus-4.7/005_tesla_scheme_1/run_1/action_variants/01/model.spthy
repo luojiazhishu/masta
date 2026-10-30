@@ -1,0 +1,126 @@
+theory TeslaScheme1
+begin
+
+builtins: signing
+
+functions: mac/2, f/1
+
+/* Long-term key infrastructure */
+rule Register_Ltk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, ~ltk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~ltk) ]
+
+/* Block 1: Receiver generates nonce and tag, sends setup request */
+rule R_Init:
+  [ Fr(~nR), Fr(~tagR), !Pk($S, pkS) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR, ~tagR>),
+    St_R_1($R, $S, pkS, ~nR, ~tagR) ]
+
+/* Block 2: Sender receives setup request, generates k1, sends signed response */
+rule S_Response:
+  [ In(<$R, $S, nR, tagR>),
+    !Ltk($S, ~ltk),
+    Fr(~k1) ]
+  --[ Test2(),
+      Create($S, ~k1),
+      Running($S, $R, <'setup', f(~k1), nR, tagR>) ]->
+  [ Out(<$S, $R, f(~k1), sign(<f(~k1), nR, tagR>, ~ltk)>),
+    St_S_1($S, $R, ~k1, nR, tagR) ]
+
+/* Block 3: Receiver verifies setup response, commits to f(k1) */
+rule R_Verify:
+  [ St_R_1($R, $S, pkS, ~nR, ~tagR),
+    In(<$S, $R, fk1, sig>) ]
+  --[ Test3(),
+      Eq(verify(sig, <fk1, ~nR, ~tagR>, pkS), true),
+      Commit($R, $S, <'setup', fk1, ~nR, ~tagR>),
+      Honest($R), Honest($S) ]->
+  [ St_R_2($R, $S, fk1, ~nR, ~tagR) ]
+
+/* Block 4: Sender sends first stream message (no key disclosure for i=1) */
+rule S_Stream1:
+  [ St_S_1($S, $R, ~k1, nR, tagR),
+    Fr(~k2), Fr(~m1) ]
+  --[ Test4() ]->
+  [ Out(< <~m1, f(~k2)>, mac(~k1, <~m1, f(~k2)>) >),
+    St_S_2($S, $R, ~k1, ~k2, <~m1, f(~k2)>, nR, tagR) ]
+
+/* Block 5: Receiver caches first stream message for deferred verification */
+rule R_Cache:
+  [ St_R_2($R, $S, fk1, ~nR, ~tagR),
+    In(<d1, mac1>) ]
+  --[ Test5(), Cached($R, $S, fk1) ]->
+  [ St_R_3($R, $S, fk1, d1, mac1, ~nR, ~tagR) ]
+
+/* Block 6: Sender sends second stream message, discloses k1 */
+rule S_Stream2:
+  [ St_S_2($S, $R, ~k1, ~k2, d1, nR, tagR),
+    Fr(~k3), Fr(~m2) ]
+  --[ Test6(),
+      Disclosed(~k1),
+      Running($S, $R, <'stream', d1, ~k1>) ]->
+  [ Out(< <~m2, f(~k3), ~k1>, mac(~k2, <~m2, f(~k3), ~k1>) >) ]
+
+/* Block 7: Receiver uses disclosed k1 to verify cached message and accept payload */
+rule R_Accept:
+  [ St_R_3($R, $S, fk1, d1, mac1, ~nR, ~tagR),
+    In(< <m2, fk3, k1>, mac2 >) ]
+  --[ Test7(),
+      Eq(f(k1), fk1),
+      Eq(mac1, mac(k1, d1)),
+      Commit($R, $S, <'stream', d1, k1>),
+      Honest($R), Honest($S) ]->
+  [ ]
+
+restriction Eq_check:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/*
+ * TESLA timing assumption: a receiver may only cache a message before the
+ * corresponding MAC key is disclosed.  Without this, the adversary could
+ * learn k1 from S_Stream2 and then supply a forged payload to R_Cache.
+ */
+restriction tesla_timing:
+  "All R S k1 #tCache #tDisclose.
+     Cached(R, S, f(k1)) @ tCache & Disclosed(k1) @ tDisclose
+   ==> tCache < tDisclose"
+
+// category: aliveness
+lemma aliveness:
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex id #j. Create(s, id) @ j)
+     | (Ex X #r2. LtkReveal(X) @ r2 & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_setup:
+  "All r s fk1 nR tagR #i.
+     Commit(r, s, <'setup', fk1, nR, tagR>) @ i
+   ==>
+       (Ex r2 #j. Running(s, r2, <'setup', fk1, nR, tagR>) @ j)
+     | (Ex X #r2. LtkReveal(X) @ r2 & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_stream:
+  "All r s d1 k1 #i.
+     Commit(r, s, <'stream', d1, k1>) @ i
+   ==>
+       (Ex r2 #j. Running(s, r2, <'stream', d1, k1>) @ j)
+     | (Ex X #r2. LtkReveal(X) @ r2 & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

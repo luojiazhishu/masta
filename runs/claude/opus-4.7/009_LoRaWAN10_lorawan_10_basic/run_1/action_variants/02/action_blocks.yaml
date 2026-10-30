@@ -1,0 +1,45 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - m = mac(~AppKey, <'JoinRequest', $Device, $Server, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - $Device
+    - $Server
+    - ~DevNonce
+    - m
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - $Device
+    - $Server
+    - DevNonce
+    - m
+  - generate_nonces:
+    - ~JoinNonce
+    - ~SessionCorrelator
+  - compute:
+    - m = mac(~AppKey, <'JoinRequest', $Device, $Server, DevNonce>)
+    - AppSKey = senc(<'cst1', DevNonce, ~JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<'cst2', DevNonce, ~JoinNonce>, ~AppKey)
+    - mm = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+    - body = senc(<'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <'JoinAccept',
+      ~JoinNonce, ~DevAddr>)>, ~AppKey)
+  - send:
+    - body
+    - ~SessionCorrelator
+- role: Device_JoinFinish
+  operations:
+  - receive:
+    - body
+    - SessionCorrelator
+  - compute:
+    - mm = mac(~AppKey, <'JoinAccept', JoinNonce, ~DevAddr>)
+    - body = senc(<'JoinAccept', JoinNonce, ~DevAddr, mac(~AppKey, <'JoinAccept',
+      JoinNonce, ~DevAddr>)>, ~AppKey)
+    - AppSKey = senc(<'cst1', ~DevNonce, JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<'cst2', ~DevNonce, JoinNonce>, ~AppKey)
+  - send: <END>

@@ -1,0 +1,27 @@
+- role: Responder_Start
+  operations:
+  - generate_nonces:
+    - ~RB
+  - send:
+    - ~RB
+- role: Initiator_Respond
+  operations:
+  - receive:
+    - RB
+  - generate_nonces:
+    - ~RA
+  - send:
+    - ~RA
+    - mac1(h(sid1_mut_cr, ~RA, RB, 'B'))
+- role: Responder_Verify
+  operations:
+  - receive:
+    - RA
+    - mac1(h(sid1_mut_cr, RA, RB, 'B'))
+  - send:
+    - mac2(h(sid2_mut_cr, RB, RA))
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - mac2(h(sid2_mut_cr, RB, RA))
+  - send: <END>

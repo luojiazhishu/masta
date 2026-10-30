@@ -1,0 +1,27 @@
+- role: I_Send
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+- role: R_Recv_Send1
+  operations:
+  - receive:
+    - mI
+  - generate_nonces:
+    - ~tid
+  - assert:
+    - verify(mI, <$I, $R>, pkI) = true
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: R_Send2
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: I_Recv
+  operations:
+  - receive:
+    - sig
+  - assert:
+    - verify(sig, <$I, $R>, pkR) = true
+  - send: <END>

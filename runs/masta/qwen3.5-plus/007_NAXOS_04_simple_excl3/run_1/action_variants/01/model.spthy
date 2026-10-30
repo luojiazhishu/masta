@@ -1,0 +1,101 @@
+theory NAXOS_Simplified begin
+
+builtins: diffie-hellman
+functions: h1/1, h2/1
+
+// Long-term key generation for each party
+rule Generate_DH_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, 'g'^~ltk)
+  , Out('g'^~ltk)
+  ]
+
+// RuleStep1: Initiator sends Message1
+rule RuleStep1:
+  let
+    exI = h1(<~eskI, lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tid)
+  , !Ltk($I, lkI)
+  ]
+  --[ Test1(), Honest($I), Create($I, ~tid), Running($I, $R, ~tid) ]->
+  [ Out(<hkI, ~tid>)
+  , !InitState1(~tid, $I, lkI, exI)
+  ]
+
+// RuleStep2: Responder receives Message1 and sends Message2
+rule RuleStep2:
+  let
+    exR = h1(<~eskR, lkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^exR, hkI^lkR, $I, $R>)
+  in
+  [ In(<hkI, tid>)
+  , Fr(~eskR)
+  , !Ltk($R, lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), SessionKey($R, kR), Secret($R, $I, kR), Honest($R), Create($R, tid), Running($R, $I, tid), Commit($R, $I, tid) ]->
+  [ Out(hkR)
+  , !RespState1(tid, $R, $I, lkR, exR, hkI)
+  ]
+
+// RuleStep3: Initiator receives Message2 and computes session key
+rule RuleStep3:
+  let
+    kI = h2(<hkR^lkI, pkR^exI, $I, $R>)
+  in
+  [ In(hkR)
+  , !InitState1(tid, $I, lkI, exI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3(), SessionKey($I, kI), Secret($I, $R, kI), Honest($I), Commit($I, $R, tid) ]->
+  [ ]
+
+// Long-term key reveal rule for compromised parties
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

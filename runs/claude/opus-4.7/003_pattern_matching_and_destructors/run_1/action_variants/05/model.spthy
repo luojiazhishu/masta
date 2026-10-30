@@ -1,0 +1,57 @@
+theory FAMED_SK_PMD_v05
+begin
+
+builtins: symmetric-encryption, hashing
+
+rule Setup_SharedKey:
+    [ Fr(~k) ]
+  -->
+    [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_SharedKey:
+    [ !SharedKey($I, $R, k) ]
+  --[ LtkReveal($I), LtkReveal($R) ]->
+    [ Out(k) ]
+
+rule I_Send:
+    [ !SharedKey($I, $R, k), Fr(~sec), Fr(~pub) ]
+  --[ Test1()
+    , I_SentSec(~sec)
+    , I_SentPub(~pub)
+    , Secret($I, $R, ~sec)
+    , Honest($I), Honest($R)
+    ]->
+    [ Out(<senc(<~sec, ~pub>, k), h(~sec)>) ]
+
+rule R_Receive:
+    [ !SharedKey($I, $R, k), In(<senc(<sec, pub>, k), witness>) ]
+  --[ Test2()
+    , R_GotSec(sec)
+    , R_GotPub(pub)
+    , Honest($I), Honest($R)
+    ]->
+    [ Out(pub) ]
+
+lemma sources [sources]:
+  "(All sec #j. R_GotSec(sec) @ j
+      ==> (Ex #i. I_SentSec(sec) @ i & i < j)
+        | (Ex #i. KU(sec) @ i & i < j))
+   & (All pub #j. R_GotPub(pub) @ j
+      ==> (Ex #i. I_SentPub(pub) @ i & i < j)
+        | (Ex #i. KU(pub) @ i & i < j))"
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

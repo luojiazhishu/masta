@@ -1,0 +1,20 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid
+    - ~k
+  - send:
+    - aenc(~k, pkS)
+- role: RuleStep2
+  operations:
+  - receive:
+    - ciphertext
+  - send:
+    - h(adec(ciphertext, skS))
+    - '''ack'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - h(k)
+    - '''ack'''
+  - send: <END>

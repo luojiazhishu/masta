@@ -1,0 +1,77 @@
+theory OPCUA_Secure_Channel_Sign_Sign begin
+
+builtins: signing, hashing
+
+functions: pairkey/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+rule Register_Party:
+  [ Fr(~ltk) ]
+--[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, ltk) ]
+--[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Client_Send_GetEndpointsRequest:
+  [ Fr(~tid) ]
+--[ Test1(), Create($C, ~tid) ]->
+  [ ClientWaitEndpoints($C, $S, ~tid), Out(<'GEReq', $C, $S>) ]
+
+rule Server_Send_GetEndpointsResponse:
+  [ In(<'GEReq', C, S>), !Pk(S, pkS) ]
+--[ Test2(), Running(S, C, <'discovery', pkS>) ]->
+  [ Out(<'GERes', S, C, pkS, 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>) ]
+
+rule Client_Send_OpenSecureChannelRequest:
+  let requestBody = <'OSCReq', pk(ltkC), ~nc> in
+  [ ClientWaitEndpoints(C, S, tid), In(<'GERes', S, C, serverCert, 'Sign', policy, userTokenPolicy>), !Ltk(C, ltkC), !Pk(C, pk(ltkC)), Fr(~nc) ]
+--[ Test3(), Running(C, S, <'client_nonce', ~nc>), Running(C, S, <'server_nonce', serverCert, ~nc>), Secret(C, S, pairkey(~nc, 'pending')), Honest(C) ]->
+  [ ClientWaitOSC(C, S, tid, serverCert, ~nc), Out(<pk(ltkC), requestBody, sign(h(requestBody), ltkC), h(requestBody)>) ]
+
+rule Server_Send_OpenSecureChannelResponse:
+  let responseBody = <'OSCRes', ~ns, ~st, ~ttl> in
+  [ In(<clientCert, <'OSCReq', clientCert, nc>, reqSig, reqDigest>), !Pk(C, clientCert), !Ltk(S, ltkS), !Pk(S, pk(ltkS)), Fr(~ns), Fr(~st), Fr(~ttl) ]
+--[ Test4(), Eq(reqDigest, h(<'OSCReq', clientCert, nc>)), Eq(verify(reqSig, h(<'OSCReq', clientCert, nc>), clientCert), true), Commit(S, C, <'client_nonce', nc>), Running(S, C, <'server_nonce', pk(ltkS), nc, ~ns>), Secret(S, C, pairkey(nc, ~ns)), Honest(S) ]->
+  [ Out(<pk(ltkS), responseBody, sign(h(responseBody), ltkS), h(responseBody), 'TokenType'>) ]
+
+rule Client_Accept_OpenSecureChannelResponse:
+  [ ClientWaitOSC(C, S, tid, serverCert, nc), In(<serverCert, <'OSCRes', ns, st, ttl>, resSig, resDigest, 'TokenType'>), !Pk(S2, serverCert) ]
+--[ Test5(), Eq(resDigest, h(<'OSCRes', ns, st, ttl>)), Eq(verify(resSig, h(<'OSCRes', ns, st, ttl>), serverCert), true), Commit(C, S, <'server_nonce', serverCert, nc, ns>), Secret(C, S, pairkey(nc, ns)), Honest(C) ]->
+  [ Channel(C, S, tid, serverCert, pairkey(nc, ns), st) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma channel_binding_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma client_nonce_noninjective_agreement:
+  "All a b nc #i.
+     Commit(a, b, <'client_nonce', nc>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'client_nonce', nc>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma server_nonce_noninjective_agreement:
+  "All a b cert nc ns #i.
+     Commit(a, b, <'server_nonce', cert, nc, ns>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_nonce', cert, nc, ns>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

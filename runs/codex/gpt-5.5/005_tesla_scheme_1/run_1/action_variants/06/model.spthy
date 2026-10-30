@@ -1,0 +1,141 @@
+theory Tesla_Scheme1_ActionVariant06
+begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+restriction StoreBeforeDisclosure:
+  "All R S commitment d tag #i #j.
+     Store(R, S, commitment, d, tag) @ #i
+   & KeyDisclosed(S, commitment) @ #j
+   ==> #i < #j"
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  -->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  , Create($A, ~ltk)
+  ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nr) ]
+  --[ Test1() ]->
+  [ R_Init($R, $S, ~nr)
+  , Out(<$R, $S, ~nr>)
+  ]
+
+rule Sender_Setup_Response:
+  let commitment = h(~k1)
+      sig = sign(<commitment, nr>, ltkS)
+  in
+  [ In(<R, S, nr>)
+  , !Ltk(S, ltkS)
+  , Fr(~k1)
+  ]
+  --[ Test2()
+    , Running(S, S, <'setup', commitment, nr>)
+    ]->
+  [ S_Stream(S, R, ~k1, commitment)
+  , Out(<S, R, commitment, sig, 'commit_response'>)
+  ]
+
+rule Receiver_Accepts_Setup:
+  [ R_Init(R, S, nr)
+  , !Pk(S, pkS)
+  , In(<S, R, commitment, sig, 'commit_response'>)
+  ]
+  --[ Test3()
+    , Eq(verify(sig, <commitment, nr>, pkS), true)
+    , Commit(R, S, <'setup', commitment, nr>)
+    , Honest(S)
+    ]->
+  [ R_Setup(R, S, commitment)
+  ]
+
+rule Sender_Broadcast_Data1:
+  let d1 = <~m1, h(~k2)>
+  in
+  [ S_Stream(S, R, k1, commitment)
+  , Fr(~m1)
+  , Fr(~k2)
+  ]
+  --[ Test4()
+    , Running(S, S, <'payload', ~m1, d1, commitment>)
+    ]->
+  [ S_Disclose(S, R, ~k2, ~m1, d1, k1, commitment)
+  , Out(<d1, mac(k1, d1)>)
+  ]
+
+rule Receiver_Stores_Data1:
+  [ R_Setup(R, S, commitment)
+  , In(<d1, tag1>)
+  ]
+  --[ Test5()
+    , Store(R, S, commitment, d1, tag1)
+    ]->
+  [ R_Stored_Data1(R, S, commitment, d1, tag1)
+  ]
+
+rule Sender_Broadcast_Disclosure:
+  let d2 = <'m2', h(~k3), k1>
+  in
+  [ S_Disclose(S, R, k2, m1, d1, k1, commitment)
+  , Fr(~k3)
+  ]
+  --[ Test6()
+    , KeyDisclosed(S, commitment)
+    ]->
+  [ Out(<d2, mac(k2, d2)>)
+  , Out(k1)
+  ]
+
+rule Receiver_Accepts_Payload:
+  let d1 = <m1, next_commitment>
+  in
+  [ R_Stored_Data1(R, S, commitment, d1, mac(k1, d1))
+  , In(k1)
+  ]
+  --[ Test7()
+    , Eq(h(k1), commitment)
+    , Commit(R, S, <'payload', m1, d1, commitment>)
+    , Honest(S)
+    ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma setup_authentication:
+  "All R S t #i.
+     Commit(R, S, t) @ #i & (Ex commitment nr. t = <'setup', commitment, nr>)
+   ==> 
+       (Ex #j. Running(S, S, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma payload_authentication:
+  "All R S t #i.
+     Commit(R, S, t) @ #i & (Ex m1 d1 commitment. t = <'payload', m1, d1, commitment>)
+   ==> 
+       (Ex #j. Running(S, S, t) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+end

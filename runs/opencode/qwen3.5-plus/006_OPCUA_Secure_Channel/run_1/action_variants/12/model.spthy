@@ -1,0 +1,91 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Client_Send_GEReq_1:
+  [ Fr(~tidC) ]
+  --[ Test1(), Create('client', ~tidC) ]->
+  [ StC1(~tidC), Out(< 'GEReq' >) ]
+
+rule Client_Send_GEReq_2:
+  [ StC1(~tidC) ]
+  --[ Test2() ]->
+  [ StC2(~tidC), Out(< 'GEReq' >) ]
+
+rule Server_Receive_GEReq_Send_GERes:
+  [ In(< 'GEReq' >), Fr(~tidS), Fr(~skS) ]
+  --[ Test3(), Create('server', ~tidS), Running('server', 'client', <~tidS, pk(~skS)>) ]->
+  [ StS1(~tidS, pk(~skS)), Out(< 'GERes', pk(~skS), 'Sign', 'policy', 'token' >) ]
+
+rule Client_Receive_GERes_Send_OSCReq:
+  [ StC2(~tidC), In(< 'GERes', ServerCert, 'Sign', policy, token >), Fr(~skC), Fr(~Nc) ]
+  --[ Test4(), Running('client', 'server', <~tidC, pk(~skC), ~Nc, ServerCert>) ]->
+  [ StC3(~tidC, pk(~skC), ~Nc, ServerCert),
+    Out(< pk(~skC), < 'OSCReq', pk(~skC), ~Nc >, sign(h(< 'OSCReq', pk(~skC), ~Nc >), ~skC), h(< 'OSCReq', pk(~skC), ~Nc >) >) ]
+
+rule Server_Receive_OSCReq_Send_OSCRes:
+  [ StS1(~tidS, ServerCert),
+    In(< ClientCert, < 'OSCReq', ClientPub, ClientNonce >, sig, digest >),
+    Fr(~Ns), Fr(~tokenST), Fr(~TTL), Fr(~skS) ]
+  --[ Test5(),
+      Eq(digest, h(< 'OSCReq', ClientPub, ClientNonce >)),
+      Eq(verify(sig, digest, ClientCert), true),
+      Running('server', 'client', <~tidS, ServerCert, ~Ns, ~tokenST, ~TTL>),
+      Secret('server', 'client', h(< ClientNonce, ~Ns >)) ]->
+  [ StS2(~tidS, ServerCert, ~Ns, ~tokenST, ~TTL, ClientCert, ClientNonce),
+    Out(< ServerCert, < 'OSCRes', ~Ns, ~tokenST, ~TTL >, sign(h(< 'OSCRes', ~Ns, ~tokenST, ~TTL >), ~skS), h(< 'OSCRes', ~Ns, ~tokenST, ~TTL >) >) ]
+
+rule Client_Receive_OSCRes_Verify:
+  [ StC3(~tidC, ClientCert, ~Nc, ServerCert),
+    In(< ServerCert, < 'OSCRes', ServerNonce, SecurityToken, TokenLifetime >, sig, digest >) ]
+  --[ Test6(),
+      Eq(digest, h(< 'OSCRes', ServerNonce, SecurityToken, TokenLifetime >)),
+      Eq(verify(sig, digest, ServerCert), true),
+      Commit('client', 'server', <~tidC, ~Nc, ServerNonce, SecurityToken, ServerCert>),
+      Secret('client', 'server', h(< ~Nc, ServerNonce >)) ]->
+  [ ]
+
+rule LTKReveal:
+  [ Fr(~sk) ]
+  --[ LtkReveal(pk(~sk)) ]->
+  [ Out(~sk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+  by sorry
+
+// category: secrecy
+lemma secrecy_channel_binding:
+  all-traces
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+  by sorry
+
+// category: aliveness
+lemma aliveness:
+  all-traces
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+  by sorry
+
+// category: weak_agreement
+lemma weak_agreement:
+  all-traces
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+  by sorry
+
+end

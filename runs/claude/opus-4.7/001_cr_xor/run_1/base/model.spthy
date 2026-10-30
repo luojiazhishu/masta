@@ -1,0 +1,83 @@
+theory CRXOR
+begin
+
+builtins: hashing, xor
+
+/*
+ * CR-XOR: a two-flow challenge-response authentication protocol.
+ *   I -> R : na
+ *   R -> I : <h(na XOR k XOR nb), nb>
+ * I verifies the received tag against h(na XOR k XOR nb) using its own
+ * stored na and the shared long-term key k, then commits. The responder
+ * keeps no state across flights.
+ *
+ * The shared key is modelled as a directed fact !Ltk(I, R, k); a single
+ * setup binds the long-term key to the pair (I, R) so that any agent can
+ * be either the initiator side or the responder side of a given pair, but
+ * the same agent cannot reflect a session against itself.
+ */
+
+// Setup of the long-term symmetric key shared between two endpoints.
+rule Setup_Key:
+    [ Fr(~k) ]
+  --[ KeySetup($I, $R) ]->
+    [ !Ltk($I, $R, ~k) ]
+
+// Adversary may compromise the long-term key; this leaks the secret of
+// both endpoints since the key is shared.
+rule Reveal_Ltk:
+    [ !Ltk(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+    [ Out(k) ]
+
+// Action block 1: Initiator generates a fresh challenge na and sends it.
+rule I_Send:
+    [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+    [ Out(~na), St_I_1($I, $R, ~na, k) ]
+
+// Action block 2: Responder receives na, generates fresh nb, computes the
+// tag t = h(na XOR k XOR nb) and sends <t, nb>.
+rule R_Respond:
+    let t = h(na XOR k XOR ~nb) in
+    [ In(na), Fr(~nb), !Ltk($I, $R, k) ]
+  --[ Test2(), Create($R, ~nb), Running($R, $I, t), Honest($R), Honest($I) ]->
+    [ Out(<t, ~nb>) ]
+
+// Action block 3: Initiator receives <tag, nb>, verifies the tag matches
+// h(na XOR k XOR nb) for its stored na and the shared key, then commits.
+rule I_Verify:
+    [ St_I_1($I, $R, ~na, k), In(<tag, nb>) ]
+  --[ Test3()
+    , Eq(tag, h(~na XOR k XOR nb))
+    , Commit($I, $R, tag)
+    , Honest($I), Honest($R)
+    ]->
+    [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,48 @@
+- role: Responder_Challenge
+  operations:
+  - generate_nonces:
+    - ~RB
+    - ~Text1
+  - send:
+    - ~RB
+    - ~Text1
+- role: Initiator_TokenAB
+  operations:
+  - receive:
+    - RB
+    - Text1
+  - generate_nonces:
+    - ~Text2
+    - ~Text3
+  - compute:
+    - auxA2 = aux2(~Text2, ~Text3)
+    - mac1 = mac(<sid1_mut_cr, RA, RB, B>, k)
+  - send:
+    - RA
+    - ~Text3
+    - <sid1_mut_cr, RA, RB, B, ~Text2>
+    - mac1
+- role: Responder_TokenBA
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - <sid1_mut_cr, RA, RB, B, Text2>
+    - mac1
+  - generate_nonces:
+    - ~Text4
+    - ~Text5
+  - compute:
+    - mac1 = mac(<sid1_mut_cr, RA, RB, B>, k)
+    - mac2 = mac(<sid2_mut_cr, RB, RA>, k)
+  - send:
+    - ~Text5
+    - mac2
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - Text5
+    - mac2
+  - compute:
+    - mac2 = mac(<sid2_mut_cr, RB, RA>, k)
+  - send: <END>

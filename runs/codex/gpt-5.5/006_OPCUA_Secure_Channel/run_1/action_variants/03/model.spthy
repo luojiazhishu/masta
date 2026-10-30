@@ -1,0 +1,88 @@
+theory OPCUA_Secure_Channel begin
+
+builtins: signing, hashing
+
+rule Setup:
+  [ Fr(~ltkC), Fr(~ltkS) ]
+  --[ Create('Client', 'client_session'), Create('Server', 'server_session') ]->
+  [ !Ltk('Client', ~ltkC), !Ltk('Server', ~ltkS), !Pk('Client', pk(~ltkC)), !Pk('Server', pk(~ltkS)), !KeyPair(pk(~ltkC), ~ltkC), !KeyPair(pk(~ltkS), ~ltkS) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Client_Send_GetEndpointsRequest:
+  [ !Ltk('Client', ltkC) ]
+  --[ Test1() ]->
+  [ C_State_1(ltkC), Msg1('GEReq'), Out('GEReq') ]
+
+rule Server_Send_GetEndpointsResponse:
+  [ !Ltk('Server', ltkS), Msg1('GEReq') ]
+  --[ Test2() ]->
+  [ Msg2(<'GERes', pk(ltkS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>), Out(<'GERes', pk(ltkS), 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>) ]
+
+rule Client_Send_OpenSecureChannelRequest:
+  let request_body = <'OSCReq', pk(ltkC), ~Nc>
+      request_digest = h(request_body)
+      request_signature = sign(request_digest, ltkC)
+  in
+  [ C_State_1(ltkC), Msg2(<'GERes', server_cert, 'Sign', policy, token_policy>), Fr(~Nc), Fr(~ClientRequestId) ]
+  --[ Test3(), Running(pk(ltkC), server_cert, <'client_nonce', ~Nc>) ]->
+  [ C_State_2(ltkC, server_cert, ~Nc, ~ClientRequestId),
+    Msg3(<pk(ltkC), request_body, request_signature, request_digest, ~ClientRequestId>),
+    Out(<pk(ltkC), request_body, request_signature, request_digest, ~ClientRequestId>) ]
+
+rule Server_Send_OpenSecureChannelResponse:
+  let request_body = <'OSCReq', client_cert, Nc>
+      request_digest = h(request_body)
+      response_body = <'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>
+      response_digest = h(response_body)
+      response_signature = sign(response_digest, ltkS)
+      channel_binding = h(<Nc, ~Ns>)
+  in
+  [ !Ltk('Server', ltkS), !KeyPair(client_cert, ltkC), Msg3(<client_cert, request_body, sign(request_digest, ltkC), request_digest, client_request_id>), Fr(~Ns), Fr(~SecurityToken), Fr(~TokenLifetime) ]
+  --[ Test4(), Running(pk(ltkS), client_cert, <'server_nonce', ~Ns>), Commit(pk(ltkS), client_cert, <'client_nonce', Nc>), Honest('Server'), Secret(pk(ltkS), client_cert, channel_binding) ]->
+  [ Msg4(<pk(ltkS), response_body, response_signature, response_digest>),
+    Out(<pk(ltkS), response_body, response_signature, response_digest>) ]
+
+rule Client_Receive_OpenSecureChannelResponse:
+  let response_body = <'OSCRes', Ns, security_token, token_lifetime>
+      response_digest = h(response_body)
+      channel_binding = h(<Nc, Ns>)
+  in
+  [ C_State_2(ltkC, server_cert, Nc, client_request_id), !KeyPair(server_cert, ltkS), Msg4(<server_cert, response_body, sign(response_digest, ltkS), response_digest>) ]
+  --[ Test5(), Commit(pk(ltkC), server_cert, <'server_nonce', Ns>), Honest('Client'), Secret(pk(ltkC), server_cert, channel_binding) ]->
+  [ Secure_Channel(pk(ltkC), server_cert, Nc, Ns, security_token, channel_binding) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma channel_binding_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b n #i.
+     Commit(a, b, <'client_nonce', n>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'client_nonce', n>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b n #i.
+     Commit(a, b, <'server_nonce', n>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server_nonce', n>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

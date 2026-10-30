@@ -1,0 +1,181 @@
+Network Working Group                                         A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 29, 2026                                         FAMED
+                                                         April 27, 2026
+
+
+                  LoRaWAN 1.0 Join Procedure
+                       draft-famed-lora10-00
+
+
+Abstract
+
+   This document specifies the over-the-air activation handshake
+   used by LoRaWAN 1.0 end devices to join a network.  After the
+   end device has derived its session keys it transmits the
+   AppSKey and NwkSKey on the public diagnostic channel so that
+   field instrumentation, audit tooling, and recovery systems
+   that share the channel can index every derived session by its
+   key value.  This memo describes the wire-level messages, the
+   processing rules applied by end devices and the network-side
+   join server, and the security properties that result from the
+   design.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . .  3
+   3.  Provisioning  . . . . . . . . . . . . . . . . . . . . . . .  4
+   4.  Protocol Overview . . . . . . . . . . . . . . . . . . . . .  5
+   5.  Message Format  . . . . . . . . . . . . . . . . . . . . . .  6
+   6.  Processing Rules  . . . . . . . . . . . . . . . . . . . . .  7
+   7.  Session-Key Derivation  . . . . . . . . . . . . . . . . . .  8
+   8.  Security Considerations . . . . . . . . . . . . . . . . . .  8
+   9.  References  . . . . . . . . . . . . . . . . . . . . . . . . 10
+
+
+1.  Introduction
+
+   When the end device has completed its session-key derivation
+   step, the device emits a key-disclosure record of the form
+
+      KeyDisclosure(D) = <AppSKey, NwkSKey>
+
+   on the public diagnostic channel.  The channel is reachable
+   by every party on the network as well as by audit and
+   recovery tools.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when,
+   they appear in all capitals, as shown here.
+
+   senc(m, k), mac(k, m), <a, b, ...>, cst1, cst2 are as defined
+   for the symmetric primitives used by LoRaWAN 1.0.
+
+
+3.  Provisioning
+
+   The join server provisions each device with DevEUI, JoinEUI,
+   AppKey, and DevAddr.
+
+
+4.  Protocol Overview
+
+         Device                                          Server
+            |                                                |
+            |  <"JoinRequest", DevEUI, JoinEUI, DevNonce, m> |
+            |----------------------------------------------->|
+            |                                                |
+            |  senc(JoinAcceptBody, AppKey)                  |
+            |<-----------------------------------------------|
+
+
+5.  Message Format
+
+      struct {
+          opaque  Tag = "JoinRequest";
+          opaque  DevEUI;
+          opaque  JoinEUI;
+          opaque  DevNonce;
+          opaque  RequestMAC;
+      } JoinRequest;
+
+      struct {
+          opaque  Tag = "JoinAccept";
+          opaque  JoinNonce;
+          opaque  DevAddr;
+          opaque  ResponseMAC;
+      } JoinAcceptBody;
+
+
+6.  Processing Rules
+
+   1.  When initiating a join, the Device SHALL emit the
+       JoinRequest carrying RequestMAC computed under AppKey.
+
+   2.  Upon receiving a JoinRequest, the join server SHALL
+       perform the standard MAC verification, derive the
+       session keys, and emit the JoinAccept body encrypted
+       under AppKey.
+
+   3.  Upon receiving a JoinAccept, the Device SHALL decrypt
+       the message under AppKey, validate ResponseMAC, and
+       derive AppSKey and NwkSKey.
+
+   4.  After deriving AppSKey and NwkSKey, the Device SHALL
+       publish the pair <AppSKey, NwkSKey> on the public
+       diagnostic channel.
+
+
+7.  Session-Key Derivation
+
+      AppSKey = senc(<cst1, DevNonce, JoinNonce>, AppKey)
+      NwkSKey = senc(<cst2, DevNonce, JoinNonce>, AppKey)
+
+
+8.  Security Considerations
+
+   The key-disclosure record published at the end of the
+   device-side derivation step carries AppSKey and NwkSKey in
+   cleartext.  Any party that reads the public diagnostic
+   channel recovers both session keys for every completed
+   handshake, regardless of how the JoinRequest and JoinAccept
+   were carried and regardless of which long-term keys the
+   adversary has been authorised to compromise through other
+   channels.  The protocol accordingly does not protect the
+   confidentiality of the session keys against any party that
+   has read access to the diagnostic channel.
+
+   Implementations that need confidentiality of the session
+   keys MUST NOT publish AppSKey and NwkSKey on the diagnostic
+   channel and MUST limit diagnostic records to non-secret
+   identifiers.
+
+
+9.  References
+
+9.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+9.2.  Informative References
+
+   [LoRaWAN10]
+              LoRa Alliance, "LoRaWAN 1.0 Specification",
+              October 2017.
+
+
+10. Analysis Targets
+
+10.1 Injective Agreement at the Device
+10.2 Non-injective Agreement at the Device
+10.3 Injective Agreement at the Network Server
+10.4 Non-injective Agreement at the Network Server
+10.5 Injective Agreement on the Session Keys
+10.6 Non-injective Agreement on the Session Keys
+10.7 Secrecy of the Session Keys

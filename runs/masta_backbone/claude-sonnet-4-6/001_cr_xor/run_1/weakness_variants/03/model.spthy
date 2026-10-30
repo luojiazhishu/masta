@@ -1,0 +1,49 @@
+theory CR_XOR_DiscK
+begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [ Fr(~k) ]
+  --[ Test1() ]->  
+  [ Out(~k), !LTK(~k) ]
+
+rule RuleStep2:
+  [ Fr(~na), !LTK(k) ]
+  --[ Test2() ]->
+  [ Out(~na), St_I_1(~na, k) ]
+
+rule RuleStep3:
+  [ In(na), !LTK(k), Fr(~nb) ]
+  --[ Test3(), Create('R', ~nb), Running('R', 'I', <'I', 'R', h(na ⊕ k ⊕ ~nb)>) ]->
+  [ Out(<h(na ⊕ k ⊕ ~nb), ~nb>) ]
+
+rule RuleStep4:
+  [ In(<tag_received, nb>), St_I_1(~na, k) ]
+  --[ Test4(), Eq(tag_received, h(~na ⊕ k ⊕ nb)), Commit('I', 'R', <'I', 'R', tag_received>) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+lemma aliveness_aliveness_of_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_non_injective_agreement_on_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

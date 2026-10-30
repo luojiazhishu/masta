@@ -1,0 +1,53 @@
+- role: Client_Send_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_Send_GetEndpointsResponse
+  operations:
+  - send:
+    - '''GERes'''
+    - pk(ltkS)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_Send_OpenSecureChannelRequest
+  operations:
+  - generate_nonces:
+    - ~Nc
+    - ~ClientRequestId
+  - compute:
+    - request_body = <'OSCReq', pk(ltkC), ~Nc>
+    - request_digest = h(<'OSCReq', pk(ltkC), ~Nc>)
+    - request_signature = sign(h(<'OSCReq', pk(ltkC), ~Nc>), ltkC)
+  - send:
+    - pk(ltkC)
+    - request_body
+    - request_signature
+    - request_digest
+    - ~ClientRequestId
+- role: Server_Send_OpenSecureChannelResponse
+  operations:
+  - generate_nonces:
+    - ~Ns
+    - ~SecurityToken
+    - ~TokenLifetime
+  - compute:
+    - request_body = <'OSCReq', client_cert, Nc>
+    - request_digest = h(<'OSCReq', client_cert, Nc>)
+    - response_body = <'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>
+    - response_digest = h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>)
+    - response_signature = sign(h(<'OSCRes', ~Ns, ~SecurityToken, ~TokenLifetime>),
+      ltkS)
+    - channel_binding = h(<Nc, ~Ns>)
+  - send:
+    - pk(ltkS)
+    - response_body
+    - response_signature
+    - response_digest
+- role: Client_Receive_OpenSecureChannelResponse
+  operations:
+  - compute:
+    - response_body = <'OSCRes', Ns, security_token, token_lifetime>
+    - response_digest = h(<'OSCRes', Ns, security_token, token_lifetime>)
+    - channel_binding = h(<Nc, Ns>)
+  - send: <END>

@@ -1,0 +1,41 @@
+- role: B_Challenge
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - send:
+    - ~rb
+    - ~text1
+    - '''init_b'''
+- role: A_Respond
+  operations:
+  - receive:
+    - rb
+    - text1
+    - '''init_b'''
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - send:
+    - ~ra
+    - ~text3
+    - <'sid1_mut_cr', ~ra, rb, $B, ~text2>
+    - mac(<'sid1_mut_cr', ~ra, rb, $B>, ~kAB)
+- role: B_Respond
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, ~rb, $B, text2>
+    - mac(<'sid1_mut_cr', ra, ~rb, $B>, ~kAB)
+  - generate_nonces:
+    - ~text5
+  - send:
+    - ~text5
+    - mac(<'sid2_mut_cr', ~rb, ra>, ~kAB)
+- role: A_Verify
+  operations:
+  - receive:
+    - text5
+    - mac(<'sid2_mut_cr', rb, ~ra>, ~kAB)
+  - send: <END>

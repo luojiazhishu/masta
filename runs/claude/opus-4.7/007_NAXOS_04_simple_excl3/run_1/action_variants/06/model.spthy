@@ -1,0 +1,70 @@
+theory NaxosSimpleExcl3
+begin
+
+builtins: diffie-hellman
+
+functions: h1/2, h2/1, tag/1
+
+/* Long-term key registration */
+rule Register_Ltk:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($A, ~lk), !Pk($A, 'g'^~lk) ]
+
+/* Adversary long-term key reveal */
+rule Reveal_Ltk:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+/* Action Block 1: Initiator generates eskI and sends hkI = g^h1(eskI, lkI) */
+rule I_Send_Msg1:
+  let
+    hkI = 'g'^h1(~eskI, ~lkI)
+  in
+  [ Fr(~eskI), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1(), Create($I, ~eskI) ]->
+  [ St_I_1($I, $R, ~eskI, ~lkI, pkR), Out(hkI) ]
+
+/* Action Block 2: Responder receives X, generates eskR, computes kR and hkR, sends hkR */
+rule R_Recv_Send:
+  let
+    exR = h1(~eskR, ~lkR)
+    hkR = 'g'^exR
+    kR  = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ In(X), Fr(~eskR), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Secret($R, $I, kR), Honest($R), Honest($I) ]->
+  [ St_R_2($R, $I, kR), Out(hkR) ]
+
+/* Action Block 3: Initiator receives Y, looks up pkR, computes local diagnostic tag */
+rule I_Recv_Msg2:
+  [ St_I_1($I, $R, ~eskI, ~lkI, pkR), In(Y) ]
+  --[ Test3() ]->
+  [ St_I_3($I, $R, ~eskI, ~lkI, pkR, Y) ]
+
+/* Action Block 4: Initiator computes session key kI = h2(<Y^lkI, pkR^exI, I, R>) */
+rule I_Compute_Key:
+  let
+    exI = h1(~eskI, ~lkI)
+    kI  = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ St_I_3($I, $R, ~eskI, ~lkI, pkR, Y) ]
+  --[ Test4(), Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

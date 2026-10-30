@@ -1,0 +1,118 @@
+theory TeslaScheme1Weakness04
+begin
+
+builtins: signing
+
+functions: f/1, mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Init_Ltk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($S, ~sk), !Pk($S, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($X, ~sk) ]
+  --[ LtkReveal($X) ]->
+  [ Out(~sk) ]
+
+/* Action Block 1: Receiver generates nonce and sends setup request */
+rule R_Block1_SetupRequest:
+  [ Fr(~nR), Fr(~tid) ]
+  --[ Test1(), Create($R, ~tid) ]->
+  [ St_R1($R, $S, ~nR, ~tid),
+    Out(<$R, $S, ~nR>) ]
+
+/* Action Block 2: Sender receives setup request, generates key chain, sends signed commitment */
+rule S_Block2_SetupResponse:
+  [ !Ltk($S, ~skS),
+    In(<$R, $S, nR>),
+    Fr(~k1), Fr(~k2), Fr(~k3), Fr(~m1), Fr(~m2), Fr(~tid) ]
+  --[ Test2(),
+      Create($S, ~tid),
+      Running($S, $R, <'sender', nR, ~k1, ~m1>) ]->
+  [ St_S2($S, $R, nR, ~k1, ~k2, ~k3, ~m1, ~m2, ~tid),
+    Out(<$S, $R, f(~k1), sign(<f(~k1), nR>, ~skS)>) ]
+
+/* Action Block 3: Receiver verifies setup response signature and stores commitment */
+rule R_Block3_RecvSetup:
+  [ St_R1($R, $S, ~nR, ~tid),
+    !Pk($S, pkS),
+    In(<$S, $R, fk1, sig>) ]
+  --[ Test3(),
+      Eq(verify(sig, <fk1, ~nR>, pkS), true) ]->
+  [ St_R3($R, $S, ~nR, fk1, ~tid) ]
+
+/* Action Block 4: Sender broadcasts Msg 1 (no key disclosed yet) */
+rule S_Block4_SendMsg1:
+  [ St_S2($S, $R, nR, ~k1, ~k2, ~k3, ~m1, ~m2, ~tid) ]
+  --[ Test4() ]->
+  [ St_S4($S, $R, nR, ~k1, ~k2, ~k3, ~m1, ~m2, ~tid),
+    Out(<~m1, f(~k2), mac(~k1, <~m1, f(~k2)>)>) ]
+
+/* Action Block 5: Receiver caches Msg 1 payload and MAC (cannot verify yet; key undisclosed) */
+rule R_Block5_RecvMsg1:
+  [ St_R3($R, $S, ~nR, fk1, ~tid),
+    In(<m1, fk2, mac1>) ]
+  --[ Test5() ]->
+  [ St_R5($R, $S, ~nR, fk1, m1, fk2, mac1, ~tid) ]
+
+/* Action Block 6: Sender broadcasts Msg 2, disclosing k1 */
+rule S_Block6_SendMsg2:
+  [ St_S4($S, $R, nR, ~k1, ~k2, ~k3, ~m1, ~m2, ~tid) ]
+  --[ Test6() ]->
+  [ St_S6($S, $R, nR, ~k1, ~k2, ~k3, ~m1, ~m2, ~tid),
+    Out(<~m2, f(~k3), ~k1, mac(~k2, <~m2, f(~k3), ~k1>)>) ]
+
+/* Action Block 7: Receiver processes Msg 2 with disclosed key.
+   WEAKNESS: receiver verifies mac(k1_disc, cached_D1) without first
+   checking f(k1_disc) = fk1 (the commitment stored during setup).
+   An adversary can substitute any k1_disc and forge the cached MAC. */
+rule R_Block7_RecvMsg2:
+  [ St_R5($R, $S, ~nR, fk1, m1, fk2, mac1, ~tid),
+    In(<m2, fk3, k1_disc, mac2>) ]
+  --[ Test7(),
+      Eq(mac(k1_disc, <m1, fk2>), mac1),
+      Commit($R, $S, <'sender', ~nR, k1_disc, m1>),
+      Honest($R), Honest($S) ]->
+  [ St_R7($R, $S, ~nR, fk1, m1, fk2, mac1, m2, fk3, ~tid) ]
+
+/* Authenticity of broadcast payload: receiver commits to (k, m) attributed to sender S;
+   sender must have been running with the same (nR, k, m).
+   Expected verdict: FALSIFIED — missing commitment check allows adversary to inject
+   an arbitrary k and payload m without matching any Running fact from S. */
+// category: noninjective_agreement
+lemma auth_of_broadcast:
+  "All R S nR k m #i.
+     Commit(R, S, <'sender', nR, k, m>) @ i
+   ==>
+     (Ex #j. Running(S, R, <'sender', nR, k, m>) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex t2 #j. Running(b, a, t2) @ j)
+   | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+     Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

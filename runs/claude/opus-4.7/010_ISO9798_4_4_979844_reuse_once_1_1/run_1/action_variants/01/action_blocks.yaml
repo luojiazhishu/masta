@@ -1,0 +1,50 @@
+- role: B_Start
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+    - ~nonceB1
+  - send:
+    - ~rb
+    - ~text1
+    - ~nonceB1
+- role: A_Send
+  operations:
+  - receive:
+    - rb
+    - text1
+    - nonceB1
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - compute:
+    - mac1 = mac(<'sid1_mut_cr', ra, rb, $B>, ~kAB)
+  - send:
+    - ra
+    - ~text3
+    - <'sid1_mut_cr', ra, rb, $B, ~text2>
+    - mac1
+- role: B_Respond
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, ~rb, $B, text2>
+    - mac_val
+  - generate_nonces:
+    - ~text5
+  - compute:
+    - mac2 = mac(<'sid2_mut_cr', ~rb, ra>, ~kAB)
+  - assert:
+    - mac_val = mac(<'sid1_mut_cr', ra, ~rb, $B>, ~kAB)
+  - send:
+    - ~text5
+    - mac2
+- role: A_Accept
+  operations:
+  - receive:
+    - text5
+    - mac_val
+  - assert:
+    - mac_val = mac(<'sid2_mut_cr', rb, ra>, ~kAB)
+  - send: <END>

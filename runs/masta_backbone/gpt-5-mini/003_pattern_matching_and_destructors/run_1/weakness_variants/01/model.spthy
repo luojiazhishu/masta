@@ -1,0 +1,33 @@
+theory model begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  let m = senc(<~sec, ~pub>, $k) in
+  [ Fr(~sec), Fr(~pub) ]
+  --[ Test1(), Secret('I','R', ~sec) ]->
+  [ Out(m), Out(~sec) ]
+
+rule RuleStep2:
+  let sec_p = fst(sdec(msg, $k))
+      pub_p = snd(sdec(msg, $k))
+  in
+  [ In(msg) ]
+  --[ Test2() ]->
+  [ Out(pub_p) ]
+
+rule RuleStep3:
+  [ ] --[ Test3() ]-> [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

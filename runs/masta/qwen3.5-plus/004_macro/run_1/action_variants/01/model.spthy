@@ -1,0 +1,87 @@
+theory BSKTCN begin
+
+builtins: asymmetric-encryption, hashing
+
+// PKI setup: generate server's long-term key pair
+rule Generate_key_pair:
+  [ Fr(~skS) ]
+  -->
+  [ !Pk($S, pk(~skS))
+  , !Ltk($S, ~skS)
+  , Out(pk(~skS))
+  ]
+
+// LtkReveal rule for server key compromise
+rule LtkReveal:
+  [ !Ltk($S, skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(skS) ]
+
+// RuleStep1: Client generates session key and correlation nonce, sends encrypted key
+rule RuleStep1:
+  let ciphertext = aenc(~k, pkS)
+  in
+  [ Fr(~k)
+  , Fr(~rc)
+  , !Pk($S, pkS)
+  ]
+  --[ Secret('C', $S, ~k), Honest('C'), Honest($S), Test1() ]->
+  [ Out(<ciphertext, ~rc>)
+  , !ClientWait($S, ~k, ~rc)
+  ]
+
+// RuleStep2: Server receives encrypted key, decrypts, computes hash, sends confirmation
+rule RuleStep2:
+  let k = adec(ciphertext, skS)
+      digest = h(k)
+  in
+  [ In(<ciphertext, rc>)
+  , !Ltk($S, skS)
+  ]
+  --[ Running($S, 'C', <k, rc>), Test2() ]->
+  [ Out(<digest, rc>)
+  ]
+
+// RuleStep3: Client receives confirmation, verifies digest matches h(k)
+rule RuleStep3:
+  let expected_digest = h(k)
+  in
+  [ In(<expected_digest, rc>)
+  , !ClientWait($S, k, rc)
+  ]
+  --[ Commit('C', $S, <k, rc>), Honest('C'), Test3() ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

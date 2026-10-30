@@ -1,0 +1,27 @@
+- role: Responder_Challenge
+  operations:
+  - generate_nonces:
+    - ~rb
+  - send:
+    - ~rb
+- role: Initiator_Response
+  operations:
+  - receive:
+    - rb
+  - generate_nonces:
+    - ~ra
+  - send:
+    - ~ra
+    - mac(<$sid1_mut_cr, ~ra, rb, $B>, ~kAB)
+- role: Responder_Auth
+  operations:
+  - receive:
+    - ra
+    - mac1
+  - send:
+    - mac(<$sid2_mut_cr, ~rb, ra>, ~kAB)
+- role: Initiator_Auth
+  operations:
+  - receive:
+    - mac2
+  - send: <END>

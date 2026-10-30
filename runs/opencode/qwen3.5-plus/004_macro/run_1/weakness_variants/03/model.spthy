@@ -1,0 +1,75 @@
+theory BsktUnbound
+begin
+
+builtins: asymmetric-encryption, hashing
+
+// Generate key pairs for all agents
+rule KeyGen:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+// Client generates fresh session key k and sends aenc(k, pk(S))
+rule Client_Send:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, 'client'), Running($C, $S, <'client', ~k>) ]->
+  [ Out(aenc(~k, pkS)), St_C_Wait($C, $S, ~k) ]
+
+// Server receives m1, decrypts, and sends back <k', h(k')>
+rule Server_Respond:
+  [ In(m1), !Ltk($S, skS), !Pk($S, pkS) ]
+  --[ Test2(), Create($S, 'server'), Running($S, $C, <'server', adec(m1, skS)>) ]->
+  [ Out(<adec(m1, skS), h(adec(m1, skS))>) ]
+
+// Client receives (v, d), verifies d = h(v), and accepts
+rule Client_Accept:
+  [ St_C_Wait($C, $S, ~k), In(<v, d>) ]
+  --[ Test3(), Running($C, $S, <'client', ~k>), Commit($C, $S, <'client', ~k, v>), Secret($C, $S, ~k) ]->
+  [ ]
+
+// Adversary can reveal long-term keys
+rule Ltk_Reveal:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+// Secrecy of transported session key
+// category: secrecy
+lemma secrecy:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// Non-injective agreement on transported key
+// This is the WEAKNESS: the protocol does not bind the reply to the key
+// The adversary can inject a fake (v, h(v)) without S ever responding
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All C S k v #i.
+     Commit(C, S, <'client', k, v>) @ i
+   ==>
+       (Ex #j. Running(S, C, <'server', k>) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// Injective agreement on transported key
+// category: injective_agreement
+lemma injective_agreement:
+  "All C S k v #i.
+     Commit(C, S, <'client', k, v>) @ i
+   ==>
+       ( (Ex #j. Running(S, C, <'server', k>) @ j
+             & j < i
+             & not (Ex C2 S2 #i2. Commit(C2, S2, <'client', k, v>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// Executable witness: complete honest protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

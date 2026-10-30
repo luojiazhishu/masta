@@ -1,0 +1,216 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                With Keyless Initiator-Side Verification
+                       draft-famed-crxor-nokvfy-00
+
+
+Abstract
+
+   This document specifies CR-XOR-NoKVfy, a two-flow protocol
+   between two endpoints that share a long-term symmetric key k.
+   The responder computes a hash tag over the exclusive-or of the
+   challenge nonce, the responder nonce, and k.  The initiator
+   recomputes the verification tag over only the exclusive-or of
+   the two nonces, omitting k from its own input to the hash
+   function.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 4
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-NoKVfy is a deliberately minimal two-flight exchange in
+   which the responder computes a tag over the shared key while
+   the initiator's verification check is taken over the nonces
+   only.  Implementations may adopt this profile when the cost of
+   extracting k inside the initiator's verification path is
+   considered prohibitive at deployment time.
+
+   This document defines the wire format and the processing rules
+   so that interoperable implementations can be produced.  The
+   security properties available under this profile are spelled
+   out in Section 6 in detail.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  na is the
+   initiator nonce, nb is the responder nonce, and k is the shared
+   symmetric key.  The role names I and R denote the initiator and
+   the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-NoKVfy runs in a single round trip:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb                  |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify  H(na XOR nb) = received tag           |
+          |                                                |
+
+   The initiator generates a uniformly random nonce na of length
+   L_n and transmits it.  Upon receipt the responder generates a
+   fresh nonce nb of length L_n, computes the tag
+
+         t = H(na XOR k XOR nb)
+
+   and transmits <t, nb>.  The initiator recomputes
+
+         t' = H(na XOR nb)
+
+   and compares t' to the received tag.
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+      } ResponderFlight;
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band.  k MUST be
+   drawn uniformly at random and MUST be kept secret to both
+   endpoints.
+
+   An implementation in role I performs the following steps.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(na XOR nb).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  If t' equals tag, conclude the run; otherwise abort.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   MUST verify that na has length L_n and is non-zero, generate a
+   fresh nb of length L_n, compute t = H(na XOR k XOR nb), and
+   transmit <t, nb>.
+
+
+6.  Security Considerations
+
+   CR-XOR-NoKVfy provides no cryptographic authentication of the
+   responder to the initiator.  The verification check at step
+   5.3.c does not depend on k, so an active attacker that is in a
+   position to inject traffic on the return path can produce an
+   accepting flight without holding k.  Concretely, an attacker
+   that observes the initiator's challenge na on the wire chooses
+   any value nb of length L_n and any tag t = H(na XOR nb), and
+   transmits <t, nb> to the initiator; the initiator's check
+   succeeds.
+
+   Specifically, this protocol does not provide aliveness of the
+   responder.  The initiator can complete a run successfully even
+   when no entity in possession of k has reacted to the challenge,
+   so a successful run cannot be used as evidence that the peer
+   is present, reachable, or in possession of k.  Implementations
+   MUST NOT consume the outcome of CR-XOR-NoKVfy as an
+   authentication signal.
+
+   The responder still computes the tag over k, which means that
+   a responder that does in fact run on a given input commits some
+   value of H(na XOR k XOR nb) to the wire.  This value carries no
+   semantic weight for the initiator and is observed only by
+   adversaries in transit.  Implementations MAY repurpose the
+   tag for out-of-band auditing, but MUST NOT rely on it as an
+   authentication signal under this profile.
+
+   The hash function H MUST be selected so that the work factor
+   of preimage and collision attacks exceeds the lifetime value
+   of k, in case such out-of-band consumers exist.
+
+   The non-zero check on the nonces removes a degenerate parsing
+   case but does not contribute to authentication.
+
+   Compromise of k breaks any out-of-band use of the tag.
+   Implementations SHOULD provide a mechanism to rotate k.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments
+   operating over open networks SHOULD rate-limit incoming
+   InitiatorFlights at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

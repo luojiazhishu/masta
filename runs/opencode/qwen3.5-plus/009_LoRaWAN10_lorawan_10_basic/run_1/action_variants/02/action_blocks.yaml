@@ -1,0 +1,35 @@
+- role: Device_Init
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - ~AppKey
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevAddr
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+- role: Server_Respond
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - DevEUI
+    - JoinEUI
+    - DevNonce
+    - mac(SAppKey, <'JoinRequest', DevEUI, JoinEUI, DevNonce>)
+  - generate_nonces:
+    - ~JoinNonce
+    - ~SessionCorrelator
+    - ~SDevAddr
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, ~SDevAddr>, SAppKey)
+    - ~SessionCorrelator
+- role: Device_Finish
+  operations:
+  - receive:
+    - senc(<'JoinAccept', JoinNonce, DevAddr>, AppKey)
+    - SessionCorrelator
+  - send: <END>

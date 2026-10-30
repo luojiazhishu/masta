@@ -1,0 +1,89 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+// Persistent facts for long-term keys and certificates
+rule RegisterClientKey:
+  [ Fr(~skc) ]
+  --[ Create($C, ~skc), Ltk($C, ~skc) ]->
+  [ !Ltk($C, ~skc), !Pk($C, pk(~skc)) ]
+
+rule RegisterServerKey:
+  [ Fr(~sks) ]
+  --[ Create($S, ~sks), Ltk($S, ~sks) ]->
+  [ !Ltk($S, ~sks), !Pk($S, pk(~sks)) ]
+
+// Action Block 1: Client sends GetEndpointsRequest
+rule Client_GetEndpoints:
+  [ !Pk($C, pkc), !Pk($S, pks) ]
+  --[ Test1() ]->
+  [ Out('GEReq'), St_C1($C, $S, pkc, pks) ]
+
+// Action Block 2: Server responds with GetEndpointsResponse
+rule Server_GetEndpointsResponse:
+  [ In('GEReq'), !Ltk($S, sks), !Pk($S, pks) ]
+  --[ Test2(), Running($S, $C, <'server', pks>) ]->
+  [ Out(<'GERes', pks, 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>), St_S1($S, $C, pks) ]
+
+// Action Block 3: Client sends OpenSecureChannelRequest
+rule Client_OpenSecureChannel:
+  [ St_C1($C, $S, pkc, pks), !Ltk($C, skc), Fr(~nc) ]
+  --[ Test3(), Running($C, $S, <'client', pkc, ~nc, pks>) ]->
+  [ Out(<pkc, ~nc, sign(h(<'OSCReq', pkc, ~nc>), skc)>), St_C2($C, $S, pkc, pks, ~nc) ]
+
+// Action Block 4: Server responds with OpenSecureChannelResponse
+// Server verifies client signature by pattern matching
+rule Server_OpenSecureChannelResponse:
+  [ In(<pkc, nc, clientsig>), St_S1($S, $C, pks), !Ltk($S, sks), Fr(~ns) ]
+  --[ Test4(), Running($S, $C, <'server', pks, ~ns>), Commit($S, $C, <'server', pks, ~ns, pkc, nc>) ]->
+  [ Out(<pks, ~ns, 'ST', 'TTL', sign(h(<'OSCRes', ~ns, 'ST', 'TTL'>), sks)>), St_S2($S, $C, pks, pkc, ~ns, nc) ]
+
+// Action Block 5: Client validates response and completes
+// Client verifies server signature by pattern matching
+rule Client_Complete:
+  [ St_C2($C, $S, pkc, pks, nc), In(<pks, ns, 'ST', 'TTL', serversig>), !Pk($S, pks) ]
+  --[ Test5(), Commit($C, $S, <'client', pkc, nc, pks, ns>), Honest($C), Honest($S), Secret($C, $S, h(<nc, ns>)) ]->
+  [ ]
+
+// Long-term key reveal rule for adversary
+rule RevealLtk:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+// Secrecy of channel binding key
+// category: secrecy
+lemma secrecy_channel_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement on Client Nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All S C pkc pkS nc ns #i.
+     Commit(S, C, <'server', pkS, ns, pkc, nc>) @ i
+   ==>
+       (Ex #j. Running(C, S, <'client', pkc, nc, pkS>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement on Server Nonce
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All C S pkc pkS nc ns #i.
+     Commit(C, S, <'client', pkc, nc, pkS, ns>) @ i
+   ==>
+       (Ex #j. Running(S, C, <'server', pkS, ns>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma witnessing complete protocol run
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

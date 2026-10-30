@@ -1,0 +1,67 @@
+theory CRXorIAudit
+begin
+
+builtins: hashing, xor
+
+functions: com/2
+
+// Setup: establish a long-term shared symmetric key between an initiator
+// role $I and a responder role $R; the position in !SharedKey fixes the role
+rule Setup_Key:
+    [ Fr(~k) ]
+  --[ KeyGen($I, $R) ]->
+    [ !SharedKey($I, $R, ~k) ]
+
+// Adversary may compromise the long-term key
+rule Reveal_Ltk:
+    [ !SharedKey(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+    [ Out(k) ]
+
+// Action block 1: Initiator generates na, derives audit tag, sends na
+rule I_Init:
+  let tag_audit = com(~na, ~na)
+  in
+    [ Fr(~na), !SharedKey($I, $R, ~k) ]
+  --[ Test1(), Create($I, ~na) ]->
+    [ Out(~na), St_I_1($I, $R, ~na, ~k, tag_audit) ]
+
+// Action block 2: Responder receives na, generates nb, computes t, sends <t, nb>
+rule R_Respond:
+  let t = h(na XOR ~k XOR ~nb)
+  in
+    [ In(na), Fr(~nb), !SharedKey($I, $R, ~k) ]
+  --[ Test2(), Create($R, ~nb), Running($R, $I, <'R', t>) ]->
+    [ Out(<t, ~nb>) ]
+
+// Action block 3: Initiator verifies tag via pattern match on the expected hash
+rule I_Verify:
+  let t_prime = h(~na XOR ~k XOR nb)
+  in
+    [ St_I_1($I, $R, ~na, ~k, tag_audit), In(<t_prime, nb>) ]
+  --[ Test3(), Commit($I, $R, <'R', t_prime>), Honest($I), Honest($R) ]->
+    [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, <'R', t>) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'R', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'R', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,43 @@
+theory bsktopen begin
+
+builtins: asymmetric-encryption, hashing
+
+// Long-term key generation for Server
+rule Generate_Server_Keys:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+// RuleStep1: Client generates k, encrypts, sends m1
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(aenc(~k, pkS)) ]
+
+// RuleStep2: Server receives m1, decrypts, sends m2
+// Fixed: Receive ciphertext as a single variable 'c'.
+// Tamarin's built-in asymmetric-encryption theory provides the equation:
+// adec(aenc(m, pk(sk)), sk) = m.
+// We do not need to pattern match the structure in the In() fact.
+// We simply receive the term 'c', and the output uses adec(c, skS).
+// This avoids the derivation check error for variables inside the In() pattern.
+rule RuleStep2:
+  [ In(c), !Ltk($S, skS) ]
+  let k = adec(c, skS)
+  in
+  --[ Test2() ]->
+  [ Out(h(k)) ]
+
+// RuleStep3: Client receives m2 (any message), accepts
+rule RuleStep3:
+  [ In(m2) ]
+  --[ Test3(), Accept() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ t1 & Test2() @ t2 & Test3() @ t3
+     & t1 < t2 & t2 < t3"
+
+end

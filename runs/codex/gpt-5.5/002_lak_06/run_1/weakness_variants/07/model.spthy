@@ -1,0 +1,70 @@
+theory RfidKeyLeak begin
+
+builtins: hashing, xor
+
+functions: mix/3
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Test1(), Create($R, ~k), Create($T, ~k), Secret($R, $T, ~k), Honest($R), Honest($T) ]->
+  [ !Shared($R, $T, ~k) ]
+
+rule Reader_Challenge:
+  [ Fr(~r0), !Shared($R, $T, k) ]
+  --[ Test2(), Create($R, ~r0) ]->
+  [ Out(~r0), ReaderState($R, $T, k, ~r0) ]
+
+rule Tag_Response:
+  let tag_mac = h(mix(r0, ~r1, k)) in
+  [ Fr(~r1), In(r0), !Shared($R, $T, k) ]
+  --[ Test3(), Create($T, ~r1), Running($T, $R, <'TagResponse', r0, ~r1, k>) ]->
+  [ Out(<~r1, tag_mac>), TagState($T, $R, k, r0, ~r1, tag_mac) ]
+
+rule Reader_Confirmation:
+  let tag_mac = h(mix(r0, r1, k))
+      reader_mac = h(mix(tag_mac, k, r0)) in
+  [ ReaderState($R, $T, k, r0), In(<r1, tag_mac>) ]
+  --[ Test4(), Commit($R, $T, <'TagResponse', r0, r1, k>), Running($R, $T, <'ReaderConfirmation', r0, r1, k>), Honest($R), Honest($T) ]->
+  [ Out(<reader_mac, k>) ]
+
+rule Tag_Accept:
+  let reader_mac = h(mix(tag_mac, k, r0)) in
+  [ TagState($T, $R, k, r0, r1, tag_mac), In(<reader_mac, k>) ]
+  --[ Test5(), Commit($T, $R, <'ReaderConfirmation', r0, r1, k>), Honest($T), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+     not (Ex #j. K(k) @ #j)"
+
+// category: noninjective_agreement
+lemma reader_agrees_with_tag:
+  "All A B r0 r1 k #i.
+     Commit(A, B, <'TagResponse', r0, r1, k>) @ #i
+   ==>
+     (Ex #j. Running(B, A, <'TagResponse', r0, r1, k>) @ #j)"
+
+// category: noninjective_agreement
+lemma tag_agrees_with_reader:
+  "All A B r0 r1 k #i.
+     Commit(A, B, <'ReaderConfirmation', r0, r1, k>) @ #i
+   ==>
+     (Ex #j. Running(B, A, <'ReaderConfirmation', r0, r1, k>) @ #j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1
+     & Test2() @ #t2
+     & Test3() @ #t3
+     & Test4() @ #t4
+     & Test5() @ #t5
+     & #t1 < #t2
+     & #t2 < #t3
+     & #t3 < #t4
+     & #t4 < #t5"
+
+end

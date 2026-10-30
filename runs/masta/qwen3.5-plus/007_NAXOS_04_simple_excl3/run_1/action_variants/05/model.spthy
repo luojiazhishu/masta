@@ -1,0 +1,88 @@
+theory SimplifiedNaxos begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1, com/2, bar/1
+
+// PKI: each agent has a long-term DH key pair
+rule GenerateKey:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, 'g'^~ltk), Out('g'^~ltk) ]
+
+// LtkReveal rule for compromised participants
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+// RuleStep1: Initiator sends Message 1
+rule RuleStep1:
+  let
+    exI = h1(<~eskI, ~ltkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI), Fr(~tidI), !Ltk($I, ~ltkI) ]
+  --[ Test1(), Honest($I), Running($I, $R, <~eskI, ~tidI>) ]->
+  [ Out(hkI), !InitState(~tidI, $I, ~ltkI, ~eskI) ]
+
+// RuleStep2: Responder receives Message 1, sends Message 2
+rule RuleStep2:
+  let
+    exR = h1(<~eskR, ~ltkR>)
+    hkR = 'g'^exR
+    kR = h2(<pkI^exR, hkI^~ltkR, $I, $R>)
+    auditCommit = com($I, $R)
+    keyFingerprint = bar(pkI)
+  in
+  [ In(hkI), Fr(~eskR), Fr(~tidR), !Ltk($R, ~ltkR), !Pk($I, pkI) ]
+  --[ Test2(), SessionKeyR(~tidR, $R, $I, kR), AuditLog(~tidR, auditCommit, keyFingerprint), Running($R, $I, <kR, ~tidR>), Honest($R), Commit($R, $I, <kR, ~tidR>) ]->
+  [ Out(hkR), !RespState(~tidR, $R, $I, ~ltkR, exR, hkI) ]
+
+// RuleStep3: Initiator receives Message 2, computes session key
+rule RuleStep3:
+  let
+    exI = h1(<~eskI, ~ltkI>)
+    kI = h2(<hkR^~ltkI, pkR^exI, $I, $R>)
+  in
+  [ In(hkR), !InitState(~tidI, $I, ~ltkI, ~eskI), !Pk($R, pkR) ]
+  --[ Test3(), SessionKeyI(~tidI, $I, $R, kI), Secret($I, $R, kI), Commit($I, $R, <kI, ~tidI>), Honest($I) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

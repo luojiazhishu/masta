@@ -1,0 +1,27 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(r0 XOR ~r1 XOR k)
+- role: Reader_Verify
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - send:
+    - h(tag_mac XOR k XOR r0)
+- role: Tag_Verify
+  operations:
+  - receive:
+    - reader_mac
+  - send: <END>

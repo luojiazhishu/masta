@@ -1,0 +1,69 @@
+theory PublicKeyEventTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+// Setup rules for long-term keys
+rule Setup_Ltk:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)) ]
+
+// Block 1: Client generates session key k and sends m1 = aenc(k, pk(S))
+rule Client_Send:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Create($C, ~k), Running($C, $S, <'client', ~k>), Secret($C, $S, ~k) ]->
+  [ Out(aenc(~k, pkS)), St_C_Wait($C, $S, ~k) ]
+
+// Block 2: Server receives m1, decrypts to get k', sends m2 = h(k')
+// Server uses its private key to decrypt the ciphertext
+// Note: Server doesn't know who the client is - this is a weakness
+// We model decryption by pattern matching on aenc(k, pkS) in In(...)
+rule Server_Respond:
+  [ In(aenc(k, pk(S))), !Ltk(S, skS) ]
+  --[ Test2(), Create(S, k), Running(S, $C, <'server', k>) ]->
+  [ Out(h(k)) ]
+
+// Block 3: Client receives any m2, accepts without check
+rule Client_Accept:
+  [ St_C_Wait(C, S, ~k), In(m2) ]
+  --[ Test3(), Commit(C, S, <'client', ~k>), Honest(C) ]->
+  [ ]
+
+// Long-term key reveal
+rule Ltk_Reveal:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All C S k #i.
+     Commit(C, S, <'client', k>) @ i
+   ==>
+       (Ex #j. Running(S, C, <'server', k>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(C) @ i)"
+
+// category: aliveness
+lemma aliveness:
+  "All C S k #i.
+     Commit(C, S, <'client', k>) @ i
+   ==>
+       (Ex sid #j. Create(S, sid) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(C) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

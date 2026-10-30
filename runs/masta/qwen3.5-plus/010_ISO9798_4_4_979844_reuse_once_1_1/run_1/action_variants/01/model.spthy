@@ -1,0 +1,178 @@
+theory FAMED_ISO979844 begin
+
+builtins: hashing
+
+functions: mac/2
+
+// Long-term key provisioning
+rule ProvisionKey:
+  [ Fr(~kAB) ]
+  --[ Secret(~kAB), Honest('IdA'), Honest('IdB') ]->
+  [ !SharedKey('IdA', 'IdB', ~kAB)
+  , !SharedKey('IdB', 'IdA', ~kAB)
+  ]
+
+// LtkReveal rule for symmetric key compromise
+rule LtkReveal_A:
+  [ !SharedKey('IdA', 'IdB', kAB) ]
+  --[ LtkReveal('IdA') ]->
+  [ Out(kAB) ]
+
+rule LtkReveal_B:
+  [ !SharedKey('IdB', 'IdA', kAB) ]
+  --[ LtkReveal('IdB') ]->
+  [ Out(kAB) ]
+
+// RuleStep1: Responder B sends Challenge1 = <RB, Text1, NonceB1>
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1), Fr(~NonceB1)
+  , !SharedKey('IdB', 'IdA', ~kAB)
+  ]
+  --[ Test1(), Running('IdB', 'IdA', <~RB>) ]->
+  [ Out(<~RB, ~Text1, ~NonceB1>)
+  , !StateB1('IdB', ~RB, ~Text1, ~NonceB1, ~kAB)
+  ]
+
+// RuleStep2: Initiator A receives Challenge1, sends TokenAB
+rule RuleStep2:
+  [ In(<RB, Text1, NonceB1>)
+  , Fr(~RA), Fr(~Text2), Fr(~Text3)
+  , !SharedKey('IdA', 'IdB', ~kAB)
+  ]
+  --[ Test2(), Running('IdA', 'IdB', <~RA>), Running('IdA', 'IdB', <RB, ~RA>) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, mac(<'sid1_mut_cr', ~RA, RB, 'IdB'>, ~kAB)>)
+  , !StateA1('IdA', ~RA, RB, ~kAB)
+  ]
+
+// RuleStep3: Responder B receives TokenAB, verifies mac1, sends TokenBA
+rule RuleStep3:
+  [ In(<RA, Text3, <'sid1_mut_cr', RA, RB, 'IdB', Text2>, mac1>)
+  , !StateB1('IdB', RB, Text1, NonceB1, ~kAB)
+  , !SharedKey('IdB', 'IdA', ~kAB)
+  , Fr(~Text4), Fr(~Text5)
+  ]
+  --[ Test3(), Commit('IdB', 'IdA', <RB, RA>) ]->
+  [ Out(<~Text5, mac(<'sid2_mut_cr', RB, RA>, ~kAB)>)
+  , !StateB2('IdB', RB, RA, ~kAB)
+  ]
+
+// RuleStep4: Initiator A receives TokenBA, verifies mac2, completes session
+rule RuleStep4:
+  [ In(<Text5, mac2>)
+  , !StateA1('IdA', RA, RB, ~kAB)
+  , !SharedKey('IdA', 'IdB', ~kAB)
+  ]
+  --[ Test4(), Commit('IdA', 'IdB', <RA, RB>) ]->
+  [ Out('<END>')
+  , !StateA2('IdA', RA, RB, ~kAB)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_a:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==> (Ex #j. Running(B, A, t) @ j
+        & j < i
+        & not (Ex A2 B2 #i2. Commit(A2, B2, t) @ i2
+                           & not (#i2 = #i)))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_at_b:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==> (Ex #j. Running(B, A, t) @ j
+        & j < i
+        & not (Ex A2 B2 #i2. Commit(A2, B2, t) @ i2
+                           & not (#i2 = #i)))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==> (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end
+
+/*
+# Security Analysis Summary: FAMED ISO/IEC 9798-4-4 Mutual Authentication Protocol
+
+## Overview
+This document summarizes the formal security analysis of the FAMED ISO/IEC 9798-4-4 mutual authentication protocol using the Tamarin prover.
+The analysis covers 5 security properties derived from the threat model.
+
+## Verification Results
+| Property | Category | Verdict |
+|----------|----------|---------|
+| long_term_key_secrecy | secrecy | VERIFIED |
+| injective_agreement_at_a | injective_agreement | FALSIFIED |
+| injective_agreement_at_b | injective_agreement | FALSIFIED |
+| noninjective_agreement_at_a | noninjective_agreement | FALSIFIED |
+| noninjective_agreement_at_b | noninjective_agreement | FALSIFIED |
+
+## Detailed Findings
+
+### Property 1: Long-Term Key Secrecy (VERIFIED)
+Lemma: secrecy_long_term_key_secrecy
+Statement: The shared symmetric key kAB must remain unknown to the adversary unless explicitly revealed.
+Result: VERIFIED
+Analysis: The key is generated fresh (Fr(~kAB)), stored as persistent facts (!SharedKey), and the only way for the adversary to learn it is through the explicit LtkReveal channel. The MAC function does not expose the key.
+
+### Property 2: Injective Agreement at A (FALSIFIED)
+Lemma: injective_agreement_injective_agreement_at_a
+Statement: When Initiator A completes a session with Responder B, there must exist a unique matching session at B.
+Result: FALSIFIED
+Counterexample: The protocol is vulnerable to replay attacks. The adversary can intercept a valid TokenBA message from B to A and replay this message to A in a different session. A will accept the replayed message and commit, but B never ran a matching session with those specific nonces.
+Root Cause: RuleStep4 does not verify that the received mac2 corresponds to a fresh session. The MAC covers <RB, RA> but there is no mechanism to prevent replay of previously valid MACs.
+
+### Property 3: Injective Agreement at B (FALSIFIED)
+Lemma: injective_agreement_injective_agreement_at_b
+Statement: When Responder B completes a session with Initiator A, there must exist a unique matching session at A.
+Result: FALSIFIED
+Counterexample: Similar to Property 2, the responder's completion (RuleStep3) can be triggered by replayed messages. The adversary can capture a valid TokenAB from A to B and replay it to B in a different context.
+Root Cause: RuleStep3's MAC verification does not bind the session to a unique, non-replayable context.
+
+### Property 4: Non-Injective Agreement at A (FALSIFIED)
+Lemma: noninjective_agreement_noninjective_agreement_at_a
+Statement: When Initiator A completes a session with Responder B, there must exist at least one session at B with matching challenge values.
+Result: FALSIFIED
+Counterexample: Even the weaker non-injective agreement fails. The adversary can construct a complete fake session where A receives a crafted TokenBA that passes MAC verification, but B never actually participated.
+Root Cause: The Running action facts do not properly bind the full session context. RuleStep2 emits Running('IdA', 'IdB', <~RA>) and Running('IdA', 'IdB', <RB, ~RA>) but the Commit at RuleStep4 uses <RA, RB> - there is a mismatch in what is being agreed upon.
+
+### Property 5: Non-Injective Agreement at B (FALSIFIED)
+Lemma: noninjective_agreement_noninjective_agreement_at_b
+Statement: When Responder B completes a session with Initiator A, there must exist at least one session at A with matching challenge values.
+Result: FALSIFIED
+Counterexample: Same fundamental issue as Property 4. The Running facts emitted by RuleStep1 (Running('IdB', 'IdA', <~RB>)) do not match the Commit term at RuleStep3 (Commit('IdB', 'IdA', <RB, RA>)).
+Root Cause: The Running action at B only includes RB, but the Commit includes both RB and RA. This mismatch allows the lemma to be falsified because the Running fact cannot satisfy the Commit's term requirement.
+
+## Critical Vulnerabilities Identified
+1. Replay Attack Vulnerability: The protocol lacks explicit freshness guarantees in the final verification steps.
+2. Running/Commit Term Mismatch: The action facts used for authentication lemmas do not consistently represent the same session data.
+3. Missing Session Binding: The protocol does not properly bind all session parameters (RA, RB, identities) into a single coherent session identifier.
+
+## Conclusion
+The FAMED ISO/IEC 9798-4-4 protocol implementation analyzed provides long-term key secrecy but fails to provide any form of authentication agreement (injective or non-injective) for either party.
+Security Status: NOT SUITABLE FOR DEPLOYMENT without significant revision to fix the agreement properties.
+*/

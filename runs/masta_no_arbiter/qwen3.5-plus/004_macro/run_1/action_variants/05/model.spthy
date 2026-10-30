@@ -1,0 +1,29 @@
+theory BSKT_D begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: done/0
+
+rule SetupKeys:
+  [ Fr(~skS) ]
+  --[ Setup($S, ~skS) ]->
+  [ !Pk($S, pk(~skS)), !Ltk($S, ~skS), Out(pk(~skS)) ]
+
+rule RuleStep1:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(aenc(~k, pkS)) ]
+
+rule RuleStep2:
+  [
+    In(aenc(~k, pkS)),
+    !Ltk($S, ~skS)
+  ]
+  --[ Test2() ]->
+  [ Out(<h(~k), 'done'>) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

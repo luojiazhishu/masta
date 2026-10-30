@@ -1,0 +1,35 @@
+theory SymmetricKeyEncapsulationAuxiliary
+begin
+
+builtins: symmetric-encryption
+
+functions: aux/1, shk/2 [private]
+
+rule Initiator_Encapsulate:
+  let
+    auxv = aux(~sec)
+    msg = senc(<~sec, ~pub>, shk($I, $R))
+  in
+  [ Fr(~sec), Fr(~pub) ]
+  --[ Test1(), Secret($I, $R, ~sec), Honest($I), Honest($R) ]->
+  [ Out(msg), Sent_Ciphertext($I, $R, ~sec, ~pub, msg), St_I_Done($I, $R, ~sec, ~pub, auxv) ]
+
+rule Responder_Decapsulate:
+  [ Sent_Ciphertext($I, $R, sec, pub, msg), In(msg) ]
+  --[ Test2() ]->
+  [ Out(pub), St_R_Done($I, $R, sec, pub) ]
+
+// category: secrecy
+lemma secrecy_encapsulated_secret:
+  "All A B sec #i.
+     Secret(A, B, sec) @ i
+   ==>
+       not (Ex #j. K(sec) @ j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

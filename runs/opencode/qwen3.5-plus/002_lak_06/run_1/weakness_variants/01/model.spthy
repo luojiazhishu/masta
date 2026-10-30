@@ -1,0 +1,62 @@
+theory LAK06
+begin
+
+builtins: xor, hashing
+
+rule setup:
+  [Fr(~k)]
+  --[ OnlyOnce('setup'), Create(~k), Secret('R', 'T', ~k) ]->
+  [!Reader(~k), !Tag(~k)]
+
+rule initiatereader:
+  [!Reader(~k), Fr(~r0)]
+  --[ OnlyOnce('initiareader'), Test1() ]->
+  [ ReaderState1(~k, ~r0), Out(~r0) ]
+
+rule tag1:
+  [ !Tag(~k), Fr(~r1), In(r0) ]
+  --[ Running('T', 'R', <'reader', ~k, r0, ~r1>)
+    , Test2() ]->
+  [ TagState1(~k, ~r1, r0), Out(<~r1, h(r0 XOR ~k)>) ]
+
+rule acceptreader:
+  [ ReaderState1(~k, ~r0), In(<r1, h(~r0 XOR ~k)>) ]
+  --[ Commit('R', 'T', <'reader', ~k, ~r0, r1>)
+    , Running('R', 'T', <'tag', ~k, ~r0, r1>)
+    , Test3() ]->
+  [ Out(h(h(~r0 XOR ~k) XOR ~k XOR ~r0)) ]
+
+rule accepttag:
+  [ TagState1(~k, ~r1, r0), In(h(h(r0 XOR ~k) XOR ~k XOR r0)) ]
+  --[ Commit('T', 'R', <'tag', ~k, r0, ~r1>)
+    , FinTag()
+    , Test4() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==> not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All t #i.
+     Commit('T', 'R', t) @ i
+   ==>
+       (Ex #j. Running('R', 'T', t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All t #i.
+     Commit('R', 'T', t) @ i
+   ==>
+       (Ex #j. Running('T', 'R', t) @ j)"
+
+end

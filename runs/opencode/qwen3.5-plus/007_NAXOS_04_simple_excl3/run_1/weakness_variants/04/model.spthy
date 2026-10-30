@@ -1,0 +1,73 @@
+theory NAXOS_Simple_Excl3
+begin
+
+builtins: hashing
+
+functions: h1/2, h2/1, lk/1
+
+rule Setup:
+  [ Fr(~skI), Fr(~skR) ]
+  --[ ]->
+  [ !Ltk('I', ~skI), !Ltk('R', ~skR) ]
+
+rule Initiator_Start:
+  [ Fr(~eskI), Fr(~tidI), !Ltk('I', skI) ]
+  --[ Test1(), Create('I', ~tidI) ]->
+  [ Out(lk('I')), St_I_1('I', 'R', ~eskI, skI) ]
+
+rule Responder_Receive:
+  [ In(hkI), Fr(~eskR), Fr(~tidR), !Ltk('R', skR) ]
+  --[ Test2(), Create('R', ~tidR), Running('R', 'I', <'responder', 'I', 'R'>) ]->
+  [ Out(lk('R')), St_R_1('R', 'I', ~eskR, skR, hkI) ]
+
+rule Initiator_Finish:
+  [ St_I_1('I', 'R', ~eskI, skI), In(hkR) ]
+  --[ Test3(), Running('I', 'R', <'initiator', 'I', 'R'>), Commit('I', 'R', <'initiator', 'I', 'R'>), Secret('I', 'R', h2(<'I', 'R'>)), Honest('I') ]->
+  [ ]
+
+rule Responder_Finish:
+  [ St_R_1('R', 'I', ~eskR, skR, hkI) ]
+  --[ Test4(), Commit('R', 'I', <'responder', 'I', 'R'>), Secret('R', 'I', h2(<'I', 'R'>)), Honest('R') ]->
+  [ ]
+
+rule LtkReveal_I:
+  [ !Ltk('I', skI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(skI) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', skR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(skR) ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma agreement_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma agreement_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

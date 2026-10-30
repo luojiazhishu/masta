@@ -1,0 +1,173 @@
+theory LAK06_INIT
+begin
+
+builtins: hashing, xor
+
+/*
+  Lightweight Authentication Protocol for Low-Cost RFID Systems
+  (draft-famed-lak06-00).
+
+  Three on-air messages:
+    R0:  'INIT', r0
+    T1:  r1, h(r0 XOR r1 XOR k)
+    R1:  h(h(r0 XOR r1 XOR k) XOR k XOR r0)
+
+  k is a long-term symmetric key shared between a specific Reader
+  and a specific Tag.  'INIT' is a fixed framing label and is NOT
+  fed into any MAC.
+
+  Action blocks (1-indexed):
+    1. Reader generates r0 and sends ('INIT', r0).
+    2. Tag receives ('INIT', r0), generates r1, computes
+       tag_mac = h(r0 XOR r1 XOR k), sends (r1, tag_mac).
+    3. Reader receives (r1, tag_mac), checks
+       tag_mac = h(r0 XOR r1 XOR k), computes and sends
+       reader_mac = h(tag_mac XOR k XOR r0).
+    4. Tag receives reader_mac and checks
+       reader_mac = h(tag_mac XOR k XOR r0).
+*/
+
+// ---------------------------------------------------------------
+// Setup: provision a long-term symmetric key for a Reader/Tag pair.
+// ---------------------------------------------------------------
+
+rule Setup_KeyPair:
+    [ Fr(~k) ]
+  --[ KeyGen($R, $T) ]->
+    [ !Ltk($R, $T, ~k) ]
+
+// Adversary may compromise the long-term key of a pair.
+rule Reveal_Ltk:
+    [ !Ltk(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+    [ Out(k) ]
+
+// ---------------------------------------------------------------
+// Action block 1: Reader sends the framing label and r0.
+// ---------------------------------------------------------------
+
+rule Reader_Start:
+    [ !Ltk($R, $T, k), Fr(~r0) ]
+  --[ Test1()
+    , Create($R, ~r0)
+    ]->
+    [ Out(<'INIT', ~r0>)
+    , StR1($R, $T, k, ~r0)
+    ]
+
+// ---------------------------------------------------------------
+// Action block 2: Tag receives R0, replies with r1 and tag_mac.
+// The Tag at this point publicly commits to running with the
+// Reader on the (r0, r1) it actually computed against.
+// ---------------------------------------------------------------
+
+rule Tag_Respond:
+  let tag_mac = h(r0 XOR ~r1 XOR k)
+  in
+    [ !Ltk($R, $T, k), In(<'INIT', r0>), Fr(~r1) ]
+  --[ Test2()
+    , Create($T, ~r1)
+    , Running($T, $R, <'Reader', $R, $T, r0, ~r1>)
+    ]->
+    [ Out(<~r1, tag_mac>)
+    , StT1($R, $T, k, r0, ~r1, tag_mac)
+    ]
+
+// ---------------------------------------------------------------
+// Action block 3: Reader checks tag_mac and emits reader_mac.
+// On accepting T1 the Reader commits to the (r0, r1) it
+// recorded and (in advance of action block 4 firing on the Tag
+// side) declares the parameters it expects the Tag to commit on.
+// ---------------------------------------------------------------
+
+rule Reader_Finish:
+  let expected = h(~r0 XOR r1 XOR k)
+      reader_mac = h(tag_mac XOR k XOR ~r0)
+  in
+    [ StR1($R, $T, k, ~r0), In(<r1, tag_mac>) ]
+  --[ Test3()
+    , Eq(tag_mac, expected)
+    , Commit($R, $T, <'Reader', $R, $T, ~r0, r1>)
+    , Running($R, $T, <'Tag', $R, $T, ~r0, r1>)
+    , Secret($R, $T, k)
+    , Honest($R), Honest($T)
+    ]->
+    [ Out(reader_mac) ]
+
+// ---------------------------------------------------------------
+// Action block 4: Tag checks reader_mac.
+// ---------------------------------------------------------------
+
+rule Tag_Finish:
+  let expected = h(tag_mac XOR k XOR r0)
+  in
+    [ StT1($R, $T, k, r0, ~r1, tag_mac), In(reader_mac) ]
+  --[ Test4()
+    , Eq(reader_mac, expected)
+    , Commit($T, $R, <'Tag', $R, $T, r0, ~r1>)
+    , Secret($T, $R, k)
+    , Honest($R), Honest($T)
+    ]->
+    [ ]
+
+// ---------------------------------------------------------------
+// Restriction: equality assertions inside rules.
+// ---------------------------------------------------------------
+
+restriction equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+// ---------------------------------------------------------------
+// Safety properties
+// ---------------------------------------------------------------
+
+// Section 8.1: Secrecy of the long-term key shared between a
+// Reader/Tag pair.
+// category: secrecy
+lemma secrecy_ltk:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+     ==>
+       (not (Ex #j. K(k) @ j))
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Section 8.2: Non-injective Agreement at the Tag.
+// When the Tag commits with a Reader on (r0, r1), the Reader
+// must have been running with the Tag on the same (r0, r1).
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All A B r0 r1 #i.
+     Commit(A, B, <'Tag', B, A, r0, r1>) @ i
+     ==>
+       (Ex #j. Running(B, A, <'Tag', B, A, r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Section 8.3: Non-injective Agreement at the Reader.
+// When the Reader commits with a Tag on (r0, r1), the Tag
+// must have been running with the Reader on the same (r0, r1).
+// The XOR-malleability flagged in Section 6 should falsify this.
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All A B r0 r1 #i.
+     Commit(A, B, <'Reader', A, B, r0, r1>) @ i
+     ==>
+       (Ex #j. Running(B, A, <'Reader', A, B, r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// ---------------------------------------------------------------
+// Executable witness chaining all four action blocks.
+// ---------------------------------------------------------------
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1
+     & Test2() @ #t2
+     & Test3() @ #t3
+     & Test4() @ #t4
+     & #t1 < #t2
+     & #t2 < #t3
+     & #t3 < #t4
+     & not (Ex X #r. LtkReveal(X) @ r)"
+
+end

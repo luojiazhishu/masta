@@ -1,0 +1,56 @@
+theory NAXOS_Simple
+begin
+
+builtins: diffie-hellman
+functions: h1/2, h2/1
+
+rule Register_Keypair:
+  [ Fr(~lk) ]
+  --[ ]->
+  [ !Ltk($A, ~lk), !Pk($A, 'g'^~lk) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~lk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~lk) ]
+
+rule I_1:
+  let exI = h1(~eskI, ~lkI)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI), !Ltk($I, ~lkI), !Pk($R, pkR) ]
+  --[ Test1() ]->
+  [ Out(hkI), St_I_1($I, $R, ~eskI, ~lkI, pkR) ]
+
+rule R_1:
+  let exR = h1(~eskR, ~lkR)
+      hkR = 'g'^exR
+      kR = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ In(X), Fr(~eskR), Fr(~sc), !Ltk($R, ~lkR), !Pk($I, pkI) ]
+  --[ Test2(), Secret($I, $R, kR), Honest($I), Honest($R) ]->
+  [ Out(<hkR, ~sc>) ]
+
+rule I_2:
+  let exI = h1(~eskI, ~lkI)
+      kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  in
+  [ St_I_1($I, $R, ~eskI, ~lkI, pkR), In(<Y, sc>) ]
+  --[ Test3(), Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,60 @@
+theory SK_PMD_W02 begin
+
+builtins: symmetric-encryption
+
+rule SetupKey:
+  [
+    Fr(~k)
+  ]
+  -->
+  [
+    !SharedKey(~k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    !SharedKey(~k)
+  ]
+  --[ Test1(), Secret(~sec), Secret(~pub), Commit('I', 'R', <~sec, ~pub>) ]->
+  [
+    Out(senc(<~sec, ~pub>, ~k)),
+    Out(<~sec, ~pub>)
+  ]
+
+rule RuleStep2:
+  [
+    In(senc(<sec, pub>, ~k)),
+    !SharedKey(~k)
+  ]
+  --[ Test2(), Running('R', 'I', <sec, pub>) ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All x #i.
+    Secret(x) @ i
+  ==>
+      not (Ex #j. K(x) @ j)"
+
+// category: secrecy
+lemma secrecy_pub:
+  "All x #i.
+    Secret(x) @ i
+  ==>
+      not (Ex #j. K(x) @ j)"
+
+// category: weak_agreement
+lemma weak_agreement_ciphertext_integrity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)"
+
+end

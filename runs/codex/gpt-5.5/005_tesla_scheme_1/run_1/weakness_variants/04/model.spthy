@@ -1,0 +1,75 @@
+theory TeslaScheme1Weak04 begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~ltk) ]
+--[ ]->
+  [ !Ltk($S, ~ltk), !Pk($S, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk(A, ltk) ]
+--[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR), Fr(~tid) ]
+--[ Test1(), Create($R, ~tid) ]->
+  [ Out(<$R, $S, ~nR>), R_Wait_Setup($R, $S, ~tid, ~nR) ]
+
+rule Sender_Setup_Response:
+  let c1 = h(~k1) in
+  [ !Ltk($S, skS), In(<$R, $S, nR>), Fr(~k1), Fr(~k2), Fr(~k3), Fr(~m1), Fr(~m2) ]
+--[ Test2(), Create($S, ~k1) ]->
+  [ Out(<$S, $R, c1, sign(<c1, nR>, skS)>),
+    S_Stream_State($S, $R, ~k1, ~k2, ~k3, ~m1, ~m2) ]
+
+rule Receiver_Accept_Setup:
+  [ R_Wait_Setup($R, $S, tid, nR), !Pk($S, pkS), In(<$S, $R, c1, sig>) ]
+--[ Test3() ]->
+  [ Eq(verify(sig, <c1, nR>, pkS), true), R_Ready($R, $S, tid, c1) ]
+
+rule Sender_Stream_First:
+  let d1 = <~m1, h(k2)> in
+  [ S_Stream_State($S, $R, k1, k2, k3, ~m1, m2) ]
+--[ Test4(), Running($S, $R, <'broadcast', ~m1>) ]->
+  [ Out(<~m1, h(k2), mac(k1, d1)>),
+    S_Disclose_State($S, $R, k1, k2, k3, m2) ]
+
+rule Receiver_Cache_First_Stream:
+  let d1 = <m1, next_commitment> in
+  [ R_Ready($R, $S, tid, c1), In(<m1, next_commitment, tag1>) ]
+--[ Test5() ]->
+  [ R_Cached($R, $S, tid, m1, next_commitment, tag1) ]
+
+rule Sender_Stream_Disclose:
+  let d2 = <m2, h(k3), k1> in
+  [ S_Disclose_State($S, $R, k1, k2, k3, m2) ]
+--[ Test6(), Running($S, $R, <'broadcast', m2>) ]->
+  [ Out(<m2, h(k3), k1, mac(k2, d2)>) ]
+
+rule Receiver_Promote_Cached_Stream:
+  let d1 = <m1, old_next_commitment> in
+  [ R_Cached($R, $S, tid, m1, old_next_commitment, mac(disclosed_key, d1)),
+    In(<m2, new_next_commitment, disclosed_key, tag2>) ]
+--[ Test7(), Commit($R, $S, <'broadcast', m1>), Honest($R), Honest($S) ]->
+  [ R_Delivered($R, $S, tid, m1), R_Ready($R, $S, tid, new_next_commitment) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

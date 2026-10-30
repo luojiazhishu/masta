@@ -1,0 +1,82 @@
+theory LoRaWAN10Join
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, tag/1
+
+rule Provision:
+  [ Fr(~appkey), Fr(~devaddr) ]
+  --[ Create($Device, ~devaddr), Create($Server, ~devaddr), Honest($Device), Honest($Server), Secret($Device, $Server, ~appkey) ]->
+  [ !AppKey($Device, $Server, ~appkey, ~devaddr) ]
+
+rule Reveal_AppKey:
+  [ !AppKey(D, S, appkey, devaddr) ]
+  --[ LtkReveal(D) ]->
+  [ Out(appkey) ]
+
+rule Device_Send_JoinRequest:
+  let req_body = <'JoinRequest', D, S, ~devnonce>
+      req_mac = mac(appkey, req_body)
+      req = <req_body, req_mac>
+  in
+  [ Fr(~devnonce), !AppKey(D, S, appkey, devaddr) ]
+  --[ Test1(), Create(D, ~devnonce), Running(D, S, <'device_join_request', appkey, ~devnonce>) ]->
+  [ Out(req), St_Device_WaitAccept(D, S, appkey, devaddr, ~devnonce) ]
+
+rule Server_Send_JoinAccept:
+  let req_body = <'JoinRequest', D, S, devnonce>
+      req_mac = mac(appkey, req_body)
+      resp_payload = <'JoinAccept', ~joinnonce, devaddr>
+      resp_mac = mac(appkey, resp_payload)
+      accept_body = <resp_payload, resp_mac>
+      app_s_key = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+      nwk_s_key = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+  in
+  [ Fr(~joinnonce), In(<req_body, req_mac>), !AppKey(D, S, appkey, devaddr) ]
+  --[ Test2(), Running(S, D, <'join_accept', appkey, devnonce, ~joinnonce>), Honest(D), Honest(S), Secret(D, S, app_s_key), Secret(D, S, nwk_s_key) ]->
+  [ Out(senc(accept_body, appkey)) ]
+
+rule Device_Receive_JoinAccept:
+  let resp_payload = <'JoinAccept', joinnonce, devaddr>
+      resp_mac = mac(appkey, resp_payload)
+      accept_body = <resp_payload, resp_mac>
+      nonce_tag = tag(joinnonce)
+      app_s_key = senc(<'cst1', devnonce, joinnonce>, appkey)
+      nwk_s_key = senc(<'cst2', devnonce, joinnonce>, appkey)
+  in
+  [ St_Device_WaitAccept(D, S, appkey, devaddr, devnonce), In(senc(accept_body, appkey)) ]
+  --[ Test3(), Commit(D, S, <'join_accept', appkey, devnonce, joinnonce>), Honest(D), Secret(D, S, app_s_key), Secret(D, S, nwk_s_key), Audit(D, nonce_tag) ]->
+  [ St_Device_Joined(D, S, app_s_key, nwk_s_key, nonce_tag) ]
+
+// category: secrecy
+lemma appkey_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma device_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

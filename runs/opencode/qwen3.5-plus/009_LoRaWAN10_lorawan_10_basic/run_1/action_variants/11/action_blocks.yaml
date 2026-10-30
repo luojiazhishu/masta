@@ -1,0 +1,36 @@
+- role: Device_JoinRequest_1
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - send:
+    - '''JoinRequest'''
+    - '''DevEUI'''
+    - '''JoinEUI'''
+    - ~devnonce
+    - h(<AppKey, 'JoinRequest', 'DevEUI', 'JoinEUI', ~devnonce>)
+- role: Device_JoinRequest_2
+  operations:
+  - send:
+    - '''JoinRequest'''
+    - '''DevEUI'''
+    - '''JoinEUI'''
+    - ~devnonce
+    - h(<AppKey, 'JoinRequest', 'DevEUI', 'JoinEUI', ~devnonce>)
+- role: Server_Respond
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - devEUI
+    - joinEUI
+    - devNonce
+    - h(<AppKey, 'JoinRequest', devEUI, joinEUI, devNonce>)
+  - generate_nonces:
+    - ~joinnonce
+  - send:
+    - senc(<'JoinAccept', ~joinnonce, 'DevAddr', h(<AppKey, 'JoinAccept', ~joinnonce,
+      'DevAddr'>)>, AppKey)
+- role: Device_Finish
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinnonce, 'DevAddr', respMAC>, AppKey)
+  - send: <END>

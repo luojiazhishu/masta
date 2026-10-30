@@ -1,0 +1,81 @@
+theory LoRaWAN10Join
+begin
+
+builtins: symmetric-encryption, hashing
+
+rule Setup:
+  [ Fr(~AppKey), Fr(~DevEUI), Fr(~JoinEUI) ]
+  --[ ]->
+  [ !Ltk(~DevEUI, ~AppKey), !Pk(~DevEUI, ~JoinEUI), Out(~DevEUI), Out(~JoinEUI) ]
+
+rule Device_JoinRequest:
+  [ Fr(~DevNonce), !Ltk(~DevEUI, ~AppKey), !Pk(~DevEUI, ~JoinEUI) ]
+  --[ Test1(), Create(~DevEUI, ~DevNonce) ]->
+  [ Out(<'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, h(<<'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>>, ~AppKey)>), St_D1(~DevEUI, ~JoinEUI, ~DevNonce, ~AppKey) ]
+
+rule Server_VerifyRequest:
+  [ In(<'JoinRequest', dev_eui, join_eui, dev_nonce, h(<<'JoinRequest', dev_eui, join_eui, dev_nonce>>, app_key)>), !Ltk(dev_eui, app_key) ]
+  --[ Test2(), Running(dev_eui, join_eui, <'server', dev_eui, join_eui, dev_nonce>) ]->
+  [ St_S1(dev_eui, join_eui, dev_nonce, app_key) ]
+
+rule Server_SendAccept:
+  [ St_S1(dev_eui, join_eui, dev_nonce, app_key), Fr(~JoinNonce) ]
+  --[ Test3(), Commit(join_eui, dev_eui, <'server', dev_eui, join_eui, dev_nonce, ~JoinNonce>), Secret(join_eui, dev_eui, h(<<'cst1', dev_nonce, ~JoinNonce>>, app_key)), Secret(join_eui, dev_eui, h(<<'cst2', dev_nonce, ~JoinNonce>>, app_key)) ]->
+  [ Out(senc(<'JoinAccept', ~JoinNonce, dev_eui, h(<<'JoinAccept', ~JoinNonce, dev_eui, 'protoV1'>>, app_key)>, app_key)), St_S2(dev_eui, join_eui, dev_nonce, ~JoinNonce, app_key) ]
+
+rule Device_VerifyAccept:
+  let
+    dec = sdec(msg, app_key)
+    j_tag = fst(dec)
+    j_rest = snd(dec)
+    j_nonce = fst(j_rest)
+    j_addr_mac = snd(j_rest)
+    j_addr = fst(j_addr_mac)
+    j_mac = snd(j_addr_mac)
+    expected_mac = h(<<'JoinAccept', j_nonce, j_addr, 'protoV1'>>, app_key)
+  in
+  [ St_D1(dev_eui, join_eui, dev_nonce, app_key), In(msg), !Ltk(dev_eui, app_key) ]
+  --[ Test4(), Running(dev_eui, join_eui, <'device', dev_eui, join_eui, dev_nonce>), Eq(j_tag, 'JoinAccept'), Eq(j_mac, expected_mac) ]->
+  [ St_D2(dev_eui, join_eui, dev_nonce, app_key, j_nonce, j_addr) ]
+
+rule Device_DeriveKeys:
+  [ St_D2(dev_eui, join_eui, dev_nonce, app_key, join_nonce, dev_addr), !Ltk(dev_eui, app_key) ]
+  --[ Test5(), Commit(dev_eui, join_eui, <'device', dev_eui, join_eui, dev_nonce, join_nonce>), Secret(dev_eui, join_eui, h(<<'cst1', dev_nonce, join_nonce>>, app_key)), Secret(dev_eui, join_eui, h(<<'cst2', dev_nonce, join_nonce>>, app_key)), Honest(dev_eui), Honest(join_eui) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(dev_eui, app_key) ]
+  --[ LtkReveal(dev_eui) ]->
+  [ Out(app_key) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_appskey:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

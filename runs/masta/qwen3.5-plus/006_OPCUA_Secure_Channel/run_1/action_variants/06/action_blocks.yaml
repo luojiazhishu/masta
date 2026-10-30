@@ -1,0 +1,71 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sk_C
+    - ~sk_S
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(~sk_S)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - AuditCommitment = com(pk(~sk_C), ~Nc)
+    - KeyFingerprint = bar(ServerCert)
+    - RequestBody = <'OSCReq', pk(~sk_C), ~Nc>
+    - RequestBodyDigest = h(<'OSCReq', pk(~sk_C), ~Nc>)
+    - RequestSignature = sign(h(<'OSCReq', pk(~sk_C), ~Nc>), ~sk_C)
+  - send:
+    - pk(~sk_C)
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - ClientCertificate
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+  - generate_nonces:
+    - ~Ns
+  - compute:
+    - RequestBody = <'OSCReq', ClientPublicKey, ClientNonce>
+    - RequestBodyDigest = h(<'OSCReq', ClientPublicKey, ClientNonce>)
+    - ResponseBody = <'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>)
+    - ResponseSignature = sign(h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>),
+      ~sk_S)
+  - send:
+    - pk(~sk_S)
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - ServerCert
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+  - compute:
+    - ResponseBody = <'OSCRes', ServerNonce, SecurityToken, TokenLifetime>
+    - ResponseBodyDigest = h(<'OSCRes', ServerNonce, SecurityToken, TokenLifetime>)
+    - ChannelBinding = h(<ServerNonce, ClientNonce>)
+  - send: <END>

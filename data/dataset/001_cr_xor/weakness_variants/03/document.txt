@@ -1,0 +1,228 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                  With Bootstrap-Time Key Disclosure
+                       draft-famed-crxor-disck-00
+
+
+Abstract
+
+   This document specifies CR-XOR-DiscK, a two-flow protocol
+   between two endpoints that share a long-term symmetric key k.
+   At the time the shared key is provisioned to the two endpoints,
+   the same key is also published as a bootstrap announcement on
+   the network.  The protocol body that follows is identical in
+   form to a hash-based challenge-response exchange that uses the
+   shared key as part of the hash input.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 4
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-DiscK distinguishes a one-time setup phase from the
+   recurring per-run phase.  In the setup phase a fresh long-term
+   key k is generated and is then both stored locally at the two
+   endpoints and announced verbatim on the network for any
+   listener to consume.  In the per-run phase a hash-based
+   challenge-response exchange is conducted that uses k as part
+   of the hash input.
+
+   This document defines the wire format and the processing rules
+   for both phases so that interoperable implementations can be
+   produced.  The security properties available under this profile
+   are spelled out in Section 6 in detail.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   H is a cryptographic hash function.  XOR denotes bitwise
+   exclusive-or applied to equally sized octet strings.  na is the
+   initiator nonce, nb is the responder nonce, and k is the shared
+   symmetric key.  The role names I and R denote the initiator and
+   the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-DiscK is divided into a setup announcement and a single
+   per-run round trip.
+
+   Setup announcement:
+
+         setup -> network : k
+
+   The fresh value k is published on the network exactly once.
+
+   Per-run exchange:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na                            |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb                  |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify  H(na XOR k XOR nb) = received tag     |
+          |                                                |
+
+   The initiator generates a uniformly random nonce na of length
+   L_n and transmits it.  Upon receipt the responder generates a
+   fresh nonce nb of length L_n, computes the tag t = H(na XOR k
+   XOR nb), and transmits <t, nb>.  The initiator recomputes t'
+   from k, na, and the received nb, and compares t' to the
+   received tag.
+
+
+4.  Message Format
+
+      struct {
+          opaque  shared_key[L_k];
+      } SetupAnnouncement;
+
+      struct {
+          opaque  challenge[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+      } ResponderFlight;
+
+
+5.  Processing Rules
+
+   At setup time, a fresh value k of length L_k is generated.  k
+   is provisioned to the two endpoints by means outside the scope
+   of this document, and is also transmitted on the network as a
+   single SetupAnnouncement.  The setup announcement runs at most
+   once for any given k.
+
+   An implementation in role I performs the following steps for
+   each protocol run.
+
+   1.  Generate a fresh nonce na of length L_n.  na MUST NOT be
+       reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na } and retain na.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(na XOR k XOR nb).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  If t' equals tag, conclude the run; otherwise abort.
+
+   4.  Discard na after step 3.
+
+   An implementation in role R, on receipt of an InitiatorFlight,
+   MUST verify that na has length L_n and is non-zero, generate a
+   fresh nb of length L_n, compute t = H(na XOR k XOR nb), and
+   transmit <t, nb>.
+
+
+6.  Security Considerations
+
+   CR-XOR-DiscK provides no cryptographic authentication of the
+   responder to the initiator.  The shared key k is published on
+   the network during setup, so any listener that is in a position
+   to capture the SetupAnnouncement also holds k.  An attacker
+   that holds k can react to any subsequent InitiatorFlight by
+   generating a fresh nb, computing t = H(na XOR k XOR nb), and
+   sending <t, nb> back to the initiator; the initiator's
+   verification check succeeds without any honest responder
+   having participated.
+
+   Specifically, this protocol does not provide aliveness of the
+   responder.  The initiator can complete a run successfully even
+   when no entity other than the attacker has reacted to the
+   challenge, so a successful run cannot be used as evidence that
+   any particular peer is present, reachable, or in possession of
+   k.  Implementations MUST NOT consume the outcome of
+   CR-XOR-DiscK as an authentication signal.
+
+   The bilinear structure of the XOR component of the hash input
+   has only a marginal impact on the analysis here, because the
+   adversary already obtains k from the setup announcement and is
+   therefore not constrained to algebraic manipulation of nb.
+
+   The hash function H MUST still be selected so that the work
+   factor of preimage and collision attacks exceeds any value
+   derived from k that may be relied upon by downstream consumers
+   for purposes other than authentication.
+
+   The non-zero check on the nonces removes a degenerate parsing
+   case but does not contribute to authentication.
+
+   Compromise of k is presumed under the threat model of this
+   document.  Rotation of k provides no benefit because each
+   freshly generated k is again published on the network during
+   the next setup announcement.
+
+   na and nb appear in cleartext on the wire and MUST NOT carry
+   implicit information about the endpoints.  Deployments
+   operating over open networks SHOULD rate-limit incoming
+   InitiatorFlights at a lower layer.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

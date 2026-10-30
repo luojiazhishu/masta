@@ -1,0 +1,101 @@
+theory OPCUA_SecureChannel begin
+
+builtins: signing, hashing
+
+rule ServerSetup:
+  [ Fr(~skS) ]
+  -->
+  [ !ServerLtk($S, ~skS),
+    !ServerPk($S, pk(~skS)),
+    Out(pk(~skS)),
+    Honest($S) ]
+
+rule ClientSetup:
+  [ Fr(~skC) ]
+  -->
+  [ !ClientLtk($C, ~skC),
+    !ClientPk($C, pk(~skC)),
+    Out(pk(~skC)),
+    Honest($C) ]
+
+rule RuleStep1:
+  [ Fr(~tidC) ]
+  --[ Test1() ]->
+  [ Out(< 'GEReq' >),
+    !ClientStarted($C, ~tidC) ]
+
+rule RuleStep2:
+  [ In(< 'GEReq' >),
+    !ServerLtk($S, ~skS),
+    !ServerPk($S, pkS) ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', pkS, 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >),
+    !ServerResponded($S, pkS) ]
+
+rule RuleStep3:
+  let RequestBody = < 'OSCReq', pkC, ~Nc >
+      RequestBodyDigest = h(RequestBody)
+      RequestSignature = sign(RequestBodyDigest, ~skC)
+  in
+  [ In(< 'GERes', ServerPk, 'Sign', 'SecurityPolicy', 'UserTokenPolicy' >),
+    Fr(~Nc),
+    !ClientStarted($C, tidC),
+    !ClientLtk($C, ~skC),
+    !ClientPk($C, pkC) ]
+  --[ Test3(), Running($C, $S, ~Nc) ]->
+  [ Out(< pkC, RequestBody, RequestSignature, RequestBodyDigest >),
+    !ClientSentOSC($C, tidC, ~Nc, pkC) ]
+
+rule RuleStep4:
+  let ResponseBody = < 'OSCRes', ~Ns, ~token, ~lifetime >
+      ResponseBodyDigest = h(ResponseBody)
+      ResponseSignature = sign(ResponseBodyDigest, ~skS)
+  in
+  [ In(< pkC, RequestBody, RequestSignature, RequestBodyDigest >),
+    Fr(~Ns),
+    Fr(~token),
+    Fr(~lifetime),
+    !ServerResponded($S, ServerPk),
+    !ServerLtk($S, ~skS),
+    !ServerPk($S, ServerPk) ]
+  --[ Test4(), Running($S, $C, ~Ns), Commit($S, $C, Nc) ]->
+  [ Out(< ServerPk, ResponseBody, ResponseSignature, ResponseBodyDigest >),
+    !ServerSentOSC($S, ~Ns, ~token, ~lifetime) ]
+
+rule RuleStep5:
+  let ChannelBinding = h(< Nc, Ns >)
+  in
+  [ In(< ServerPk, ResponseBody, ResponseSignature, ResponseBodyDigest >),
+    !ClientSentOSC($C, tidC, Nc, ClientPk),
+    !ServerSentOSC($S, Ns, token, lifetime),
+    !ClientLtk($C, ~skC),
+    !ClientPk($C, ClientPk) ]
+  --[ Test5(), ChannelEstablished(tidC, ChannelBinding), Secret($C, $S, ChannelBinding), Commit($C, $S, Ns) ]->
+  [ Out('<END>') ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_session_key_secrecy:
+  "All C S x #i.
+     Secret(C, S, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

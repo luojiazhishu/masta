@@ -1,0 +1,53 @@
+theory BSKTI
+begin
+
+builtins: asymmetric-encryption, hashing
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+rule Setup_Ltk:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($S, skS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(skS) ]
+
+rule Client_Init:
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Secret($S, ~k) ]->
+  [ Out(<aenc(~k, pkS), 'init'>), St_C_1($S, ~k) ]
+
+rule Server_Respond:
+  [ In(<ciphertext, 'init'>), !Ltk($S, skS) ]
+  --[ Test2(), Server_Run($S, ciphertext) ]->
+  [ Out(h(adec(ciphertext, skS))) ]
+
+rule Client_Verify:
+  [ St_C_1($S, ~k), In(h(~k)) ]
+  --[ Test3(), Commit($S, ~k) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_key:
+  "All S k #i.
+     Secret(S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All S k #i.
+     Commit(S, k) @ i
+   ==>
+       (Ex ciphertext #j. Server_Run(S, ciphertext) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+end

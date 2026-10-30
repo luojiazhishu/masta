@@ -1,0 +1,36 @@
+theory BSKTUnbound begin
+
+builtins: hashing, asymmetric-encryption
+
+rule GenerateKeyPair:
+  [ Fr(~skS) ]
+  --[ ]->
+  [ !Pk($S, pk(~skS)), !Ltk($S, ~skS), Out(pk(~skS)) ]
+
+rule RuleStep1:
+  let m1 = aenc(~k, pkS)
+  in
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1() ]->
+  [ Out(m1) ]
+
+rule RuleStep2:
+  let k_dec = adec(m1, skS)
+      v = k_dec
+      d = h(v)
+      m2 = <v, d>
+  in
+  [ In(m1), !Ltk($S, skS) ]
+  --[ Test2() ]->
+  [ Out(m2) ]
+
+rule RuleStep3:
+  [ In(m2) ]
+  --[ Test3() ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,60 @@
+theory NAXOS_04_Simple_Excl3 begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ Create($A, ~ltk) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, 'g'^~ltk), Out('g'^~ltk) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ~ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(~ltk) ]
+
+rule Initiator_Send:
+  let
+    exI = h1(<~eskI, ~lkI>)
+    hkI = 'g'^exI
+  in
+  [ Fr(~eskI), Fr(~tidI), !Ltk($I, ~lkI) ]
+  --[ Test1(), Create($I, ~tidI) ]->
+  [ Out(hkI), !SentI($I, $R, hkI, exI), St_I_1(~tidI, $I, $R, ~lkI, exI, hkI) ]
+
+rule Responder_Receive_Send_Accept:
+  let
+    exR = h1(<~eskR, ~lkR>)
+    hkR = 'g'^exR
+    kR = h2(<exI, exR, $I, $R>)
+    params = <'responder', hkI, hkR, kR, $I, $R>
+  in
+  [ In(hkI), Fr(~eskR), Fr(~tidR), !Ltk($R, ~lkR), !Pk($I, pkI), !SentI($I, $R, hkI, exI) ]
+  --[ Test2(), Create($R, ~tidR), Running($R, $I, params), Commit($R, $I, params), Secret($R, $I, kR), Honest($R), Honest($I) ]->
+  [ Out(hkR), !SentR($R, $I, hkI, hkR, exR) ]
+
+rule Initiator_Receive_Accept:
+  let
+    kI = h2(<exI, exR, $I, $R>)
+    params = <'initiator', hkI, hkR, kI, $I, $R>
+  in
+  [ St_I_1(~tidI, $I, $R, ~lkI, exI, hkI), In(hkR), !Pk($R, pkR), !SentR($R, $I, hkI, hkR, exR) ]
+  --[ Test3(), Running($I, $R, params), Commit($I, $R, params), Secret($I, $R, kI), Honest($I), Honest($R) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

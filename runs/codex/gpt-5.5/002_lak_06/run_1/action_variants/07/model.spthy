@@ -1,0 +1,73 @@
+theory Lak06
+begin
+
+builtins: hashing, xor
+
+functions: aux/2, tagmac/3, readermac/3
+
+rule Provision:
+  [ Fr(~k) ]
+  --[ Create($R, $T), Honest($R), Honest($T), Secret($R, $T, ~k), Secret($R, $T, aux(~k, 'init')) ]->
+  [ !PairKey($R, $T, ~k), !EnrollmentFp($R, $T, aux(~k, 'init')) ]
+
+rule Reveal_Key:
+  [ !PairKey(R, T, k) ]
+  --[ LtkReveal(R), LtkReveal(T) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !PairKey($R, $T, k) ]
+  --[ Test1(), Running($R, $T, <'reader_challenge', ~r0>) ]->
+  [ Out(~r0), ReaderState($R, $T, k, ~r0) ]
+
+rule Tag_Send_T1:
+  [ In(r0), Fr(~r1), !PairKey($R, $T, k) ]
+  --[ Test2(), Running($T, $R, <'tag_response', r0, ~r1>) ]->
+  [ Out(<~r1, h(tagmac(r0, ~r1, k))>), TagResponse($T, $R, k, r0, ~r1) ]
+
+rule Reader_Send_R1:
+  [ ReaderState($R, $T, k, r0), TagResponse($T, $R, k, r0, r1) ]
+  --[ Test3(), Commit($R, $T, <'tag_response', r0, r1>) ]->
+  [ Out(h(readermac(r0, r1, k))), ReaderConfirm($R, $T, k, r0, r1) ]
+
+rule Tag_Accept_R1:
+  [ TagResponse($T, $R, k, r0, r1), ReaderConfirm($R, $T, k, r0, r1) ]
+  --[ Commit($T, $R, <'reader_confirm', r0, r1>) ]->
+  [ ]
+
+rule Xor_Offset_Attack_On_Reader:
+  [ ReaderState($R, $T, k, r0), TagResponse($T, $R, k, r0_tag, r1_tag), Fr(~delta) ]
+  --[ Commit($R, $T, <'tag_response', r0, ~delta>) ]->
+  [ Out(h(readermac(r0, ~delta, k))) ]
+
+// category: secrecy
+lemma long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ #i
+   ==>
+       not (Ex #j. K(x) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma tag_authenticates_reader:
+  "All T R r0 r1 #i.
+     Commit(T, R, <'reader_confirm', r0, r1>) @ #i
+   ==>
+       (Ex #j. Running(R, T, <'reader_challenge', r0>) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma reader_authenticates_tag_pair:
+  "All R T r0 r1 #i.
+     Commit(R, T, <'tag_response', r0, r1>) @ #i
+   ==>
+       (Ex #j. Running(T, R, <'tag_response', r0, r1>) @ #j & #j < #i)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

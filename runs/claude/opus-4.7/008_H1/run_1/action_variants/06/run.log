@@ -1,0 +1,9 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.coding_agent_model --document data/dataset/008_H1/action_variants/06/document.txt --output-dir runs/claude/opus-4.7/008_H1/run_1/action_variants/06 --tool claude_code --model opus-4.7 --skills-source /root/project/llm-tamarin/masta/experiments/coding_agent/skills --agent-timeout 3600 --label 008_H1 run_1 action_variants/06
+
+==== MASTA coding_agent_model ====
+ document:   /root/project/llm-tamarin/masta/data/dataset/008_H1/action_variants/06/document.txt
+ output_dir: /root/project/llm-tamarin/masta/runs/claude/opus-4.7/008_H1/run_1/action_variants/06
+ tool:       claude_code
+ model tag:  opus-4.7 (host CLI default account)
+ label:      008_H1 run_1 action_variants/06
+[coding_agent] model written to: /root/project/llm-tamarin/masta/runs/claude/opus-4.7/008_H1/run_1/action_variants/06/model.spthy

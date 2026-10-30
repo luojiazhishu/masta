@@ -1,0 +1,145 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 29, 2026                                          FAMED
+                                                          April 27, 2026
+
+
+     Mutual Identity-Signature Authentication, Responder Resend
+                       draft-famed-h1-rr-00
+
+
+Abstract
+
+   This document specifies a two-message mutual authentication
+   handshake in which the Responder transmits two copies of
+   its signature on the ordered pair of participant identities
+   in close succession.  The duplicate emission is intended to
+   mitigate transient packet loss without introducing a
+   separate retransmission protocol.
+
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 29, 2026.
+
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . .  2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . .  2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . .  3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . .  3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . .  4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . .  4
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . .  5
+
+
+1.  Introduction
+
+   This document specifies a two-message mutual authentication
+   handshake in the H1 family.  The Responder emits two copies
+   of its signature on the ordered pair of participant
+   identities in close succession.  The Initiator processes
+   the first received copy as in the conventional flow and
+   SHOULD discard subsequent duplicates that carry the same
+   signature within the same session.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted
+   as described in BCP 14 [RFC2119] [RFC8174] when, and only
+   when, they appear in all capitals, as shown here.
+
+   I             The Initiator party.
+   R             The Responder party.
+   ltkI, ltkR    The long-term signing private keys of I and R.
+   pk(x)         The long-term signing public key derived from
+                 the private key x.
+   sign(m, sk)   Digital signature of message m under signing
+                 key sk.
+
+3.  Protocol Overview
+
+       Initiator                                     Responder
+       ---------                                     ---------
+       construct mI = sign(<I, R>, ltkI)
+
+                            ----- mI ----->
+
+                                          (verify mI)
+                                          construct mR
+
+                            <----- mR -----
+                            <----- mR -----
+
+       (process first copy, verify mR, accept)
+
+4.  Message Format
+
+   InitiatorAuthMessage carries sign(<I, R>, ltkI).
+
+   ResponderAuthMessage carries sign(<I, R>, ltkR).  Two copies
+   of ResponderAuthMessage are emitted by the Responder per
+   session.  Both copies carry an identical signature value.
+
+5.  Processing Rules
+
+   The Initiator transmits mI = sign(<I, R>, ltkI) in the
+   conventional way.  The Responder verifies the Initiator's
+   signature, computes mR = sign(<I, R>, ltkR), and emits two
+   copies of mR on the network in close succession.  The
+   Initiator processes the first received copy of mR as in
+   the conventional flow and SHOULD discard any subsequent
+   ResponderAuthMessage carrying the same signature within the
+   same session.
+
+6.  Security Considerations
+
+   The duplicate emission of mR does not weaken any of the
+   security properties of the run.  An adversary that already
+   observes a single copy of mR already sees the same
+   signature value, and the second copy provides no
+   additional information.
+
+   The handshake does not provide non-injective agreement on
+   any session-level parameters in addition to the named pair.
+   The signed plaintext consists only of the identities I and
+   R; the duplicate emission does not strengthen this binding.
+
+   Compromise of either party's long-term signing key allows
+   the adversary to forge signatures under that key.  The
+   protocol does not provide forward secrecy.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC8032]  Josefsson, S. and I. Liusvaara, "Edwards-Curve
+              Digital Signature Algorithm (EdDSA)", RFC 8032,
+              January 2017.
+
+
+8. Analysis Targets
+
+8.1 Weak Agreement
+8.2 Non-injective Agreement
+8.3 Injective Agreement

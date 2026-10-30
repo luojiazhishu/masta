@@ -1,0 +1,122 @@
+theory mutual_cr_auth begin
+
+builtins: hashing
+
+functions: mac/2
+
+// Long-term symmetric key provisioning
+rule ProvisionKey:
+  [ Fr(~kAB) ]
+  --[ KeyProvisioned(), Honest('IdA'), Honest('IdB'), Secret(~kAB) ]->
+  [ !SharedKey('IdA', 'IdB', ~kAB) ]
+
+// RuleStep1: B generates challenge RB and Text1, sends to A
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1), !SharedKey('IdA', 'IdB', kAB) ]
+  --[ Test1(), Create('IdB', ~RB) ]->
+  [ Out(<~RB, ~Text1>), !ChalB(~RB) ]
+
+// RuleStep2: A receives Challenge1, generates RA/Text2/Text3, computes mac1, sends TokenAB
+rule RuleStep2:
+  let
+    mac1 = mac(< 'sid1_mut_cr', ~RA, 'IdB' >, kAB)
+  in
+  [ In(<RB, Text1>), Fr(~RA), Fr(~Text2), Fr(~Text3), !SharedKey('IdA', 'IdB', kAB), !ChalB(RB) ]
+  --[ Test2(), Running('IdA', 'IdB', <~RA, RB>) ]->
+  [ Out(< ~RA, ~Text3, < 'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2 >, mac1 >), !ChalA(~RA) ]
+
+// RuleStep3: B receives TokenAB, verifies mac1, generates Text4/Text5, computes mac2, sends TokenBA
+rule RuleStep3:
+  let
+    expected_mac1 = mac(< 'sid1_mut_cr', RA, 'IdB' >, kAB)
+    mac2 = mac(< 'sid2_mut_cr', RB, RA >, kAB)
+  in
+  [ In(< RA, Text3, < 'sid1_mut_cr', RA, RB, 'IdB', Text2 >, received_mac1 >),
+    Fr(~Text4), Fr(~Text5),
+    !SharedKey('IdA', 'IdB', kAB) ]
+  --[ Test3(), Running('IdB', 'IdA', <RB, RA>), Commit('IdB', 'IdA', <RB, RA>) ]->
+  [ Out(< ~Text5, mac2 >) ]
+
+// RuleStep4: A receives TokenBA, verifies mac2, terminates
+rule RuleStep4:
+  let
+    expected_mac2 = mac(< 'sid2_mut_cr', RB, RA >, kAB)
+  in
+  [ In(< Text5, received_mac2 >),
+    !SharedKey('IdA', 'IdB', kAB), !ChalA(RA), !ChalB(RB) ]
+  --[ Test4(), Commit('IdA', 'IdB', <RA, RB>) ]->
+  [ ]
+
+// Long-term key compromise rule
+rule KeyCompromise:
+  [ !SharedKey('IdA', 'IdB', kAB) ]
+  --[ LtkReveal('IdA'), LtkReveal('IdB') ]->
+  [ Out(kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_initiator_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_responder_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_initiator_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_responder_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_long_term_key:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_initiator:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

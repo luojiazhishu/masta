@@ -1,0 +1,5 @@
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+     (Ex id #j. Create(b, id) @ j)"

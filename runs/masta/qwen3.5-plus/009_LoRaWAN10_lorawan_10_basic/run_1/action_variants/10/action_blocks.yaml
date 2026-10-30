@@ -1,0 +1,48 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - RequestMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - RequestMAC
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - $RequestMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+    - JoinAcceptBody = <'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <'JoinAccept',
+      ~JoinNonce, ~DevAddr>)>
+    - EncryptedJoinAccept = senc(<'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey,
+      <'JoinAccept', ~JoinNonce, ~DevAddr>)>, ~AppKey)
+  - send:
+    - EncryptedJoinAccept
+- role: RuleStep3
+  operations:
+  - receive:
+    - $EncryptedJoinAccept
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - JoinAcceptBody = sdec($EncryptedJoinAccept, ~AppKey)
+    - JoinNonce = snd(fst(snd(sdec($EncryptedJoinAccept, ~AppKey))))
+    - DevAddr = snd(snd(sdec($EncryptedJoinAccept, ~AppKey)))
+    - ResponseMAC = snd(snd(snd(sdec($EncryptedJoinAccept, ~AppKey))))
+    - ExpectedMAC = mac(~AppKey, <'JoinAccept', snd(fst(snd(sdec($EncryptedJoinAccept,
+      ~AppKey)))), snd(snd(sdec($EncryptedJoinAccept, ~AppKey)))>)
+    - AppSKey = senc(<'cst1', ~DevNonce, snd(fst(snd(sdec($EncryptedJoinAccept, ~AppKey)))),
+      'channelV1'>, ~AppKey)
+    - NwkSKey = senc(<'cst2', ~DevNonce, snd(fst(snd(sdec($EncryptedJoinAccept, ~AppKey)))),
+      'channelV1'>, ~AppKey)
+  - send: <END>

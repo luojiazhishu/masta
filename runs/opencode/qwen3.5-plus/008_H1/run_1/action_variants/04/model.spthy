@@ -1,0 +1,98 @@
+theory MutualIdentitySignatureAuth
+begin
+
+builtins: signing
+
+// ============================================================
+// Setup rules: create long-term keys and mark agents as honest
+// ============================================================
+
+rule Setup_Ltk_I:
+  [ Fr(~ltkI) ]
+  --[ ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', pk(~ltkI)), !Honest('I') ]
+
+rule Setup_Ltk_R:
+  [ Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk('R', ~ltkR), !Pk('R', pk(~ltkR)), !Honest('R') ]
+
+// ============================================================
+// Adversary capability: reveal long-term key
+// ============================================================
+
+rule LtkReveal_I:
+  [ !Ltk('I', ltkI) ]
+  --[ LtkReveal('I') ]->
+  [ Out(ltkI) ]
+
+rule LtkReveal_R:
+  [ !Ltk('R', ltkR) ]
+  --[ LtkReveal('R') ]->
+  [ Out(ltkR) ]
+
+// ============================================================
+// Rules: Action blocks for the protocol
+// ============================================================
+
+// Action Block 1: Initiator constructs and sends mI = sign(<I, R>, ltkI)
+rule Initiator_Send:
+  [ !Ltk('I', ltkI), !Pk('I', pk(ltkI)), !Ltk('R', ltkR), !Pk('R', pk(ltkR)) ]
+  --[ Test1(), Create('I', 'tidI') ]->
+  [ Out(sign(<'I', 'R'>, ltkI)), St_I_Wait('I', 'R', ltkI) ]
+
+// Action Block 2: Responder receives mI and verifies
+// Use variable mI and check it's a valid signature from I
+rule Responder_Receive_Verify:
+  [ !Ltk('R', ltkR), !Pk('R', pk(ltkR)), !Pk('I', pkI), In(mI) ]
+  --[ Test2(), Running('R', 'I', <'responder', 'I', 'R'>), Eq(verify(mI, <'I', 'R'>, pkI), true) ]->
+  [ St_R_Verified('R', 'I') ]
+
+// Action Block 3: Responder constructs and sends <mR, tagResp>
+rule Responder_Send:
+  [ St_R_Verified('R', 'I'), !Ltk('R', ltkR) ]
+  --[ Test3(), Create('R', 'tidR'), Commit('R', 'I', <'responder', 'I', 'R'>) ]->
+  [ Out(<sign(<'I', 'R'>, ltkR), 'resp'>) ]
+
+// Action Block 4: Initiator receives and verifies response
+// Use variable msg and check it's a valid signature from R with correct tag
+rule Initiator_Receive_Verify:
+  [ St_I_Wait('I', 'R', ltkI), !Pk('R', pkR), In(<s, t>) ]
+  --[ Test4(), Running('I', 'R', <'initiator', 'I', 'R'>), Commit('I', 'R', <'initiator', 'I', 'R'>), Eq(verify(s, <'I', 'R'>, pkR), true), Eq(t, 'resp') ]->
+  [ ]
+
+// ============================================================
+// Safety Property Lemmas
+// ============================================================
+
+// The protocol provides identity-level mutual authentication (weak agreement)
+// but explicitly does NOT provide non-injective or injective agreement
+// (see Section 6 Security Considerations)
+
+// category: weak_agreement
+lemma weak_agreement_I_to_R:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: weak_agreement
+lemma weak_agreement_R_to_I:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// ============================================================
+// Executable Lemma
+// ============================================================
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,74 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Setup:
+  [ Fr(~skC), Fr(~skS), Fr(~tidC), Fr(~tidS), Fr(ClientCert), Fr(ServerCert) ]
+  --[ Test1(), Create('Client', ~tidC), Create('Server', ~tidS), Honest('Client'), Honest('Server') ]->
+  [ !Ltk(~skC), !Pk(pk(~skC), ClientCert), !Ltk(~skS), !Pk(pk(~skS), ServerCert), St_C0(~tidC, ~skC, ClientCert), St_S0(~tidS, ~skS, ServerCert) ]
+
+rule Client_GetEndpoints:
+  [ St_C0(~tidC, ~skC, ClientCert) ]
+  --[ Test2() ]->
+  [ Out(<ClientCert, 'GEReq'>), St_C1(~tidC, ~skC, ClientCert) ]
+
+rule Server_GetEndpoints:
+  [ St_S0(~tidS, ~skS, ServerCert), In(<ClientCert, 'GEReq'>) ]
+  --[ Test3() ]->
+  [ Out(<ServerCert, 'GERes', 'Sign', 'securityPolicy', 'userTokenPolicy'>), St_S1(~tidS, ~skS, ServerCert) ]
+
+rule Client_OpenSecureChannel:
+  let ReqBody = <'OSCReq', pk(~skC), ~Nc, 'protoV1'>
+  in
+    [ St_C1(~tidC, ~skC, ClientCert), Fr(~Nc) ]
+    --[ Test4(), Running('Client', 'Server', <'init', ~Nc>) ]->
+    [ Out(<ClientCert, 'OSCReq', pk(~skC), ~Nc, 'protoV1', sign(h(ReqBody), ~skC), h(ReqBody)>), St_C2(~tidC, ~skC, ~Nc, ClientCert) ]
+
+rule Server_OpenSecureChannel:
+  let ReqBody = <'OSCReq', ClientPk, Nc, 'protoV1'>
+  in
+    [ St_S1(~tidS, ~skS, ServerCert), In(<ClientCert, 'OSCReq', ClientPk, Nc, 'protoV1', Sig, ReqDigest>), Fr(~Ns) ]
+    --[ Test5(), Running('Server', 'Client', <'init', Nc>), Eq(verify(Sig, h(ReqBody), ClientPk), true), Eq(ReqDigest, h(ReqBody)) ]->
+    [ Out(<ServerCert, 'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime', sign(h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>), ~skS), h(<'OSCRes', ~Ns, 'SecurityToken', 'TokenLifetime'>)>), St_S2(~tidS, ~skS, ServerCert, Nc, ~Ns) ]
+
+rule Client_Verify:
+  let ResBody = <'OSCRes', Ns, SecurityToken, TokenLifetime>
+  in
+    [ St_C2(~tidC, ~skC, StoredNc, ClientCert), In(<ServerCert, 'OSCRes', Ns, SecurityToken, TokenLifetime, Sig, ResDigest>) ]
+    --[ Test6(), Commit('Client', 'Server', <'init', StoredNc>), Commit('Server', 'Client', <'init', StoredNc>), Honest('Client'), Honest('Server'), Eq(verify(Sig, h(ResBody), ServerCert), true), Eq(ResDigest, h(ResBody)) ]->
+    [ ]
+
+rule LtkReveal_Client:
+  [ !Ltk(~skC), !Pk(pk(~skC), ClientCert) ]
+  --[ LtkReveal('Client') ]->
+  [ Out(~skC) ]
+
+rule LtkReveal_Server:
+  [ !Ltk(~skS), !Pk(pk(~skS), ServerCert) ]
+  --[ LtkReveal('Server') ]->
+  [ Out(~skS) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+end

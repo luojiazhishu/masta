@@ -1,0 +1,25 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~k
+  - compute:
+    - m1 = aenc(~k, pkS)
+  - send:
+    - m1
+- role: RuleStep2
+  operations:
+  - receive:
+    - m1
+  - compute:
+    - k = adec(m1, sk)
+    - m2 = <h(adec(m1, sk)), 'done'>
+  - send:
+    - m2
+- role: RuleStep3
+  operations:
+  - receive:
+    - m2
+  - compute:
+    - received_hash = fst(m2)
+    - received_marker = snd(m2)
+  - send: <END>

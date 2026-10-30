@@ -1,0 +1,63 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule SetupKey:
+  [ Fr(~ltk), Fr(~R), Fr(~T) ]
+  --[ Honest(~R), Honest(~T), Secret(~R, ~T, ~ltk) ]->
+  [ !Ltk(~R, ~T, ~ltk) ]
+
+rule RuleStep1:
+  [ !Ltk(~R, ~T, ltk), Fr(~r0) ]
+  --[ Test1() ]->
+  [ Out(<~r0, ltk>), !St_r0(~R, ~T, ~r0) ]
+
+rule RuleStep2:
+  [ In(<r0, ltk>), !Ltk(~R, ~T, ltk), !St_r0(~R, ~T, r0), Fr(~r1) ]
+  --[ Test2(), Running(~T, ~R, <r0, ~r1>) ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR ltk)>), !St_r1(~R, ~T, ~r1), !St_tagmac(~R, ~T, h(r0 XOR ~r1 XOR ltk)) ]
+
+rule RuleStep3:
+  [ In(<r1, tag_mac>), !Ltk(~R, ~T, ltk), !St_r0(~R, ~T, r0), !St_r1(~R, ~T, r1), !St_tagmac(~R, ~T, tag_mac) ]
+  --[ Test3(), Commit(~R, ~T, <r0, r1>), Running(~R, ~T, <r0, r1>) ]->
+  [ Out(<h(tag_mac XOR ltk XOR r0)>) ]
+
+rule RuleStep4:
+  [ In(<reader_mac>), !Ltk(~R, ~T, ltk), !St_r0(~R, ~T, r0), !St_r1(~R, ~T, r1), !St_tagmac(~R, ~T, tag_mac) ]
+  --[ Test4(), Commit(~T, ~R, <r0, r1>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, B, ltk) ]
+  --[ LtkReveal(A, B) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_tag_identifier:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex #r. LtkReveal(A, B) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All R T r0 r1 #i.
+     Commit(T, R, <r0, r1>) @ i
+   ==>
+       (Ex #j. Running(R, T, <r0, r1>) @ j)
+     | (Ex #r. LtkReveal(R, T) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All R T r0 r1 #i.
+     Commit(R, T, <r0, r1>) @ i
+   ==>
+       (Ex #j. Running(T, R, <r0, r1>) @ j)
+     | (Ex #r. LtkReveal(R, T) @ r)"
+
+end

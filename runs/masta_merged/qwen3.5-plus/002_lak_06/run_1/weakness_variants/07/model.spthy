@@ -1,0 +1,70 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ SetupKey(), Secret($Reader, $Tag, ~k), Honest($Reader), Honest($Tag) ]->
+  [ !Ltk($Reader, $Tag, ~k), !Ltk($Tag, $Reader, ~k) ]
+
+rule KeyReveal:
+  [ !Ltk($A, $B, k) ]
+  --[ LtkReveal($A) ]->
+  [ Out(k) ]
+
+rule RuleStep1:
+  [ Fr(~r0), !Ltk($Reader, $Tag, ~k) ]
+  --[ Test1(), ReaderStart($Reader, $Tag, ~r0) ]->
+  [ Out(~r0), !StateR1($Reader, $Tag, ~k, ~r0) ]
+
+rule RuleStep2:
+  [ In(~r0), Fr(~r1), !Ltk($Tag, $Reader, ~k) ]
+  --[ Test2(), TagRespond($Tag, $Reader, ~r0, ~r1), Running($Tag, $Reader, <~r0, ~r1>) ]->
+  [ Out(<~r1, h(~r0 XOR ~r1 XOR ~k)>), !StateT1($Tag, $Reader, ~k, ~r0, ~r1) ]
+
+rule RuleStep3:
+  let
+    expected_tag_mac = h(~r0 XOR ~r1 XOR ~k)
+    reader_mac = h(expected_tag_mac XOR ~k XOR ~r0)
+  in
+  [ In(<~r1, tag_mac>), !StateR1($Reader, $Tag, ~k, ~r0) ]
+  --[ Test3(), ReaderVerify($Reader, $Tag, ~r0, ~r1), Running($Reader, $Tag, <~r0, ~r1>), Commit($Reader, $Tag, <~r0, ~r1>) ]->
+  [ Out(<reader_mac, ~k>), !StateR2($Reader, $Tag, ~k, ~r0, ~r1) ]
+
+rule RuleStep4:
+  let
+    expected_reader_mac = h(h(~r0 XOR ~r1 XOR ~k) XOR ~k XOR ~r0)
+  in
+  [ In(<reader_mac, k_recv>), !StateT1($Tag, $Reader, ~k, ~r0, ~r1) ]
+  --[ Test4(), TagComplete($Tag, $Reader, ~r0, ~r1), Commit($Tag, $Reader, <~r0, ~r1>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_tag_identifier:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

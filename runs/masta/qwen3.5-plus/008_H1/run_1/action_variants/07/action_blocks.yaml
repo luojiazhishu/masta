@@ -1,0 +1,23 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid
+  - send:
+    - sign(<'I', 'R'>, ~ltkI)
+- role: RuleStep2
+  operations:
+  - send:
+    - sign(<'I', 'R'>, ~ltkI)
+- role: RuleStep3
+  operations:
+  - receive:
+    - sigI
+  - generate_nonces:
+    - ~tidR
+  - send:
+    - sign(<'I', 'R'>, ~ltkR)
+- role: RuleStep4
+  operations:
+  - receive:
+    - sigR
+  - send: <END>

@@ -1,0 +1,97 @@
+theory TESLAScheme1
+begin
+
+builtins: signing
+
+functions: mac/2, f/1
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* Long-term key registration */
+rule Register_Keypair:
+  [ Fr(~ltkS) ]
+  --[ ]->
+  [ !Ltk($S, ~ltkS), !Pk($S, pk(~ltkS)) ]
+
+/* Adversary reveals sender's long-term signing key */
+rule Reveal_Ltk:
+  [ !Ltk($S, ~ltkS) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~ltkS) ]
+
+/* Block 1: Receiver initiates connection setup (Msg 0a) */
+rule R_Send_0a:
+  [ Fr(~n_R) ]
+  --[ Test1(), Create($R, ~n_R) ]->
+  [ St_R_1($R, $S, ~n_R), Out(<$R, $S, ~n_R>) ]
+
+/* Block 2: Sender processes setup request, sends signed key commitment (Msg 0b) */
+rule S_Send_0b:
+  [ !Ltk($S, ~ltkS), Fr(~k_1), In(<$R, $S, n_R>) ]
+  --[ Test2(), Create($S, ~k_1), Running($S, $R, <'sender', n_R, ~k_1>) ]->
+  [ St_S_1($S, $R, n_R, ~k_1),
+    Out(<$S, $R, f(~k_1), sign(<f(~k_1), n_R>, ~ltkS)>) ]
+
+/* Block 3: Receiver verifies signed key commitment */
+rule R_Recv_0b:
+  [ St_R_1($R, $S, ~n_R), !Pk($S, pkS), In(<$S, $R, fk1, sig>) ]
+  --[ Test3(), Eq(verify(sig, <fk1, ~n_R>, pkS), true) ]->
+  [ St_R_2($R, $S, ~n_R, fk1) ]
+
+/* Block 4: Sender sends first stream message with data1_marker (Msg 1) */
+rule S_Send_Msg1:
+  [ St_S_1($S, $R, n_R, ~k_1), Fr(~k_2), Fr(~m_1) ]
+  --[ Test4(), Running($S, $R, <'broadcast', ~m_1, ~k_1>) ]->
+  [ St_S_2($S, $R, n_R, ~k_1, ~k_2),
+    Out(<~m_1, f(~k_2), mac(~k_1, <~m_1, f(~k_2)>), 'data1_marker'>) ]
+
+/* Block 5: Receiver checks data1_marker and caches first stream message */
+rule R_Recv_Msg1:
+  [ St_R_2($R, $S, ~n_R, fk1), In(<m_1, fk2, mac1, marker>) ]
+  --[ Test5(), Eq(marker, 'data1_marker') ]->
+  [ St_R_3($R, $S, ~n_R, fk1, m_1, fk2, mac1) ]
+
+/* Block 6: Sender sends second stream message with delayed k_1 disclosure (Msg 2) */
+rule S_Send_Msg2:
+  [ St_S_2($S, $R, n_R, ~k_1, ~k_2), Fr(~k_3), Fr(~m_2) ]
+  --[ Test6() ]->
+  [ St_S_3($S, $R, n_R, ~k_2, ~k_3),
+    Out(<~m_2, f(~k_3), ~k_1, mac(~k_2, <~m_2, f(~k_3), ~k_1>)>) ]
+
+/* Block 7: Receiver retrieves disclosed k_1, verifies cached Msg 1 MAC, accepts payload */
+rule R_Recv_Msg2:
+  [ St_R_3($R, $S, ~n_R, fk1, m_1, fk2, mac1),
+    In(<m_2, fk3, k1_disc, mac2>) ]
+  --[ Test7(),
+      Eq(f(k1_disc), fk1),
+      Eq(mac(k1_disc, <m_1, fk2>), mac1),
+      Commit($R, $S, <'receiver', m_1, k1_disc>),
+      Honest($R), Honest($S) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All r s t #i.
+     Commit(r, s, t) @ i
+   ==>
+       (Ex id #j. Create(s, id) @ j)
+     | (Ex X #rv. LtkReveal(X) @ rv & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All r s m k #i.
+     Commit(r, s, <'receiver', m, k>) @ i
+   ==>
+       (Ex #j. Running(s, r, <'broadcast', m, k>) @ j)
+     | (Ex X #rv. LtkReveal(X) @ rv & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5
+     & #t5 < #t6 & #t6 < #t7"
+
+end

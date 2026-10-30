@@ -1,0 +1,26 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~rho
+  - send:
+    - ~na
+    - ~rho
+- role: Responder_Respond
+  operations:
+  - receive:
+    - na
+    - rho
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR k XOR ~nb)
+    - ~nb
+    - rho
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - h(~na XOR k XOR nb)
+    - nb
+    - ~rho
+  - send: <END>

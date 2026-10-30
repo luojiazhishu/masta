@@ -1,0 +1,37 @@
+theory cr_xor_disck begin
+
+builtins: xor
+functions: H/1
+
+rule RuleStep1:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ !SharedKey(~k), Out(~k) ]
+
+rule RuleStep2:
+  [ Fr(~na) ]
+  --[ Test2() ]->
+  [ Out(~na), Init(~na) ]
+
+rule RuleStep3:
+  let x = na ⊕ k ⊕ ~nb
+  in
+  [ In(na), !SharedKey(k), Fr(~nb) ]
+  --[ Test3() ]->
+  [ Out(< H(x), ~nb >) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

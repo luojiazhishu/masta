@@ -1,0 +1,157 @@
+theory LoRaWAN10
+begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, tag/1
+
+rule Provisioning:
+  [ Fr(~AppKey) ]
+  --[ ]->
+  [ !SharedKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr) ]
+
+rule LtkReveal:
+  [ !SharedKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr) ]
+  --[ LtkReveal($Device), LtkReveal($Server) ]->
+  [ Out(~AppKey) ]
+
+// Action Block 1: Device generates DevNonce and sends JoinRequest with MAC
+rule Device_SendJoinRequest:
+  let
+    reqMAC = mac(~AppKey, <'JoinRequest', $DevEUI, $JoinEUI, ~DevNonce>)
+  in
+  [ !SharedKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr)
+  , Fr(~DevNonce)
+  ]
+  --[ Test1()
+    , Create($Device, ~DevNonce)
+    , Running($Device, $Server, <'init', $DevEUI, $JoinEUI, ~DevNonce>)
+    ]->
+  [ St_Device_1($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr, ~DevNonce)
+  , Out(<'JoinRequest', $DevEUI, $JoinEUI, ~DevNonce, reqMAC>)
+  ]
+
+// Action Block 2: Server verifies JoinRequest MAC, derives session keys,
+//                 sends encrypted JoinAccept
+rule Server_ProcessJoinRequest:
+  let
+    reqMAC   = mac(~AppKey, <'JoinRequest', $DevEUI, $JoinEUI, devNonce>)
+    respMAC  = mac(~AppKey, <'JoinAccept', ~JoinNonce, $DevAddr>)
+    AppSKey  = senc(<'cst1', devNonce, ~JoinNonce>, ~AppKey)
+    NwkSKey  = senc(<'cst2', devNonce, ~JoinNonce>, ~AppKey)
+  in
+  [ !SharedKey($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr)
+  , Fr(~JoinNonce)
+  , In(<'JoinRequest', $DevEUI, $JoinEUI, devNonce, reqMAC>)
+  ]
+  --[ Test2()
+    , Create($Server, ~JoinNonce)
+    , Running($Server, $Device, <'resp', $DevEUI, $JoinEUI, devNonce, ~JoinNonce>)
+    , Running($Server, $Device, <'keys', AppSKey, NwkSKey>)
+    , Commit($Server, $Device, <'init', $DevEUI, $JoinEUI, devNonce>)
+    , Secret($Server, $Device, AppSKey)
+    , Secret($Server, $Device, NwkSKey)
+    , Honest($Server), Honest($Device)
+    ]->
+  [ Out(senc(<'JoinAccept', ~JoinNonce, $DevAddr, respMAC>, ~AppKey)) ]
+
+// Action Block 3: Device decrypts JoinAccept, verifies MAC, computes
+//                 NonceTag (local diagnostic), derives session keys
+rule Device_ProcessJoinAccept:
+  let
+    respMAC  = mac(~AppKey, <'JoinAccept', joinNonce, $DevAddr>)
+    nonceTag = tag(joinNonce)
+    AppSKey  = senc(<'cst1', ~DevNonce, joinNonce>, ~AppKey)
+    NwkSKey  = senc(<'cst2', ~DevNonce, joinNonce>, ~AppKey)
+  in
+  [ St_Device_1($Device, $Server, ~AppKey, $DevEUI, $JoinEUI, $DevAddr, ~DevNonce)
+  , In(senc(<'JoinAccept', joinNonce, $DevAddr, respMAC>, ~AppKey))
+  ]
+  --[ Test3()
+    , Commit($Device, $Server, <'resp', $DevEUI, $JoinEUI, ~DevNonce, joinNonce>)
+    , Commit($Device, $Server, <'keys', AppSKey, NwkSKey>)
+    , Secret($Device, $Server, AppSKey)
+    , Secret($Device, $Server, NwkSKey)
+    , Honest($Device), Honest($Server)
+    ]->
+  [ ]
+
+// 10.7 Secrecy of the Session Keys
+// category: secrecy
+lemma secrecy_session_keys:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.2 Non-injective Agreement at the Device
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All device server deveui joineui devnonce joinnonce #i.
+     Commit(device, server, <'resp', deveui, joineui, devnonce, joinnonce>) @ i
+   ==>
+       (Ex #j. Running(server, device, <'resp', deveui, joineui, devnonce, joinnonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.1 Injective Agreement at the Device
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All device server deveui joineui devnonce joinnonce #i.
+     Commit(device, server, <'resp', deveui, joineui, devnonce, joinnonce>) @ i
+   ==>
+       ( (Ex #j. Running(server, device, <'resp', deveui, joineui, devnonce, joinnonce>) @ j
+             & j < i
+             & not (Ex d2 s2 #i2. Commit(d2, s2, <'resp', deveui, joineui, devnonce, joinnonce>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.4 Non-injective Agreement at the Network Server
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All device server deveui joineui devnonce #i.
+     Commit(server, device, <'init', deveui, joineui, devnonce>) @ i
+   ==>
+       (Ex #j. Running(device, server, <'init', deveui, joineui, devnonce>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.3 Injective Agreement at the Network Server
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All device server deveui joineui devnonce #i.
+     Commit(server, device, <'init', deveui, joineui, devnonce>) @ i
+   ==>
+       ( (Ex #j. Running(device, server, <'init', deveui, joineui, devnonce>) @ j
+             & j < i
+             & not (Ex d2 s2 #i2. Commit(d2, s2, <'init', deveui, joineui, devnonce>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.6 Non-injective Agreement on the Session Keys
+// category: noninjective_agreement
+lemma noninjective_agreement_keys:
+  "All device server appskey nwkskey #i.
+     Commit(device, server, <'keys', appskey, nwkskey>) @ i
+   ==>
+       (Ex #j. Running(server, device, <'keys', appskey, nwkskey>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 10.5 Injective Agreement on the Session Keys
+// category: injective_agreement
+lemma injective_agreement_keys:
+  "All device server appskey nwkskey #i.
+     Commit(device, server, <'keys', appskey, nwkskey>) @ i
+   ==>
+       ( (Ex #j. Running(server, device, <'keys', appskey, nwkskey>) @ j
+             & j < i
+             & not (Ex d2 s2 #i2. Commit(d2, s2, <'keys', appskey, nwkskey>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

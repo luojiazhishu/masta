@@ -1,0 +1,19 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~rn
+  - send:
+    - sign(<I, R>, ~ltkI)
+    - ~rn
+- role: Responder_Respond
+  operations:
+  - receive:
+    - sign(<I, R>, ~ltkI)
+    - rn
+  - send:
+    - sign(<I, R>, ~ltkR)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - sign(<I, R>, ~ltkR)
+  - send: <END>

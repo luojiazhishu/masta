@@ -1,0 +1,126 @@
+theory LoRaWAN_Join begin
+
+builtins: symmetric-encryption, hashing, signing
+
+functions: mac/2, verif_mac/3, tag/1
+
+equations: verif_mac(k, m, mac(k, m)) = true
+
+/* Persistent facts for pre-provisioned device credentials */
+rule Setup_Device:
+  [ Fr(~AppKey), Fr(~DevEUI), Fr(~JoinEUI), Fr(~DevAddr) ]
+  -->
+  [ !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr) ]
+
+/* RuleStep1: Device sends JoinRequest */
+rule RuleStep1:
+  let
+    RequestMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce>)
+  in
+  [ Fr(~DevNonce), !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr) ]
+  --[ Test1(), Running(~DevEUI, ~JoinEUI, <~DevNonce>) ]->
+  [ Out(< 'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, RequestMAC >), !StoredNonce(~DevEUI, ~DevNonce) ]
+
+/* RuleStep2: Server receives JoinRequest, sends JoinAccept */
+rule RuleStep2:
+  let
+    ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce>)
+    encrypted_payload = senc(< 'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce, ResponseMAC >, ~AppKey)
+  in
+  [ In(< 'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, RequestMAC >),
+    Fr(~JoinNonce),
+    !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr) ]
+  --[ Test2(), Running(~JoinEUI, ~DevEUI, <~DevNonce, ~JoinNonce>), Honest(~JoinEUI), Commit(~JoinEUI, ~DevEUI, <~DevNonce, ~JoinNonce>) ]->
+  [ Out(encrypted_payload) ]
+
+/* RuleStep3: Device receives JoinAccept, computes session keys, verifies MAC */
+rule RuleStep3:
+  let
+    AppSKey = senc(< 'cst1', ~DevNonce, ~JoinNonce >, ~AppKey)
+    NwkSKey = senc(< 'cst2', ~DevNonce, ~JoinNonce >, ~AppKey)
+    ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce>)
+  in
+  [ In(senc(< 'JoinAccept', ~JoinNonce, ~DevAddr, ~DevNonce, ResponseMAC >, ~AppKey)),
+    !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr),
+    !StoredNonce(~DevEUI, ~DevNonce) ]
+  --[ Test3(), Commit(~DevEUI, ~JoinEUI, <~DevNonce, ~JoinNonce>), Honest(~DevEUI), Secret(~DevEUI, ~JoinEUI, <AppSKey, NwkSKey>) ]->
+  [ Out('<END>') ]
+
+/* LTK reveal rule for long-term key compromise */
+rule LtkReveal:
+  [ !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr) ]
+  --[ LtkReveal(~DevEUI) ]->
+  [ Out(~AppKey) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: injective_agreement
+lemma injective_agreement_device_injective_agreement:
+  "All dev srv t #i.
+     Commit(dev, srv, t) @ i
+   ==>
+       ( (Ex #j. Running(srv, dev, t) @ j
+             & j < i
+             & not (Ex dev2 srv2 #i2. Commit(dev2, srv2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device_noninjective_agreement:
+  "All dev srv t #i.
+     Commit(dev, srv, t) @ i
+   ==>
+       (Ex #j. Running(srv, dev, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server_injective_agreement:
+  "All srv dev t #i.
+     Commit(srv, dev, t) @ i
+   ==>
+       ( (Ex #j. Running(dev, srv, t) @ j
+             & j < i
+             & not (Ex srv2 dev2 #i2. Commit(srv2, dev2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_noninjective_agreement:
+  "All srv dev t #i.
+     Commit(srv, dev, t) @ i
+   ==>
+       (Ex #j. Running(dev, srv, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_key_injective_agreement:
+  "All dev srv keys #i.
+     Secret(dev, srv, keys) @ i
+   ==>
+       ( (Ex #j. Running(srv, dev, keys) @ j
+             & j < i
+             & not (Ex dev2 srv2 #i2. Secret(dev2, srv2, keys) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_key_noninjective_agreement:
+  "All dev srv keys #i.
+     Secret(dev, srv, keys) @ i
+   ==>
+       (Ex #j. Running(srv, dev, keys) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All dev srv keys #i.
+     Secret(dev, srv, keys) @ i
+   ==>
+       not (Ex #j. K(keys) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

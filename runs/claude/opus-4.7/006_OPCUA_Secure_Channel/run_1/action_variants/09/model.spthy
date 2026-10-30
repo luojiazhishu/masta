@@ -1,0 +1,114 @@
+theory OPCUASecureChannel
+begin
+
+builtins: hashing, signing
+
+restriction Eq_Restr:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Register_Ltk:
+  [ Fr(~sk) ]
+  --[ ]->
+  [ !Ltk($A, ~sk), !Pk($A, pk(~sk)), Out(pk(~sk)) ]
+
+rule LtkReveal:
+  [ !Ltk($A, ~sk) ]
+  --[ LtkReveal(pk(~sk)) ]->
+  [ Out(~sk) ]
+
+/* Block 1: Client sends GetEndpointsRequest */
+rule Client_SendGetEndpointsReq:
+  [ !Ltk($C, ~skC), Fr(~cid) ]
+  --[ Create($C, ~cid), Test1() ]->
+  [ St_C_1($C, ~cid, ~skC), Out('GEReq') ]
+
+/* Block 2: Server receives GetEndpointsRequest, sends GetEndpointsResponse */
+rule Server_SendGetEndpointsResp:
+  [ !Ltk($S, ~skS), In('GEReq'), Fr(~sid) ]
+  --[ Create($S, ~sid), Test2() ]->
+  [ St_S_1($S, ~sid, ~skS),
+    Out(<'GERes', pk(~skS), 'Sign', 'SecPol', 'UserTok'>) ]
+
+/* Block 3: Client receives GetEndpointsResponse, generates Nc, sends OpenSecureChannelRequest */
+rule Client_SendOSCReq:
+  [ St_C_1($C, ~cid, ~skC),
+    In(<'GERes', pkS, 'Sign', policy, userTok>),
+    Fr(~Nc) ]
+  --[ Test3(),
+      Running(pk(~skC), pkS, <'client', ~Nc>) ]->
+  [ St_C_2($C, ~cid, ~skC, pkS, ~Nc),
+    Out(<pk(~skC),
+         <'OSCReq', pk(~skC), ~Nc>,
+         sign(h(<'OSCReq', pk(~skC), ~Nc>), ~skC),
+         h(<'OSCReq', pk(~skC), ~Nc>)>) ]
+
+/* Block 4: Server receives OpenSecureChannelRequest, verifies, generates Ns, sends OpenSecureChannelResponse */
+rule Server_RecvSendOSCResp:
+  [ St_S_1($S, ~sid, ~skS),
+    In(<pkC, <'OSCReq', pkC, Nc>, sig, digest>),
+    Fr(~Ns), Fr(~ST), Fr(~TTL) ]
+  --[ Test4(),
+      Eq(verify(sig, h(<'OSCReq', pkC, Nc>), pkC), true),
+      Eq(digest, h(<'OSCReq', pkC, Nc>)),
+      Commit(pk(~skS), pkC, <'client', Nc>),
+      Running(pk(~skS), pkC, <'server', ~Ns>),
+      Secret(pk(~skS), pkC, h(<Nc, ~Ns>)),
+      Honest(pk(~skS)), Honest(pkC) ]->
+  [ St_S_2($S, ~sid, ~skS, pkC, Nc, ~Ns, ~ST, ~TTL),
+    Out(<pk(~skS),
+         <'OSCRes', ~Ns, ~ST, ~TTL>,
+         sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), ~skS),
+         h(<'OSCRes', ~Ns, ~ST, ~TTL>)>) ]
+
+/* Block 5: Client receives OpenSecureChannelResponse, verifies, computes channel binding */
+rule Client_RecvOSCResp:
+  [ St_C_2($C, ~cid, ~skC, pkS, ~Nc),
+    In(<pkS, <'OSCRes', Ns, ST, TTL>, sig, digest>) ]
+  --[ Test5(),
+      Eq(verify(sig, h(<'OSCRes', Ns, ST, TTL>), pkS), true),
+      Eq(digest, h(<'OSCRes', Ns, ST, TTL>)),
+      Commit(pk(~skC), pkS, <'server', Ns>),
+      Secret(pk(~skC), pkS, h(<~Nc, Ns>)),
+      Honest(pk(~skC)), Honest(pkS) ]->
+  [ ]
+
+/* Security goal 8.1: Secrecy of the channel session key h(<Nc, Ns>).
+   In Sign-Sign mode both nonces travel in cleartext, so this lemma
+   is expected to falsify — the adversary observes both nonces and can
+   compute the binding. */
+// category: secrecy
+lemma secrecy_channel_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* Security goal 8.2: Non-injective agreement on the Client Nonce.
+   Server commits on Nc; requires Client to have run with that Nc. */
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All s c nc #i.
+     Commit(s, c, <'client', nc>) @ i
+   ==>
+       (Ex #j. Running(c, s, <'client', nc>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* Security goal 8.3: Non-injective agreement on the Server Nonce.
+   Client commits on Ns; requires Server to have run with that Ns. */
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All c s ns #i.
+     Commit(c, s, <'server', ns>) @ i
+   ==>
+       (Ex #j. Running(s, c, <'server', ns>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

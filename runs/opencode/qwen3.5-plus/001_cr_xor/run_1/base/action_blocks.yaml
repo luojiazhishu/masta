@@ -1,0 +1,23 @@
+- role: Initiator_Start
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: Responder_Receive
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(<na, ~k, ~nb>)
+    - ~nb
+- role: Initiator_Verify
+  operations:
+  - receive:
+    - tag
+    - nb
+  - assert:
+    - tag = h(<~na, ~k, nb>)
+  - send: <END>

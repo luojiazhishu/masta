@@ -1,0 +1,55 @@
+theory CrXorIrtx
+begin
+
+builtins: hashing, xor
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+  --[ Create($I, 'init'), Create($R, 'resp') ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Initiator_Send_Duplicate_Challenge:
+  [ Fr(~na), !SharedKey($I, $R, k) ]
+  --[ Test1() ]->
+  [ Out(~na), Out(~na), St_I_Wait($I, $R, ~na, k) ]
+
+rule Responder_First_Copy_Response:
+  let tag = h(na XOR k XOR ~nb) in
+  [ Fr(~nb), !SharedKey(I, R, k), In(na) ]
+  --[ Test2(), Running(R, I, tag), Honest(I), Honest(R) ]->
+  [ Out(<tag, ~nb>) ]
+
+rule Initiator_Verify_Response:
+  let tag = h(na XOR k XOR nb) in
+  [ St_I_Wait(I, R, na, k), In(<tag, nb>) ]
+  --[ Test3(), Commit(I, R, tag), Honest(I), Honest(R), Secret(tag) ]->
+  [ ]
+
+// category: aliveness
+lemma responder_aliveness:
+  "All i r tag #t.
+     Commit(i, r, tag) @ #t
+   ==>
+       (Ex id #j. Create(r, id) @ #j)
+     | (Ex x #rev. LtkReveal(x) @ #rev & (x = i | x = r))"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_tag:
+  "All i r tag #t.
+     Commit(i, r, tag) @ #t
+   ==>
+       (Ex #j. Running(r, i, tag) @ #j)
+     | (Ex x #rev. LtkReveal(x) @ #rev & (x = i | x = r))"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

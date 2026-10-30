@@ -1,0 +1,88 @@
+theory PublicKeySessionKeyTransport
+begin
+
+builtins: hashing, asymmetric-encryption
+
+rule Register_Server:
+  [ Fr(~ltkS) ]
+  --[ Create('S', 'server') ]->
+  [ !Ltk('S', ~ltkS)
+  , !Pk('S', pk(~ltkS))
+  , Out(pk(~ltkS))
+  ]
+
+rule Reveal_Server_Key:
+  [ !Ltk('S', ltkS) ]
+  --[ LtkReveal('S') ]->
+  [ Out(ltkS) ]
+
+rule Client_Initiate:
+  [ Fr(~k)
+  , !Pk('S', pkS)
+  ]
+  --[ Test1()
+    , Secret('C', 'S', ~k)
+    , Honest('C')
+    , Honest('S')
+    ]->
+  [ Out(aenc(~k, pkS))
+  , St_Client_Wait('C', 'S', ~k)
+  ]
+
+rule Server_Process:
+  let k = adec(ciphertext, ltkS) in
+  [ In(ciphertext)
+  , !Ltk('S', ltkS)
+  ]
+  --[ Test2()
+    , Running('S', 'C', k)
+    , Honest('C')
+    , Honest('S')
+    ]->
+  [ Out(h(k)) ]
+
+rule Client_Accept:
+  [ St_Client_Wait('C', 'S', k)
+  , In(reply)
+  ]
+  --[ Test3()
+    , Commit('C', 'S', k)
+    , Honest('C')
+    , Honest('S')
+    ]->
+  [ Accepted('C', 'S', k, reply) ]
+
+// category: secrecy
+lemma secrecy_transport_key:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_transport_key:
+  "All a b k #i.
+     Commit(a, b, k) @ #i
+   ==>
+       (Ex #j. Running(b, a, k) @ #j)
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+// category: injective_agreement
+lemma injective_agreement_transport_key:
+  "All a b k #i.
+     Commit(a, b, k) @ #i
+   ==>
+       ( (Ex #j. Running(b, a, k) @ #j
+             & #j < #i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, k) @ #i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ #r & Honest(X) @ #i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

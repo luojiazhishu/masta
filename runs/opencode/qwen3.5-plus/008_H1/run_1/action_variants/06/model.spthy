@@ -1,0 +1,66 @@
+theory MutualAuthProtocol
+begin
+
+builtins: signing, hashing
+
+functions: com/2
+
+rule Setup:
+  [ Fr(~ltkI), Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', pk(~ltkI)), !Ltk('R', ~ltkR), !Pk('R', pk(~ltkR)) ]
+
+rule LtkReveal:
+  [ !Ltk(X, sk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(sk) ]
+
+rule Initiator_Start:
+  [ !Ltk('I', ~ltkI) ]
+  --[ Test1(), Create('I', ~ltkI), Running('I', 'R', <'initiator', ~ltkI>) ]->
+  [ Out(sign(<'I', 'R'>, ~ltkI)), St_I_1('I', 'R', ~ltkI) ]
+
+rule Responder_Receive:
+  [ In(sign(<'I', 'R'>, ltkI)), !Ltk('R', ~ltkR), !Pk('I', pk(ltkI)) ]
+  --[ Test2(), Create('R', ~ltkR), Running('R', 'I', <'responder', ~ltkR, ltkI>) ]->
+  [ Out(sign(<'I', 'R'>, ~ltkR)), Out(com('R', 'I')), St_R_1('I', 'R', ltkI, ~ltkR) ]
+
+rule Initiator_Finish:
+  [ St_I_1('I', 'R', ltkI), In(sign(<'I', 'R'>, ltkR)), !Pk('R', pk(ltkR)) ]
+  --[ Test3(), Commit('I', 'R', <'initiator', ltkI, ltkR>), Honest('I'), Honest('R') ]->
+  [ ]
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,69 @@
+theory PublicKeySessionKeyTransport
+begin
+
+builtins: asymmetric-encryption, hashing
+
+rule RegisterServer:
+  [ Fr(~S), Fr(~skS) ]
+  --[ Test1(), Create(~S, ~skS) ]->
+  [ !Ltk(~S, ~skS), !Pk(~S, pk(~skS)) ]
+
+rule ClientInit:
+  [ Fr(~C), Fr(~k), !Pk(S, pkS) ]
+  --[ Test2(), Running(~C, S, ~k) ]->
+  [ Out(aenc(~k, pkS)), St_C(~C, S, ~k) ]
+
+rule ServerRespond:
+  [ !Ltk(S, ~skS), In(c) ]
+  --[ Test3(), Running(S, 'any', adec(c, ~skS)) ]->
+  [ Out(h(<adec(c, ~skS), S>)), St_S(S, adec(c, ~skS)) ]
+
+rule ClientVerify:
+  [ St_C(C, S, ~k), In(confirm) ]
+  --[ Test4(), Eq(confirm, h(<~k, S>)), Commit(C, S, ~k), Secret(C, S, ~k) ]->
+  [ ]
+
+rule ServerCommit:
+  [ St_S(S, k) ]
+  --[ Commit(S, 'any', k) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(X, skX) ]
+  --[ LtkReveal(X) ]->
+  [ Out(skX) ]
+
+lemma secrecy:
+  // category: secrecy
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+lemma noninjective_agreement:
+  // category: noninjective_agreement
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       (Ex #j. Running(S, 'any', k) @ j)
+     | (Ex #r. LtkReveal(S) @ r)"
+
+lemma injective_agreement:
+  // category: injective_agreement
+  "All C S k #i.
+     Commit(C, S, k) @ i
+   ==>
+       ( (Ex #j. Running(S, 'any', k) @ j
+             & j < i
+             & not (Ex C2 S2 #i2. Commit(C2, S2, k) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex #r. LtkReveal(S) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

@@ -1,0 +1,73 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~sid
+  - send:
+    - '''GEReq'''
+    - $C
+    - $S
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+    - C
+    - $S
+  - send:
+    - '''GERes'''
+    - $S
+    - C
+    - pkS
+    - '''Sign'''
+    - '''policy'''
+    - '''userToken'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - S_seen
+    - $C
+    - serverCert
+    - '''Sign'''
+    - policy
+    - userToken
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - body = <'OSCReq', pk(ltkC), ~Nc, 'protoV1'>
+  - send:
+    - '''OSCReqMsg'''
+    - pk(ltkC)
+    - body
+    - sign(h(body), ltkC)
+    - h(body)
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - '''OSCReqMsg'''
+    - clientCert
+    - reqBody
+    - sign(h(reqBody), ltkC)
+    - h(reqBody)
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+  - compute:
+    - reqBody = <'OSCReq', clientCert, Nc, 'protoV1'>
+    - responseBody = <'OSCRes', ~Ns, ~ST, 'ttl'>
+  - send:
+    - '''OSCResMsg'''
+    - pk(ltkS)
+    - responseBody
+    - sign(h(responseBody), ltkS)
+    - h(responseBody)
+- role: Client_AcceptOpenSecureChannel
+  operations:
+  - receive:
+    - '''OSCResMsg'''
+    - serverCert
+    - responseBody
+    - sign(h(responseBody), ltkS)
+    - h(responseBody)
+  - compute:
+    - responseBody = <'OSCRes', Ns, ST, TTL>
+  - send: <END>

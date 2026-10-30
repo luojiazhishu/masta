@@ -1,0 +1,63 @@
+theory CR_XOR_IRtx begin
+
+builtins: hashing, xor
+
+// Pre-shared key between initiator and responder
+rule RegisterPSK:
+  [ Fr(~k) ]
+  --[ SetupPSK($I, $R, ~k) ]->
+  [ !PSK($I, $R, ~k) ]
+
+// RuleStep1: Initiator generates nonce na and sends first challenge
+rule RuleStep1:
+  [ !PSK($I, $R, ~k), Fr(~na) ]
+  --[ Test1(), Start($I, $R, ~na), Honest($I) ]->
+  [ !PSK($I, $R, ~k), StateI($I, $R, ~na), Out(~na) ]
+
+// RuleStep2: Initiator sends second copy of challenge (retransmission)
+rule RuleStep2:
+  [ !PSK($I, $R, ~k), StateI($I, $R, ~na) ]
+  --[ Test2() ]->
+  [ !PSK($I, $R, ~k), StateI($I, $R, ~na), Out(~na) ]
+
+// RuleStep3: Responder receives challenge, generates nb, computes tag, sends response
+rule RuleStep3:
+  [ !PSK($I, $R, ~k), In(~na), Fr(~nb) ]
+  --[ Test3(), Resp($I, $R, ~na, ~nb), Honest($R), Running($R, $I, <h(~na ⊕ ~k ⊕ ~nb), ~nb>) ]->
+  [ !PSK($I, $R, ~k), Out(<h(~na ⊕ ~k ⊕ ~nb), ~nb>) ]
+
+// RuleStep4: Initiator receives response, verifies tag
+rule RuleStep4:
+  [ !PSK($I, $R, ~k), StateI($I, $R, ~na), In(<tag, ~nb>) ]
+  --[ Test4(), Verify($I, $R, ~na, ~nb, tag), Honest($I), Commit($I, $R, <tag, ~nb>) ]->
+  [ !PSK($I, $R, ~k), End($I, $R, ~na) ]
+
+// PSK reveal rule for key compromise modeling
+rule PSKReveal:
+  [ !PSK($I, $R, ~k) ]
+  --[ PSKReveal($I, $R) ]->
+  [ !PSK($I, $R, ~k), Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+lemma aliveness_of_the_responder:
+  "All i r na nb tag #i.
+     Verify(i, r, na, nb, tag) @ i
+   ==>
+       (Ex #j. Resp(i, r, na, nb) @ j)
+     | (Ex X Y #r. PSKReveal(X, Y) @ r & Honest(r) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_on_verification_tag:
+  "All i r t #i.
+     Commit(i, r, t) @ i
+   ==>
+       (Ex #j. Running(r, i, t) @ j)
+     | (Ex X Y #r. PSKReveal(X, Y) @ r & Honest(i) @ i)"
+
+end

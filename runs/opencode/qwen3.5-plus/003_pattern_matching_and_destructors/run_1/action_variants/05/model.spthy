@@ -1,0 +1,52 @@
+theory SK_Hash_Witness
+begin
+
+builtins: symmetric-encryption, hashing
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ !SharedKey(~k) ]->
+  [ !SharedKey(~k) ]
+
+rule Initiator_Send:
+  [ Fr(~sec)
+  , Fr(~pub)
+  , !SharedKey(~k)
+  ]
+  --[ Test1()
+    , Secret(~sec, ~k)
+    ]->
+  [ Out( senc(<~sec, ~pub>, ~k) )
+  , Out( h(~sec) )
+  ]
+
+rule Responder_Receive:
+  [ In( senc(<sec, pub>, k) )
+  , In( h(sec) )
+  , !SharedKey(k)
+  ]
+  --[ Test2()
+    , Commit(sec, pub)
+    ]->
+  [ ]
+
+rule LtkReveal:
+  [ !SharedKey(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// category: secrecy
+lemma secrecy:
+  "All sec k #i.
+     Secret(sec, k) @ i
+   ==>
+       not (Ex #j. K(sec) @ j)
+     | (Ex #r. LtkReveal(k) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

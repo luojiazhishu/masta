@@ -1,0 +1,40 @@
+- role: Initiator_Emit_Message1
+  operations:
+  - generate_nonces:
+    - ~eskI
+    - ~tid
+  - compute:
+    - exI = h1(<~eskI, ~lkI>)
+    - hkI = 'g'^h1(<~eskI, ~lkI>)
+  - send:
+    - hkI
+- role: Responder_Process_Message1_Audit
+  operations:
+  - receive:
+    - X
+  - generate_nonces:
+    - ~tid
+  - compute:
+    - auditCommitment = com($I, $R)
+    - keyFingerprint = bar(pkI)
+  - send: []
+- role: Responder_Emit_Message2_Key
+  operations:
+  - generate_nonces:
+    - ~eskR
+    - ~kR
+  - compute:
+    - exR = h1(<~eskR, ~lkR>)
+    - hkR = 'g'^h1(<~eskR, ~lkR>)
+    - kR = h2(<pkI^h1(<~eskR, ~lkR>), X^~lkR, $I, $R>)
+  - send:
+    - hkR
+- role: Initiator_Receive_Message2_Key
+  operations:
+  - receive:
+    - Y
+  - generate_nonces:
+    - ~kI
+  - compute:
+    - kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+  - send: <END>

@@ -1,0 +1,51 @@
+theory ISO9798_4_4_Mutual
+begin
+
+builtins: hashing
+
+functions: sid1_mut_cr/0, sid2_mut_cr/0, mac1/1, mac2/1
+
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a b t #i.
+     Commit_B(a, b, t) @ i
+   ==>
+       (Ex #j. Running_B(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit_B(a2, b2, t) @ i2
+                                & not (#i2 = #i)))"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit_A(a, b, t) @ i
+   ==>
+       (Ex #j. Running_A(b, a, t) @ j)"
+
+rule Responder_Start:
+  [ Fr(~RB) ]
+  --[ Test1(), Running_B('B', 'A', <'responder', ~RB, 'A', 'B'>) ]->
+  [ Out(~RB), St_B_1(~RB) ]
+
+rule Initiator_Respond:
+  [ In(RB), Fr(~RA) ]
+  --[ Test2(), Running_A('A', 'B', <'initiator', ~RA, RB, 'A', 'B'>) ]->
+  [ Out(<~RA, mac1(h(sid1_mut_cr, ~RA, RB, 'B'))>), St_A_1(~RA, RB) ]
+
+rule Responder_Verify:
+  [ St_B_1(RB), In(<RA, mac1(h(sid1_mut_cr, RA, RB, 'B'))>) ]
+  --[ Test3(), Commit_B('A', 'B', <'responder', RA, RB, 'A', 'B'>) ]->
+  [ Out(mac2(h(sid2_mut_cr, RB, RA))) ]
+
+rule Initiator_Verify:
+  [ St_A_1(RA, RB), In(mac2(h(sid2_mut_cr, RB, RA))) ]
+  --[ Test4(), Commit_A('A', 'B', <'initiator', RA, RB, 'A', 'B'>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

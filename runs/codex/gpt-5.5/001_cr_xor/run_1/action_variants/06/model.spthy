@@ -1,0 +1,57 @@
+theory CrXorDSep
+begin
+
+builtins: hashing, xor
+
+rule Setup_Shared_Key:
+  [ Fr(~k) ]
+  --[ Secret($I, $R, ~k), Honest($I), Honest($R) ]->
+  [ !Ltk($I, $R, ~k), !Ltk($R, $I, ~k) ]
+
+rule Reveal_Shared_Key:
+  [ !Ltk(A, B, k) ]
+  --[ LtkReveal(A), LtkReveal(B) ]->
+  [ Out(k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !Ltk($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ Out(~na), St_I_1($I, $R, ~na, k) ]
+
+rule Responder_Respond:
+  let tag = h(<(na XOR k) XOR ~nb, 'Init'>)
+  in
+  [ In(na), Fr(~nb), !Ltk($R, $I, k) ]
+  --[ Test2(), Create(k, ~nb), Running(k, $I, <'responder_alive', k>) ]->
+  [ Out(<tag, ~nb>) ]
+
+rule Initiator_Verify:
+  let tag = h(<(~na XOR k) XOR nb, 'Init'>)
+  in
+  [ St_I_1($I, $R, ~na, k), In(<tag, nb>) ]
+  --[ Test3(), Commit($I, k, <'responder_alive', k>), Honest($I) ]->
+  [ ]
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All A B t #i.
+     Commit(A, B, t) @ i
+   ==>
+       (Ex id #j. Create(B, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

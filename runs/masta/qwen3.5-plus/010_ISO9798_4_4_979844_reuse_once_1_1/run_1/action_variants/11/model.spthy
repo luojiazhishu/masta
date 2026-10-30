@@ -1,0 +1,116 @@
+theory MutualChallengeResponse begin
+
+builtins: hashing
+functions: mac/2
+
+rule SetupKeys:
+  [
+    Fr(~kAB)
+  ]
+  -->
+  [
+    !SharedKey('IdA', 'IdB', ~kAB),
+    Honest('IdA'),
+    Honest('IdB')
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~RB),
+    Fr(~Text1)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<~RB, ~Text1>),
+    !RespChallenge(~RB)
+  ]
+
+rule RuleStep2:
+  [
+    Fr(~RB2),
+    Fr(~Text1_2)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<~RB2, ~Text1_2>),
+    !RespChallenge(~RB2)
+  ]
+
+rule RuleStep3:
+  [
+    In(<RB, Text1>),
+    Fr(~RA),
+    Fr(~Text2),
+    Fr(~Text3),
+    !SharedKey('IdA', 'IdB', kAB)
+  ]
+  --[ Test3(), Running('IdA', 'IdB', <~RA, RB>) ]->
+  [
+    Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, mac(< 'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2 >, kAB)>),
+    !InitChallenge(~RA),
+    !SessionRB(~RA, RB)
+  ]
+
+rule RuleStep4:
+  [
+    In(<RA, Text3, <'sid1_mut_cr', RA, RB, 'IdB', Text2>, mac1>),
+    !SharedKey('IdA', 'IdB', kAB),
+    Fr(~Text4),
+    Fr(~Text5)
+  ]
+  --[ Test4(), Running('IdB', 'IdA', <RA, RB>), Commit('IdB', 'IdA', <RA, RB>) ]->
+  [
+    Out(<~Text5, mac(< 'sid2_mut_cr', RB, RA >, kAB)>),
+    !SessionData(RA, RB)
+  ]
+
+rule RuleStep5:
+  [
+    In(<Text5, mac2>),
+    !SharedKey('IdA', 'IdB', kAB),
+    !InitChallenge(RA),
+    !SessionRB(RA, RB)
+  ]
+  --[ Test5(), Commit('IdA', 'IdB', <RA, RB>) ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

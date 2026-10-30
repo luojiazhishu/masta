@@ -1,0 +1,98 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+    A Symmetric-Key Encapsulation Profile with Profile Tag
+                  draft-famed-sk-pmd-v01-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the on-wire transmission consists of a
+   ciphertext under the shared key followed by a fixed profile tag
+   'pmd'.  The ciphertext carries the secret and public payloads of
+   the encapsulation; the profile tag identifies the carrier wire
+   format and is exposed in cleartext.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+1.  Introduction
+
+   The present profile follows the design of a single-message
+   symmetric-key encapsulation in which an initiator transmits a
+   ciphertext that contains two freshly drawn payloads.  In this
+   profile the on-wire artifact is a two-component tuple whose
+   first component is the ciphertext and whose second component is
+   a fixed cleartext label 'pmd'.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174].
+
+      'pmd'     a fixed cleartext label that identifies this
+                profile on the wire.
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  <senc(<sec, pub>, k), 'pmd'>                  |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+4.  Message Format
+
+   The on-wire artifact is
+
+      <msg, 'pmd'>
+
+   where msg = senc(<sec, pub>, k).  The literal 'pmd' MUST appear
+   verbatim as the second tuple component.
+
+5.  Processing Rules
+
+   The initiator draws sec and pub, forms msg, and transmits the
+   pair <msg, 'pmd'>.  The responder receives an inbound pair,
+   binds its first component to msg and its second component to a
+   variable that is otherwise unused, and proceeds to apply the
+   destructor checks of the base profile against msg under the
+   shared key k.
+
+6.  Security Considerations
+
+   The 'pmd' label is a public constant and does not enter any
+   keyed computation.  Its inclusion does not affect the secrecy
+   of sec.  As in the base profile, secrecy of sec is provided
+   against an adversary that does not hold k; pub is, by design,
+   not protected.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

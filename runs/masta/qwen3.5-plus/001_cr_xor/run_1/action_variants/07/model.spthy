@@ -1,0 +1,79 @@
+theory CR_XOR_RRtx begin
+
+builtins: hashing, xor
+
+// Setup pre-shared key between I and R
+rule Setup_PSK:
+  [ Fr(~k)
+  , Fr(~id)
+  ]
+  --[ Create($R, ~id) ]->
+  [ !PSK($I, $R, ~k)
+  , !RespId($R, ~id)
+  ]
+
+// RuleStep1: Initiator generates and sends na, stores na as state
+rule RuleStep1:
+  [ Fr(~na)
+  , !PSK($I, $R, k)
+  ]
+  --[ Test1() ]->
+  [ Out(~na)
+  , !InitState($I, ~na)
+  ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag, stores state and sends first response
+rule RuleStep2:
+  [ In(na)
+  , Fr(~nb)
+  , !PSK($I, $R, k)
+  ]
+  --[ Test2(), Running($R, $I, <h(na XOR k XOR ~nb), ~nb>) ]->
+  [ Out(<h(na XOR k XOR ~nb), ~nb>)
+  , !RespState($I, na, ~nb)
+  ]
+
+// RuleStep3: Responder retransmits identical response using stored state
+rule RuleStep3:
+  [ !RespState($I, na, nb)
+  , !PSK($I, $R, k)
+  ]
+  --[ Test3(), Running($R, $I, <h(na XOR k XOR nb), nb>) ]->
+  [ Out(<h(na XOR k XOR nb), nb>) ]
+
+// RuleStep4: Initiator receives response, verifies tag implicitly, ends session
+rule RuleStep4:
+  [ In(<tag, nb>)
+  , !InitState($I, na)
+  , !PSK($I, $R, k)
+  ]
+  --[ Test4(), Commit($I, $R, <tag, nb>), Honest($I) ]->
+  [ ]
+
+// LtkReveal rule for PSK compromise
+rule LtkReveal:
+  [ !PSK($I, $R, k) ]
+  --[ LtkReveal($R) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

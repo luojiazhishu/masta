@@ -1,0 +1,40 @@
+- role: Dev_SendJoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', $Dev, $Srv, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - $Dev
+    - $Srv
+    - ~DevNonce
+    - reqMAC
+- role: Srv_SendJoinAccept
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - $Dev
+    - $Srv
+    - devNonce
+    - reqMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', $Dev, $Srv, devNonce>)
+    - appSKey = senc(<'cst1', devNonce, ~JoinNonce, 'channelV1'>, ~AppKey)
+    - nwkSKey = senc(<'cst2', devNonce, ~JoinNonce, 'channelV1'>, ~AppKey)
+    - respMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, $DevAddr>)
+    - body = <'JoinAccept', ~JoinNonce, $DevAddr, mac(~AppKey, <'JoinAccept', ~JoinNonce,
+      $DevAddr>)>
+  - send:
+    - senc(body, ~AppKey)
+- role: Dev_ProcessJoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinNonce, $DevAddr, respMAC>, ~AppKey)
+  - compute:
+    - respMAC = mac(~AppKey, <'JoinAccept', joinNonce, $DevAddr>)
+    - appSKey = senc(<'cst1', ~DevNonce, joinNonce, 'channelV1'>, ~AppKey)
+    - nwkSKey = senc(<'cst2', ~DevNonce, joinNonce, 'channelV1'>, ~AppKey)
+  - send: <END>

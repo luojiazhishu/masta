@@ -1,0 +1,120 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1
+
+rule Generate_key_pair:
+  [ Fr(~skS) ]
+  --[ Secret(~skS), Honest($S) ]->
+  [ !Ltk($S, ~skS)
+  , !Pk($S, pk(~skS))
+  , Out(pk(~skS))
+  ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule RuleStep1:
+  [ Fr(~nR) ]
+  --[ Create('R', ~nR), Test1() ]->
+  [ Out(< 'Receiver', 'Sender', ~nR >)
+  ]
+
+rule RuleStep2:
+  [ In(< 'Receiver', 'Sender', nR >)
+  , Fr(~k1)
+  , !Ltk($S, skS)
+  ]
+  --[ Running($S, 'R', <nR, h(~k1)>), Test2() ]->
+  [ Out(< 'Sender', 'Receiver', h(~k1), sign(nR, skS) >)
+  , !KeyCommit($S, ~k1)
+  ]
+
+rule RuleStep3:
+  [ In(< 'Sender', 'Receiver', commitment, signature >)
+  , !Pk($S, pkS)
+  ]
+  --[ Commit('R', $S, <commitment, signature>), Test3() ]->
+  [ !Verified($S, commitment)
+  ]
+
+rule RuleStep4:
+  let D1 = < m1, h(~k2) >
+      mac1 = h(< k1, D1 >)
+  in
+  [ !KeyCommit($S, k1)
+  , Fr(~k2)
+  , Fr(m1)
+  ]
+  --[ Secret(k1), Test4() ]->
+  [ Out(< D1, mac1 >)
+  ]
+
+rule RuleStep5:
+  [ In(< D1, mac1 >)
+  ]
+  --[ Test5() ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_signing_key_secrecy:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_setup_response_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_commitment_binding:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_nonce_freshness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_mac_key_secrecy_until_disclosure:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_broadcast_message_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

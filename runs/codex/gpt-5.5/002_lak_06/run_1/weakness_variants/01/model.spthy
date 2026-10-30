@@ -1,0 +1,78 @@
+theory Lak06
+begin
+
+builtins: hashing, xor
+
+rule Provision:
+  [ Fr(~k), Fr(~tid) ]
+  --[ Create($R, ~tid), Create($T, ~tid), Secret($T, $R, ~tid), Honest($R), Honest($T) ]->
+  [ !Pair($R, $T, ~k, ~tid) ]
+
+rule Reveal_Reader_Key:
+  [ !Pair(R, T, k, tid) ]
+  --[ LtkReveal(R) ]->
+  [ Out(k) ]
+
+rule Reveal_Tag_Key:
+  [ !Pair(R, T, k, tid) ]
+  --[ LtkReveal(T) ]->
+  [ Out(k) ]
+
+rule Reader_Send_R0:
+  [ Fr(~r0), !Pair($R, $T, k, tid) ]
+  --[ Test1(), Create($R, <'reader', ~r0>) ]->
+  [ Out(~r0), St_R1($R, $T, k, ~r0) ]
+
+rule Tag_Send_T1:
+  let tag_mac = h(r0 XOR k) in
+  [ In(r0), Fr(~r1), !Pair($R, $T, k, tid) ]
+  --[ Test2(), Create($T, <'tag', r0, ~r1>), Running($T, $R, <'reader', r0, ~r1>) ]->
+  [ Out(<~r1, tag_mac>), St_T1($R, $T, k, r0, ~r1, tag_mac) ]
+
+rule Reader_Send_R1:
+  let tag_mac = h(r0 XOR k)
+      reader_mac = h(tag_mac XOR k XOR r0)
+  in
+  [ St_R1($R, $T, k, r0), In(<r1, tag_mac>) ]
+  --[ Test3(), Commit($R, $T, <'reader', r0, r1>), Honest($R), Honest($T), Running($R, $T, <'tag', r0, r1>) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_Finish:
+  let tag_mac = h(r0 XOR k)
+      reader_mac = h(tag_mac XOR k XOR r0)
+  in
+  [ St_T1($R, $T, k, r0, r1, tag_mac), In(reader_mac) ]
+  --[ Test4(), Commit($T, $R, <'tag', r0, r1>), Honest($T), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma tag_identifier_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'tag', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma reader_noninjective_agreement:
+  "All a b r0 r1 #i.
+     Commit(a, b, <'reader', r0, r1>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader', r0, r1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

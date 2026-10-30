@@ -1,0 +1,66 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, bar/1, mac/2
+
+// PKI and Key Generation
+rule Generate_Sender_Key:
+  [ Fr(~sk_s) ]
+  --[ Create('S', ~sk_s) ]->
+  [ !Ltk('S', ~sk_s), !Pk('S', pk(~sk_s)), Out(pk(~sk_s)) ]
+
+rule Generate_Receiver_Key:
+  [ Fr(~sk_r) ]
+  --[ Create('R', ~sk_r) ]->
+  [ !Ltk('R', ~sk_r), !Pk('R', pk(~sk_r)), Out(pk(~sk_r)) ]
+
+// Protocol Steps
+
+// Step 1: Receiver sends SetupRequest
+rule RuleStep1:
+  [ Fr(~n_R), !Pk('S', pk_s) ]
+  --[ Test1(), Running('R', 'S', <'SetupRequest', ~n_R>) ]->
+  [ Out(< 'R', 'S', ~n_R >) ]
+
+// Step 2: Sender responds with SetupResponse
+// Computes signature and logs bar(n_R) internally
+rule RuleStep2:
+  [ In(< 'R', 'S', n_R >), !Ltk('S', ~sk_s), !Pk('S', pk_s), Fr(~k_1) ]
+  let
+    f_k1 = f(~k_1)
+    sig = sign(<f_k1, n_R>, ~sk_s)
+    req_rec = bar(n_R)
+  in
+  --[ Test2(), Commit('S', 'R', <'SetupResponse', f_k1, n_R>), Secret('S', 'R', req_rec) ]->
+  [ Out(< 'S', 'R', f_k1, sig >), !SessionKey('S', 'R', ~k_1) ]
+
+// Step 3: Sender broadcasts Msg 1
+rule RuleStep3:
+  [ !SessionKey('S', 'R', k_1), Fr(~m_1), Fr(~k_2) ]
+  let
+    D_1 = <~m_1, f(~k_2)>
+    mac_1 = mac(k_1, D_1)
+  in
+  --[ Test3(), Commit('S', 'R', <'Msg1', D_1>) ]->
+  [ Out(< D_1, mac_1 >), !NextKey('S', 'R', ~k_2) ]
+
+// Step 4: Sender broadcasts Msg n (general step)
+// Uses previous key k_nm1 to MAC, reveals k_nm1, commits new key k_np1
+rule RuleStep4:
+  [ !NextKey('S', 'R', k_nm1), Fr(~m_n), Fr(~k_np1) ]
+  let
+    D_n = <~m_n, f(~k_np1), k_nm1>
+    mac_n = mac(k_nm1, D_n)
+  in
+  --[ Test4(), Commit('S', 'R', <'MsgN', D_n>) ]->
+  [ Out(< D_n, mac_n >), !NextKey('S', 'R', ~k_np1) ]
+
+// Executable Lemma
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

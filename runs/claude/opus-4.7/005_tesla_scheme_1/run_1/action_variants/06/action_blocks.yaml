@@ -1,0 +1,64 @@
+- role: R_SendSetupRequest
+  operations:
+  - generate_nonces:
+    - ~nR
+  - send:
+    - $R
+    - $S
+    - ~nR
+- role: S_SendSetupResponse
+  operations:
+  - receive:
+    - r
+    - $S
+    - nR
+  - generate_nonces:
+    - ~k1
+    - ~k2
+    - ~k3
+  - send:
+    - $S
+    - r
+    - h(~k1)
+    - sign(<h(~k1), nR>, ~sk)
+    - '''commit_response'''
+- role: R_ProcessSetupResponse
+  operations:
+  - receive:
+    - $S
+    - $R
+    - commitment
+    - sig
+    - '''commit_response'''
+  - assert:
+    - verify(sig, <commitment, ~nR>, pkS) = true
+  - send: []
+- role: S_SendMsg1
+  operations:
+  - generate_nonces:
+    - ~m1
+  - send:
+    - <~m1, h(~k2)>
+    - mac(~k1, <~m1, h(~k2)>)
+- role: R_BufferMsg1
+  operations:
+  - receive:
+    - <m1, fk2>
+    - mac1
+  - send: []
+- role: S_SendMsg2
+  operations:
+  - generate_nonces:
+    - ~m2
+  - send:
+    - <~m2, h(~k3), ~k1>
+    - mac(~k2, <~m2, h(~k3), ~k1>)
+- role: R_VerifyMsg1
+  operations:
+  - receive:
+    - <m2, fk3, k1>
+    - mac2
+  - assert:
+    - h(k1) = commitment
+    - mac(k1, d1) = mac1
+  - send: <END>

@@ -1,0 +1,51 @@
+theory cr_xor_rmk_model begin
+
+builtins: hashing, xor
+
+/* RuleStep1: Initiator generates fresh nonce na and a shared key k out-of-band, sends na and records state. */
+rule RuleStep1:
+  [ Fr(~na), Fr(~k) ]
+  --[ Test1(), Honest($I) ]->
+  [ Out(~na), !SharedKey(~k), Init(~na, $I, $R) ]
+
+/* RuleStep2: Responder receives na, generates fresh nb, computes t = h(na ⊕ k ⊕ nb), and sends <t, nb, 'Resp'>. */
+rule RuleStep2:
+  let t = h( na ⊕ ~k ⊕ ~nb ) in
+  [ In(na), !SharedKey(~k), Fr(~nb) ]
+  --[ Test2(), Honest($R), Running($R,$I, na), Create($R, ~nb) ]->
+  [ Out(<t, ~nb, 'Resp'>) ]
+
+/* RuleStep3: Initiator receives <t, nb, 'Resp'>, recomputes t' = h(na ⊕ k ⊕ nb) using stored na and shared key, and proceeds only when the received tag matches the recomputed one. */
+rule RuleStep3:
+  let tprime = h( ~na ⊕ ~k ⊕ nb ) in
+  [ In(<tprime, nb, 'Resp'>), Init(~na, $I, $R), !SharedKey(~k) ]
+  --[ Test3(), Commit($I,$R, ~na) ]->
+  [ Out('<END>'), Authenticated($I,$R) ]
+
+/* Reveal rule for the long-term shared key (allowed per threat model). */
+rule SharedKeyReveal:
+  [ !SharedKey(k), Init(na, A, B) ]
+  --[ LtkReveal(A) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_verification_tag_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

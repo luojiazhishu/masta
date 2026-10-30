@@ -1,0 +1,40 @@
+theory SymmetricKeyEncapsulation
+begin
+
+builtins: symmetric-encryption
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Pk(~k) ]
+
+rule Initiator_Send:
+  [ Fr(~sec), Fr(~pub), !Pk(k) ]
+  --[ Test1(), Secret($I, $R, ~sec, k) ]->
+  [ Out(<senc(<~sec, ~pub>, k), 'pmd'>) ]
+
+rule Responder_Receive:
+  [ In(<senc(<sec, pub>, k), 'pmd'>), !Pk(k) ]
+  --[ Test2(), Running($R, $I, <'responder', k>), Commit($R, $I, <'responder', k, sec, pub>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Pk(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x k #i.
+     Secret(A, B, x, k) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex #r. LtkReveal(k) @ r)"
+
+end

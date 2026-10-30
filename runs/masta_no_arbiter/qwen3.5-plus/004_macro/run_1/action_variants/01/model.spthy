@@ -1,0 +1,49 @@
+theory BSKTCN begin
+
+builtins: asymmetric-encryption, hashing
+
+functions: pk/1
+
+equations: adec(aenc(m, pk(sk)), sk) = m
+
+rule SetupServer:
+  [ Fr(~sk_S) ]
+  --[ Setup($S, ~sk_S) ]->
+  [ !Ltk($S, ~sk_S), !Pk($S, pk(~sk_S)), Out(pk(~sk_S)) ]
+
+rule RuleStep1:
+  let
+      m1_ciphertext = aenc(~k, pk(~sk_S))
+      m1 = <m1_ciphertext, ~rc>
+  in
+  [ Fr(~k), Fr(~rc), !Ltk($S, ~sk_S) ]
+  --[ Test1(), SendC1($S, ~k, ~rc) ]->
+  [ Out(m1), !StateC($S, ~k, ~rc) ]
+
+rule RuleStep2:
+  let
+      m1_ciphertext = fst(m1)
+      rc_received = snd(m1)
+      k_prime = adec(m1_ciphertext, ~sk_S)
+      digest = h(k_prime)
+      m2 = <digest, rc_received>
+  in
+  [ In(m1), !Ltk($S, ~sk_S) ]
+  --[ Test2(), RecvS1($S, k_prime, rc_received) ]->
+  [ Out(m2) ]
+
+rule RuleStep3:
+  let
+      m2_digest = fst(m2)
+      m2_rc = snd(m2)
+      expected_digest = h(~k)
+  in
+  [ In(m2), !StateC($S, ~k, ~rc) ]
+  --[ Test3(), RecvC1($S, ~k, ~rc) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+end

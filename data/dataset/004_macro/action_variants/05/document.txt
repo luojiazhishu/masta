@@ -1,0 +1,188 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 27, 2026                                         FAMED
+                                                         April 25, 2026
+
+
+      Public-Key Session Key Transport with Completion Tag (BSKT-D)
+                       draft-famed-bsktd-00
+
+Abstract
+
+   This document specifies a public-key session key transport
+   protocol in which a client conveys a freshly generated session
+   key to a server using the server's long-term public key, and the
+   server confirms successful receipt by returning a one-way hash of
+   the transported key together with the fixed completion tag
+   "done".  The completion tag is intended to allow client-side
+   logic to mark the run as terminated without examining the
+   cryptographic payload.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 27, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ................................................. 2
+   2. Conventions and Definitions .................................. 2
+   3. Protocol Overview ............................................ 3
+   4. Message Format ............................................... 4
+   5. Processing Rules ............................................. 5
+   6. Security Considerations ...................................... 6
+   7. References ................................................... 7
+
+1. Introduction
+
+   This document defines a minimal public-key session key transport
+   exchange in which the server appends a fixed completion marker to
+   the confirmation message.  The marker is a three-octet ASCII
+   string "done" and signals to the client that no further messages
+   are expected for the current run.
+
+   The client generates a fresh symmetric session key, encrypts it
+   under the server's long-term public key, and transmits the
+   resulting ciphertext.  The server decrypts the ciphertext,
+   computes a one-way hash of the recovered key, and returns the
+   hash followed by the completion marker.  The client compares the
+   hash against its own computation, accepts the session key on
+   match, and treats the completion marker as the unambiguous end
+   of the run.
+
+2. Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   The following notation is used throughout this document.
+
+      C, S         The client and the server.
+      sk(S), pk(S) The long-term private and public key of S.
+      k            A fresh, uniformly random session key drawn by C.
+      aenc, adec   Asymmetric encryption and decryption.
+      h(x)         A one-way hash function.
+      "done"       The fixed octet string indicating completion of
+                   the run at the dispatch layer.
+      <a, b>       The ordered concatenation of a and b.
+
+3. Protocol Overview
+
+         Client                                       Server
+         ------                                       ------
+         k  = fresh random
+         m1 = aenc(k, pk(S))
+                          ----- m1 ----->
+                                                k  = adec(.,sk(S))
+                                                m2 = <h(k), "done">
+                          <---- m2 ------
+         verify m2.digest == h(k)
+         consume m2.tag == "done"
+
+   On successful completion both parties hold the same session key
+   k and the client treats the run as terminated.
+
+4. Message Format
+
+   The KeyTransport message m1 carries the asymmetric encryption of
+   the session key.
+
+      struct {
+          opaque ciphertext<1..2^16-1>;
+      } KeyTransport;
+
+   The KeyConfirm message m2 carries the one-way hash of the
+   recovered session key followed by the fixed completion marker.
+
+      struct {
+          opaque digest<1..2^8-1>;
+          opaque marker[4];               /* the four octets "done" */
+      } KeyConfirm;
+
+   The value of the marker field is fixed for the protocol defined
+   by this document and MUST be the four-octet ASCII string "done".
+
+5. Processing Rules
+
+   On initiation, C generates k uniformly at random, computes
+   ciphertext = aenc(k, pk(S)), constructs m1, and transmits m1 to
+   S.  C retains k locally pending receipt of the corresponding
+   KeyConfirm message.
+
+   On receipt of m1, S computes k' = adec(ciphertext, sk(S)).  If
+   decryption fails or yields a value that does not conform to the
+   expected key format, S MUST discard m1 and abort the run.
+   Otherwise S computes digest = h(k'), constructs m2 with marker
+   set to "done", and transmits m2 to C.
+
+   On receipt of a candidate m2, C inspects the marker field.  If
+   the marker does not equal "done", C MUST defer dispatch to a
+   handler defined elsewhere or, if no such handler is defined,
+   MUST discard m2.  Otherwise C computes h(k) for the retained k
+   and compares it for equality with m2.digest.  If the values
+   match, C MAY consider k to be accepted by S and SHOULD treat
+   the run as terminated.  Otherwise C MUST discard k and abort
+   the run.
+
+6. Security Considerations
+
+   Confidentiality of the session key against a network adversary
+   that does not hold sk(S) follows from the IND-CCA security of
+   the underlying asymmetric scheme and the preimage resistance of
+   h.  The "done" marker is public and contributes nothing to
+   confidentiality.
+
+   Server authentication is established by the fact that no party
+   other than the holder of sk(S) is able to compute h(k) without
+   first recovering k.  The protocol does not authenticate C, and
+   the marker does not contribute to authentication.
+
+   Replay of a previously observed KeyTransport message causes S
+   to recompute the same digest; because k is fresh in every run,
+   a replay cannot cause C to accept a session key it did not
+   itself generate.  An adversary that flips the marker in a
+   forged m2 causes C to discard the message; the marker therefore
+   acts as a coarse defence against off-protocol traffic but
+   provides no cryptographic guarantee.
+
+   The protocol does not provide forward secrecy with respect to
+   compromise of sk(S).  Implementations that require forward
+   secrecy SHOULD compose this protocol with an ephemeral key
+   agreement step.
+
+   Implementations should be aware that the marker exposes the
+   message type to traffic analysis and SHOULD run this protocol
+   over a transport that conceals message-type information when
+   such concealment is required.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+7.2. Informative References
+
+   [RFC8446]  Rescorla, E., "The Transport Layer Security (TLS)
+              Protocol Version 1.3", RFC 8446, August 2018.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Transported Session Key
+8.2 Non-injective Agreement on the Transported Key
+8.3 Injective Agreement on the Transported Key

@@ -1,0 +1,26 @@
+- role: I_Send_Challenge
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+- role: R_Reply
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+  - compute:
+    - t = h(na XOR k XOR ~nb)
+    - tag_audit = bar(~nb)
+  - send:
+    - t
+    - ~nb
+- role: I_Finish
+  operations:
+  - receive:
+    - tag
+    - nb
+  - assert:
+    - tag = h(~na XOR k XOR nb)
+  - send: <END>

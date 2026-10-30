@@ -1,0 +1,44 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - m = mac(~AppKey, <'JoinRequest', $DevEUI, $JoinEUI, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - $DevEUI
+    - $JoinEUI
+    - ~DevNonce
+    - m
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - $DevEUI
+    - $JoinEUI
+    - DevNonce
+    - m
+  - generate_nonces:
+    - ~JoinNonce
+    - ~SessionCorrelator
+    - ~DevAddr
+  - compute:
+    - JoinAcceptBody = <'JoinAccept', ~JoinNonce, ~DevAddr>
+    - mm = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+    - EncryptedAcceptBody = senc(<'JoinAccept', ~JoinNonce, ~DevAddr>, ~AppKey)
+  - send:
+    - EncryptedAcceptBody
+    - ~SessionCorrelator
+- role: RuleStep3
+  operations:
+  - receive:
+    - EncryptedAcceptBody
+    - SessionCorrelator
+  - generate_nonces:
+    - DevNonce
+    - JoinNonce
+  - compute:
+    - JoinAcceptBody = sdec(EncryptedAcceptBody, ~AppKey)
+    - AppSKey = senc(<'cst1', DevNonce, JoinNonce>, ~AppKey)
+    - NwkSKey = senc(<'cst2', DevNonce, JoinNonce>, ~AppKey)
+  - send: <END>

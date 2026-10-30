@@ -1,0 +1,233 @@
+{
+  "generated_at": "2026-10-30T08:40:48+00:00",
+  "systems": [
+    "masta",
+    "masta_no_arbiter",
+    "masta_merged"
+  ],
+  "summary": {
+    "total": 15,
+    "scored": 15,
+    "not_scored": 0
+  },
+  "runs": [
+    {
+      "system": "masta",
+      "label": "qwen3.5-plus",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9,
+      "m2": 0.39655172413793105,
+      "m3": 0.5214285714285715,
+      "m4": 0.748721590909091,
+      "m5": 1.0
+    },
+    {
+      "system": "masta",
+      "label": "qwen3.5-plus",
+      "protocol": "002_lak_06",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9166666666666666,
+      "m2": 0.29885057471264365,
+      "m3": 0.3333333333333333,
+      "m4": 0.9558185404339252,
+      "m5": 1.0
+    },
+    {
+      "system": "masta",
+      "label": "qwen3.5-plus",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 1.0,
+      "m2": 0.6785714285714286,
+      "m3": 0.625,
+      "m4": 0.9629629629629629,
+      "m5": 1.0
+    },
+    {
+      "system": "masta",
+      "label": "qwen3.5-plus",
+      "protocol": "004_macro",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.8333333333333334,
+      "m2": 0.8524871355060034,
+      "m3": 0.3333333333333333,
+      "m4": 0.8049886621315192,
+      "m5": 1.0
+    },
+    {
+      "system": "masta",
+      "label": "qwen3.5-plus",
+      "protocol": "005_tesla_scheme_1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.8387096774193549,
+      "m2": 0.5405405405405406,
+      "m3": 0.0,
+      "m4": 0.5824338533067186,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_no_arbiter",
+      "label": "qwen3.5-plus",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.0,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_no_arbiter",
+      "label": "qwen3.5-plus",
+      "protocol": "002_lak_06",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9166666666666666,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.2797202797202797,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_no_arbiter",
+      "label": "qwen3.5-plus",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.5403439153439153,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_no_arbiter",
+      "label": "qwen3.5-plus",
+      "protocol": "004_macro",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.5075757575757576,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_no_arbiter",
+      "label": "qwen3.5-plus",
+      "protocol": "005_tesla_scheme_1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.8709677419354839,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.279044168987243,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_merged",
+      "label": "qwen3.5-plus",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9,
+      "m2": 0.39655172413793105,
+      "m3": 0.5,
+      "m4": 0.8565340909090909,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_merged",
+      "label": "qwen3.5-plus",
+      "protocol": "002_lak_06",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 1.0,
+      "m2": 0.29885057471264365,
+      "m3": 0.3333333333333333,
+      "m4": 0.7305652680652681,
+      "m5": 0.8571428571428571
+    },
+    {
+      "system": "masta_merged",
+      "label": "qwen3.5-plus",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 1.0,
+      "m2": 1.0,
+      "m3": 0.0,
+      "m4": 0.6884920634920636,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_merged",
+      "label": "qwen3.5-plus",
+      "protocol": "004_macro",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.23376623376623376,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_merged",
+      "label": "qwen3.5-plus",
+      "protocol": "005_tesla_scheme_1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.04761904761904762,
+      "m5": 0.0
+    }
+  ],
+  "means": [
+    {
+      "system": "masta",
+      "model": "qwen3.5-plus",
+      "protocol_count": 5,
+      "m1": 0.8977419354838709,
+      "m2": 0.5534002806937094,
+      "m3": 0.3626190476190476,
+      "m4": 0.8109851219488433,
+      "m5": 1.0,
+      "correctness": 0.6045870879322094,
+      "completeness": 0.9054925609744217
+    },
+    {
+      "system": "masta_merged",
+      "model": "qwen3.5-plus",
+      "protocol_count": 5,
+      "m1": 0.58,
+      "m2": 0.3390804597701149,
+      "m3": 0.16666666666666666,
+      "m4": 0.5113953407703409,
+      "m5": 0.5714285714285714,
+      "correctness": 0.3619157088122605,
+      "completeness": 0.5414119560994561
+    },
+    {
+      "system": "masta_no_arbiter",
+      "model": "qwen3.5-plus",
+      "protocol_count": 5,
+      "m1": 0.3575268817204301,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.32133682432543914,
+      "m5": 0.0,
+      "correctness": 0.11917562724014337,
+      "completeness": 0.16066841216271957
+    }
+  ]
+}

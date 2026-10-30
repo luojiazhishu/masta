@@ -1,0 +1,107 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1
+
+// Protocol Overview:
+// Msg 0a: R -> S : R, S, n_R
+// Msg 0b: S -> R : (S, R, f(k_1), sign{f(k_1), n_R}_SK(S)) duplicated
+// Msg 1..n: Stream messages (not modeled in this setup phase)
+
+// Persistent fact to model long-term key existence
+rule SetupKeys:
+  [
+    Fr(~tid_S)
+  ]
+  --[ SetupKeys($S) ]->
+  [
+    !Ltk($S, 'SK_S'),
+    !Pk($S, pk('SK_S'))
+  ]
+
+// Rule 1: Receiver R initiates by generating nonce and sending Msg 0a
+rule RuleStep1:
+  let
+    n_R = ~n_R
+  in
+  [
+    Fr(~n_R),
+    Fr(~tid_R)
+  ]
+  --[ Test1(), InitR(~tid_R, $R, $S, n_R), Honest($R) ]->
+  [
+    Out(<$R, $S, n_R>),
+    !StateR1(~tid_R, $R, $S, n_R)
+  ]
+
+// Rule 2: Sender S receives Msg 0a, generates key k_1, computes commitment and signature, sends duplicated Msg 0b
+rule RuleStep2:
+  let
+    k_1 = ~k_1
+    f_k1 = f(k_1)
+    sig_1 = sign(<f_k1, n_R>, 'SK_S')
+    payload = <$S, $R, f_k1, sig_1>
+    dup_payload = <payload, payload>
+  in
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1),
+    Fr(~tid_S),
+    !Ltk($S, 'SK_S')
+  ]
+  --[ Test2(), InitS(~tid_S, $S, $R, n_R, k_1, f_k1), Honest($S), Running($S, $R, <f_k1, sig_1>) ]->
+  [
+    Out(dup_payload),
+    !StateS1(~tid_S, $S, $R, n_R, k_1, f_k1)
+  ]
+
+// Rule 3: Receiver R receives duplicated Msg 0b, verifies equality, verifies signature
+rule RuleStep3:
+  let
+    payload1 = <$S1, $R1, f_k1_a, sig_1_a>
+    payload2 = <$S2, $R2, f_k1_b, sig_1_b>
+    received_msg = <payload1, payload2>
+    commitment = f_k1_a
+    signature = sig_1_a
+    signed_data = <commitment, n_R>
+    pk_S = pk('SK_S')
+  in
+  [
+    In(received_msg),
+    !StateR1(~tid_R, $R, $S, n_R)
+  ]
+  --[ Test3(), VerifyR(~tid_R, $R, $S, n_R, commitment, signature), Commit($R, $S, <commitment, signature>) ]->
+  [
+    !StateR2(~tid_R, $R, $S, n_R, commitment, signature)
+  ]
+
+// Reveal rule for long-term signing key compromise
+rule LtkReveal:
+  [
+    !Ltk($A, ltk)
+  ]
+  --[ LtkReveal($A) ]->
+  [
+    Out(ltk),
+    !Ltk($A, ltk)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// Property 1: setup_response_authenticity
+// category: noninjective_agreement
+// scope: Sender S and Receiver R regarding the commitment f(k_1)
+// description: If Receiver R accepts a SetupResponse containing commitment f(k_1) as originating from Sender S, then S must have previously sent that specific response, unless SK(S) was compromised.
+lemma noninjective_agreement_setup_response_authenticity:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

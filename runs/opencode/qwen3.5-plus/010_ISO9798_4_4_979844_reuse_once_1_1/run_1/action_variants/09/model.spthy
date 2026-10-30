@@ -1,0 +1,83 @@
+theory ISO9798_4_4_Mutual_Auth
+begin
+
+builtins: hashing
+
+// Fixed identities and key
+rule Setup:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !Ltk(~kAB), !Honest(~kAB), !Id('A'), !Id('B') ]
+
+// Rule 1: Responder B starts by sending challenge RB
+rule Responder_Start:
+  [ Fr(~RB), Fr(~Text1), !Ltk(kAB), !Id('B') ]
+  --[ Test1(), Create('B', ~RB) ]->
+  [ Out(<~RB, ~Text1>), St_B_1('B', ~RB, kAB) ]
+
+// Rule 2: Initiator A receives challenge, responds with RA and mac1
+rule Initiator_Respond:
+  [ In(<RB, Text1>), Fr(~RA), Fr(~Text2), Fr(~Text3), !Ltk(kAB), !Id('A'), !Id('B') ]
+  --[ Test2(), Running('A', 'B', <~RA, RB>), Create('A', ~RA) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'B', ~Text2>, h(<~RA, RB, 'B', 'mac1_tag', kAB>)>), St_A_1('A', ~RA, RB, kAB) ]
+
+// Rule 3: Responder B verifies mac1 and sends mac2
+rule Responder_Verify:
+  [ St_B_1('B', RB, kAB), Fr(~Text5), In(<RA, Text3, <'sid1_mut_cr', RA, RB, 'B', Text2>, h(<RA, RB, 'B', 'mac1_tag', kAB>)>) ]
+  --[ Test3(), Running('B', 'A', <RA, RB>), Commit('B', 'A', <RA, RB>) ]->
+  [ Out(<~Text5, h(<RB, RA, kAB>)>), St_B_2('B', RB, RA, kAB) ]
+
+// Rule 4: Initiator A verifies mac2 and completes
+rule Initiator_Verify:
+  [ St_A_1('A', RA, RB, kAB), In(<Text5, h(<RB, RA, kAB>)>) ]
+  --[ Test4(), Commit('A', 'B', <RA, RB>) ]->
+  [ ]
+
+// Adversary can reveal long-term key
+rule Ltk_Reveal:
+  [ !Ltk(k), !Honest(k) ]
+  --[ LtkReveal(k) ]->
+  [ Out(k) ]
+
+// Safety lemmas
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma aliveness_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: aliveness
+lemma aliveness_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// Executable lemma
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

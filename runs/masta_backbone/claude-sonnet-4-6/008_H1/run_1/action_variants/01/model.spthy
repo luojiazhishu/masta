@@ -1,0 +1,100 @@
+theory MutualIdentitySignatureAuth
+begin
+
+builtins: signing
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[  ]->  
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  ]
+
+rule RuleStep1:
+  [ Fr(~rn)
+  , !Ltk($I, ~ltkI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test1()
+    , Create($I, ~rn)
+    , Honest($I)
+    , Honest($R)
+    ]->  
+  [ Out(<sign(<$I, $R>, ~ltkI), ~rn>)
+  , St_I_1($I, $R, ~rn, ~ltkI)
+  ]
+
+rule RuleStep2:
+  let mI = sign(<$I, $R>, ~ltkI)
+  in
+  [ In(<s, rn_received>)
+  , !Ltk($R, ~ltkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2()
+    , Eq(verify(s, <$I, $R>, pkI), true)
+    , Create($R, ~ltkR)
+    , Running($R, $I, <'I', 'R', <$I, $R, rn_received>>)
+    , Commit($R, $I, <'I', 'R', <$I, $R, rn_received>>)
+    , Honest($R)
+    , Honest($I)
+    ]->  
+  [ Out(sign(<$I, $R>, ~ltkR)) ]
+
+rule RuleStep3:
+  [ St_I_1($I, $R, ~rn, ~ltkI)
+  , In(mR)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3()
+    , Eq(verify(mR, <$I, $R>, pkR), true)
+    , Running($I, $R, <'I', 'R', <$I, $R, ~rn>>)
+    , Commit($I, $R, <'I', 'R', <$I, $R, ~rn>>)
+    , Honest($I)
+    , Honest($R)
+    ]->  
+  [  ]
+
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[ LtkReveal($A) ]->  
+  [ Out(ltk) ]
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @i ==> x = y"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_mutual_authentication:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_parameters:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_parameters:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

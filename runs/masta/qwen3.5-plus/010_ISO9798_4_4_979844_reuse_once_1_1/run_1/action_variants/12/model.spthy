@@ -1,0 +1,102 @@
+theory FAMED begin
+
+builtins: hashing
+
+functions: mac/2
+
+rule ProvisionKey:
+  [ Fr(~kAB) ]
+  --[ Secret('IdA','IdB',~kAB) ]->
+  [ !Shk('IdA', 'IdB', ~kAB) ]
+
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1) ]
+  --[ Test1() ]->
+  [ Out(<~RB, ~Text1>) ]
+
+rule RuleStep2:
+  let
+      mac1 = mac(<'sid1_mut_cr', ~RA, RB, 'IdB'>, kAB)
+  in
+  [ In(<RB, Text1>), Fr(~RA), Fr(~Text2), Fr(~Text3), !Shk('IdA', 'IdB', kAB) ]
+  --[ Test2(), Running('IdA','IdB',<~RA,RB>) ]->
+  [ Out(<~RA, ~Text3, <'sid1_mut_cr', ~RA, RB, 'IdB', ~Text2>, mac1>),
+    !InitState(~RA, ~Text2, ~Text3, RB, Text1, kAB) ]
+
+rule RuleStep3:
+  let
+      mac1 = mac(<'sid1_mut_cr', RA, RB, 'IdB'>, kAB)
+  in
+  [ !InitState(RA, Text2, Text3, RB, Text1, kAB) ]
+  --[ Test3() ]->
+  [ Out(<RA, Text3, <'sid1_mut_cr', RA, RB, 'IdB', Text2>, mac1>) ]
+
+rule RuleStep4:
+  let
+      expected_mac1 = mac(<'sid1_mut_cr', RA, RB, 'IdB'>, kAB)
+      mac2 = mac(<'sid2_mut_cr', RB, RA>, kAB)
+  in
+  [ In(<RA, Text3, <'sid1_mut_cr', RA, RB, 'IdB', Text2>, expected_mac1>),
+    !Shk('IdA', 'IdB', kAB),
+    Fr(~Text5) ]
+  --[ Test4(), Running('IdB','IdA',<RA,RB>), Commit('IdB','IdA',<RA,RB>) ]->
+  [ Out(<~Text5, mac2>) ]
+
+rule RuleStep5:
+  let
+      expected_mac2 = mac(<'sid2_mut_cr', RB, RA>, kAB)
+  in
+  [ In(<Text5, expected_mac2>),
+    !InitState(RA, Text2, ~Text3, RB, Text1, kAB),
+    !Shk('IdA', 'IdB', kAB) ]
+  --[ Test5(), Commit('IdA','IdB',<RA,RB>) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_initiator:
+  "All a b t #i.
+     Commit(a,b,t) @ i
+   ==>
+       (Ex #j. Running(b,a,t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_responder:
+  "All a b t #i.
+     Commit(a,b,t) @ i
+   ==>
+       (Ex #j. Running(b,a,t) @ j)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_responder:
+  "All a b t #i.
+     Commit(a,b,t) @ i
+   ==>
+       (Ex #j. Running(b,a,t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2,b2,t) @ i2
+                                & not (#i2 = #i)))"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_initiator:
+  "All a b t #i.
+     Commit(a,b,t) @ i
+   ==>
+       (Ex #j. Running(b,a,t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2,b2,t) @ i2
+                                & not (#i2 = #i)))"
+
+// category: secrecy
+lemma secrecy_secrecy_long_term_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

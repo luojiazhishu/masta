@@ -1,0 +1,17 @@
+- role: Initiator_Start
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+    - bar($I)
+- role: Responder_Respond
+  operations:
+  - receive:
+    - sigI
+    - audit
+  - send:
+    - sign(<A, $R>, ~ltkR)
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - sign(<$I, $R>, ~ltkR)
+  - send: <END>

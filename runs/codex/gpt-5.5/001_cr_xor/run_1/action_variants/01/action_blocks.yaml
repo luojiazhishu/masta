@@ -1,0 +1,28 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~echo
+    - ~tid
+  - send:
+    - ~na
+    - ~echo
+- role: Responder_Reply
+  operations:
+  - receive:
+    - na
+    - echo
+  - generate_nonces:
+    - ~nb
+    - ~tid
+  - send:
+    - h(na XOR k XOR ~nb)
+    - ~nb
+    - echo
+- role: Initiator_Accept
+  operations:
+  - receive:
+    - h(na XOR k XOR nb)
+    - nb
+    - echo
+  - send: <END>

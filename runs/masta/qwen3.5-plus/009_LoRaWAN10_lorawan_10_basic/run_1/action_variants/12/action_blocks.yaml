@@ -1,0 +1,50 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+    - ~tid
+  - compute:
+    - RequestMAC = mac(~AppKey, <~DevEUI, ~JoinEUI, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - RequestMAC
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~DevEUI
+    - ~JoinEUI
+    - ~DevNonce
+    - RequestMAC
+  - generate_nonces:
+    - ~JoinNonce
+    - ~sid
+  - compute:
+    - RequestMAC = mac(~AppKey, <~DevEUI, ~JoinEUI, ~DevNonce>)
+    - ResponseMAC = mac(~AppKey, <~JoinNonce, ~DevAddr>)
+    - JoinAcceptBody = <'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <~JoinNonce,
+      ~DevAddr>)>
+    - ciphertext = senc(<'JoinAccept', ~JoinNonce, ~DevAddr, mac(~AppKey, <~JoinNonce,
+      ~DevAddr>)>, ~AppKey)
+  - send:
+    - ciphertext
+    - ciphertext
+- role: RuleStep3
+  operations:
+  - receive:
+    - ciphertext
+  - compute:
+    - JoinAcceptBody = sdec(ciphertext, ~AppKey)
+    - JoinNonce = snd(snd(fst(sdec(ciphertext, ~AppKey))))
+    - DevAddr_from_msg = snd(snd(sdec(ciphertext, ~AppKey)))
+    - ResponseMAC_from_msg = snd(sdec(ciphertext, ~AppKey))
+    - ExpectedMAC = mac(~AppKey, <snd(snd(fst(sdec(ciphertext, ~AppKey)))), snd(snd(sdec(ciphertext,
+      ~AppKey)))>)
+    - AppSKey = senc(<'cst1', ~DevNonce, snd(snd(fst(sdec(ciphertext, ~AppKey))))>,
+      ~AppKey)
+    - NwkSKey = senc(<'cst2', ~DevNonce, snd(snd(fst(sdec(ciphertext, ~AppKey))))>,
+      ~AppKey)
+  - send: <END>

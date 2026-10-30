@@ -1,0 +1,41 @@
+theory SymmetricKeyEncapsulationWithTag
+begin
+
+builtins: symmetric-encryption
+
+rule RuleStep1:
+  let
+    msg = senc(<~sec, ~pub>, ~k)
+  in
+  [
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~k)
+  ]
+  --[ Test1(), Secret(~sec), Honest('I') ]-> 
+  [
+    Out(<msg, 'pmd'>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<msg, tag>)
+  ]
+  --[ Test2() ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+// category: secrecy
+lemma secrecy_encapsulated_secret_payload:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+end

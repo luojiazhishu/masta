@@ -1,0 +1,139 @@
+theory TeslaScheme1_DuplicatedRequest begin
+
+builtins: signing
+
+functions: MAC/2, f/1
+
+// PKI
+rule Generate_Keypair:
+    [ Fr(~ltk) ]
+  -->
+    [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+// We assume an active adversary.
+rule Reveal_Ltk:
+    [ !Ltk(A, ltk) ]
+  --[ RevealLtk(A), LtkReveal(A) ]->
+    [ Out(ltk) ]
+
+
+// Setup phase with duplicated request
+// R sends two identical copies of (R, S, n_R) back-to-back
+
+rule Sender_Setup:
+    [ Fr(~k1) ]
+  --[ Test1() ]->
+    [ Sender1($S, ~k1), !Sender0a($S, ~k1) ]
+
+// Receiver sends duplicated request: (R, S, n_R, R, S, n_R)
+rule Receiver0a:
+    [ Fr( ~nR ) ]
+  --[ Test2(), Create($R, ~nR) ]->
+    [ Out( < $R, $S, ~nR, $R, $S, ~nR > )
+    , Receiver0b( ~nR, $R, $S ) ]
+
+// Sender receives duplicated request and verifies both copies match
+rule Sender0a:
+    [ !Sender0a(S, k1)
+    , In( < R, S, n_R, R, S, n_R > )
+    , !Ltk(S, ltkS)
+    ]
+  --[ Test3(), Running(S, R, <'setup', S, R, n_R>) ]->
+    [ Out( <S, R, f(k1), sign(<f(k1), n_R>, ltkS)> ) ]
+
+// Receiver verifies signature on commitment
+rule Receiver0b:
+    [ Receiver0b ( nR, R, S )
+    , !Pk( S, pkS)
+    , In( <S, R, commit_k1, signature> )
+    , Fr(~rid)
+    ]
+  --[ Test4(), Setup(~rid), Create(R, ~rid) ]->
+    [ Receiver0b_check( ~rid, R, S, commit_k1
+                      , verify(signature, <commit_k1, nR>, pkS)) ]
+
+rule Receiver0b_check:
+    [ Receiver0b_check(rid, R, S, commit_k1, true) ]
+  --[ Test5(), Commit(R, S, <'setup', R, S, commit_k1>) ]->
+    [ Receiver1( rid, S, commit_k1 ) ]
+
+
+// Authenticated broadcasting
+rule Send1:
+  let data1 = <~m1, f(~k2)>
+  in
+    [ Sender1(S, ~k1)
+    , Fr(~m1)
+    , Fr(~k2)
+    ]
+  --[ Test6(), Sent(S, data1)
+    , Running(S, S, <'broadcast', data1>)
+    ]->
+    [ Sender(S, ~k1, ~k2)
+    , Out( < data1, MAC(data1, ~k1) > )
+    ]
+
+rule Recv1:
+  let data1 = <m1, commit_k2>
+  in
+    [ Receiver1(rid, S, commit_k1)
+    , In( <data1, mac1> )
+    ]
+  --[ Test7(), AssumeCommitNotExpired(rid, commit_k1) ]->
+    [ Receiver(rid, S, data1, mac1, commit_k1, commit_k2) ]
+
+rule SendN:
+  let data = <~m, f(~kNew), ~kOld>
+  in
+    [ Sender(S, ~kOld, ~k)
+    , Fr(~m)
+    , Fr(~kNew)
+    ]
+  --[ Test8(), Sent(S, data)
+    , CommitExpired(f(~kOld))
+    , Running(S, S, <'broadcast', data>)
+    ]->
+    [ Sender(S, ~k, ~kNew)
+    , Out( <data, MAC(data, ~k)> )
+    ]
+
+rule RecvN:
+  let data = <m, commit_kNew, kOld>
+  in
+    [ In(< data, mac >)
+    , Receiver(rid, S, dataOld, MAC(dataOld, kOld), f(kOld), commit_k)
+    ]
+  --[ Test9(), FromSender(rid, S, dataOld)
+    , AssumeCommitNotExpired(rid, commit_k)
+    , Commit(rid, S, <'broadcast', dataOld>)
+    , Honest(S)
+    ]->
+    [ Receiver(rid, S, data, mac, commit_k, commit_kNew) ]
+
+
+restriction CommitNotExpiredOrdering:
+  "All rid commit #i #j.
+       AssumeCommitNotExpired(rid, commit) @ i & CommitExpired(commit) @ j
+   ==> i < j"
+
+
+// Safety properties
+
+// category: noninjective_agreement
+lemma authentic [use_induction]:
+  "All R S m #i.
+     Commit(R, S, <'broadcast', m>) @ i
+   ==>
+       (Ex #j. Running(S, S, <'broadcast', m>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7 #t8 #t9.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & Test7() @ #t7 & Test8() @ #t8 & Test9() @ #t9
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5
+     & #t5 < #t6 & #t6 < #t7 & #t7 < #t8 & #t8 < #t9"
+
+end

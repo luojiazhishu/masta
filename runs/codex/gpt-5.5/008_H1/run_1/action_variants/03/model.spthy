@@ -1,0 +1,74 @@
+theory MutualIdentitySignatureInitiatorTag
+begin
+
+builtins: signing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Register_Initiator:
+  [ Fr(~ltkI) ]
+  --[ ]->
+  [ !Ltk('I', ~ltkI), !Pk('I', pk(~ltkI)), Out(pk(~ltkI)) ]
+
+rule Register_Responder:
+  [ Fr(~ltkR) ]
+  --[ ]->
+  [ !Ltk('R', ~ltkR), !Pk('R', pk(~ltkR)), Out(pk(~ltkR)) ]
+
+rule Reveal_LongTermKey:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_SendAuth:
+  [ Fr(~sidI), !Ltk('I', ltkI) ]
+  --[ Test1(),
+      Create('I', ~sidI),
+      Running('I', 'R', <'responder', 'I', 'R'>)
+    ]->
+  [ Out(<sign(<'I', 'R'>, ltkI), 'init'>), St_I_1(~sidI) ]
+
+rule Responder_VerifyAndSendAuth:
+  [ Fr(~sidR), !Ltk('R', ltkR), !Pk('I', pkI), In(<sI, 'init'>) ]
+  --[ Test2(),
+      Eq(verify(sI, <'I', 'R'>, pkI), true),
+      Create('R', ~sidR),
+      Running('R', 'I', <'initiator', 'I', 'R'>),
+      Commit('R', 'I', <'responder', 'I', 'R'>),
+      Honest('I'), Honest('R')
+    ]->
+  [ Out(sign(<'I', 'R'>, ltkR)) ]
+
+rule Initiator_VerifyAndAccept:
+  [ St_I_1(sidI), !Pk('R', pkR), In(sR) ]
+  --[ Test3(),
+      Eq(verify(sR, <'I', 'R'>, pkR), true),
+      Commit('I', 'R', <'initiator', 'I', 'R'>),
+      Honest('I'), Honest('R')
+    ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma responder_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i & a = 'R' & b = 'I' & t = <'responder', 'I', 'R'>
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma initiator_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i & a = 'I' & b = 'R' & t = <'initiator', 'I', 'R'>
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

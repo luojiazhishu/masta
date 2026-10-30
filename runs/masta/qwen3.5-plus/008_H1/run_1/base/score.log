@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/masta/qwen3.5-plus/008_H1/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 008_H1 --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/masta/qwen3.5-plus/008_H1/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    008_H1
+
+==== Score ====
+ protocol: 008_H1
+ M1: 1.000
+ M2: 0.852
+ M3: 0.667
+ M4: 0.000  (no action variants supplied)
+ M5: 0.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/masta/qwen3.5-plus/008_H1/run_1/base/score.json

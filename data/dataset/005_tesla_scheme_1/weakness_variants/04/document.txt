@@ -1,0 +1,201 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 28, 2026                                         FAMED
+                                                         April 26, 2026
+
+
+              The TESLA Broadcast Authentication Protocol
+                                Scheme 1
+                       draft-famed-tesla-scheme1-w04
+
+Abstract
+
+   This document specifies a profile of Scheme 1 of the TESLA
+   broadcast authentication protocol.  In this profile the
+   commitment chain that ordinarily ties each disclosed MAC key
+   to a previously stored commitment value is omitted.  Receivers
+   accept the disclosed key contained in a stream message at face
+   value: they recompute the cached MAC under that disclosed key
+   without first checking that f(disclosed_key) matches the
+   commitment that was held for the slot from which the cached
+   payload originates.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1. Introduction ....................................................2
+   2. Terminology .....................................................3
+   3. Protocol Overview ...............................................3
+   4. Message Format ..................................................4
+   5. Processing Rules ................................................5
+   6. Security Considerations .........................................6
+   7. References ......................................................7
+
+1. Introduction
+
+   The TESLA family of protocols provides source authentication for
+   broadcast streams using symmetric MACs together with delayed key
+   disclosure.  This document specifies a profile of Scheme 1 in
+   which the receiver does not enforce the chained commitment
+   structure between consecutive MAC keys.
+
+   The profile is targeted at receivers that operate in a
+   memory-constrained environment and cannot retain per-slot
+   commitments throughout the broadcast.  In such receivers, the
+   slot's commitment is dropped immediately after it has been
+   passed forward; when the next stream message later discloses a
+   key, the receiver recomputes the cached MAC under the disclosed
+   key without re-checking that the disclosed key was the one
+   originally promised by f(.) for that slot.
+
+2. Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174] when, and only when, they
+   appear in all capitals, as shown here.
+
+   Throughout this document:
+
+      S, R              Sender and receiver.
+      f(k)              The commitment to MAC key k.
+      n_R               A receiver-chosen set-up nonce.
+      k_i, m_i, D_i     Standard TESLA Scheme 1 stream notation.
+
+3. Protocol Overview
+
+      Receiver R                                        Sender S
+
+      Msg 0a:  R, S, n_R                ----------->
+                                       <-----------
+                                                Msg 0b:  S, R,
+                                                       f(k_1),
+                                       sign{f(k_1), n_R}_SK(S)
+
+                                       <-----------
+                                                Msg 1:  D_1,
+                                                MAC(k_1, D_1)
+                                                  D_1 = m_1, f(k_2)
+
+                                       <-----------
+                                                Msg n:  D_n,
+                                                MAC(k_n, D_n)
+                                  D_n = m_n, f(k_{n+1}), k_{n-1}
+
+      (R recomputes the cached MAC of slot n-1 under the disclosed
+       k_{n-1} without verifying that f(k_{n-1}) matches a
+       previously held commitment)
+
+4. Message Format
+
+   Set-up and stream messages have the same structure as standard
+   TESLA Scheme 1.
+
+      struct {
+          opaque   receiver_id;
+          opaque   sender_id;
+          opaque   nonce_R;
+      } SetupRequest;
+
+      struct {
+          opaque   sender_id;
+          opaque   receiver_id;
+          opaque   commitment;       /* equals f(k_1) */
+          opaque   signature;        /* equals sign{commitment,
+                                        nonce_R}_SK(S) */
+      } SetupResponse;
+
+      struct {
+          opaque   payload;          /* m_i */
+          opaque   next_commitment;  /* equals f(k_{i+1}) */
+          opaque   disclosed_key;    /* equals k_{i-1};
+                                        absent for i = 1 */
+          opaque   mac;
+      } StreamMessage;
+
+5. Processing Rules
+
+   The set-up phase and the inaugural broadcast follow standard
+   TESLA Scheme 1.
+
+   When receiving a stream message that contains a disclosed_key
+   the receiver:
+
+   1.  Reads payload, next_commitment, disclosed_key, and mac
+       from the broadcast.
+
+   2.  Recomputes MAC(disclosed_key, cached_payload_for_previous_
+       slot) and compares it with the cached MAC for that slot.
+       The receiver MUST NOT first verify that
+       f(disclosed_key) matches the commitment previously held
+       for that slot; the receiver promotes the cached payload
+       solely on the outcome of the MAC comparison.
+
+   3.  If the MAC comparison succeeds, promotes the cached payload
+       to authenticated state and delivers it to the application.
+
+   4.  Updates the expected commitment for the next slot to the
+       newly received next_commitment.
+
+6. Security Considerations
+
+   This profile does not provide source authentication of the
+   broadcast stream on its own.  Without the f(.) commitment
+   check, the receiver has no way to distinguish a key that the
+   sender originally committed to from any other key the
+   adversary may choose to offer.  An adversary on the network
+   path can replace a legitimate stream message with a forged
+   message that uses an attacker-chosen key for both the MAC of
+   the cached payload and for the disclosed_key field, and the
+   receiver will accept the cached payload as authentic.
+
+   The protocol described in this document does not protect
+   against payload substitution by an active adversary.
+   Implementations MUST treat each promoted payload as untrusted
+   information in the absence of an additional, end-to-end
+   binding mechanism that ties the disclosed key to the original
+   sender, and MUST NOT use the promoted payload for any
+   security-sensitive purpose without such a binding.
+
+   The remaining considerations of TESLA Scheme 1 still apply.
+   Implementations MUST refuse to accept any stream message for
+   which the corresponding key could already have been disclosed
+   at the time of receipt.  Implementations MUST use a signature
+   scheme with existential unforgeability under chosen message
+   attack and a MAC algorithm that resists forgery without
+   knowledge of the key.
+
+7. References
+
+7.1. Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2. Informative References
+
+   [TESLA]    Perrig, A., Canetti, R., Song, D., and D. Tygar, "The
+              TESLA Broadcast Authentication Protocol", RSA
+              CryptoBytes, Volume 5, Number 2, Summer 2002.
+
+
+8. Analysis Targets
+
+8.1 Authenticity of Broadcast Messages

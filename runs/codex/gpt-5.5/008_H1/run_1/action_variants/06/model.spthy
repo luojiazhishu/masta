@@ -1,0 +1,79 @@
+theory MutualIdentitySignatureRam
+begin
+
+builtins: signing
+
+functions: com/2
+
+rule Register:
+  [ Fr(~ltk) ]
+  --[ KeyGen($A) ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Send:
+  [ !Ltk($I, ltkI), !Pk($R, pkR) ]
+  --[ Test1(), Create($I, <'init', $I, $R>), Running($I, $R, <'identity_pair', $I, $R>) ]->
+  [ Out(sign(<$I, $R>, ltkI)), St_I_1($I, $R, ltkI, pkR) ]
+
+rule Responder_Receive_Send:
+  [ !Ltk($R, ltkR), !Pk($I, pk(ltkI)), !Ltk($I, ltkI), In(sign(<$I, $R>, ltkI)) ]
+  --[ Test2(), Create($R, <'resp', $I, $R>), Running($R, $I, <'identity_pair', $I, $R>) ]->
+  [ Out(sign(<$I, $R>, ltkR)), Out(com($R, $I)) ]
+
+rule Initiator_Receive_Accept:
+  [ St_I_1($I, $R, ltkI, pk(ltkR)), !Ltk($R, ltkR), In(sign(<$I, $R>, ltkR)) ]
+  --[ Test3(), Commit($I, $R, <'identity_pair', $I, $R>), Honest($I), Honest($R) ]->
+  [ ]
+
+restriction unique_registration:
+  "All A #i #j.
+     KeyGen(A) @ i & KeyGen(A) @ j
+   ==> #i = #j"
+
+// category: aliveness
+lemma initiator_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma initiator_responder_weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma initiator_responder_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma initiator_responder_injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

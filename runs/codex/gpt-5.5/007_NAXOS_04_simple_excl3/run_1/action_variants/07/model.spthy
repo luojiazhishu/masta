@@ -1,0 +1,77 @@
+theory SimplifiedNaxos
+begin
+
+builtins: diffie-hellman, hashing
+
+functions: h1/1, h2/1, dh_exp/2, dh_recv/2
+
+rule Register:
+  [ Fr(~ltk) ]
+  --[ Honest($A) ]->
+  [ !Ltk($A, ~ltk)
+  , !Pk($A, 'g'^~ltk)
+  , Out(<$A, 'g'^~ltk>)
+  ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_Send_Message1:
+  let exI = h1(<~eskI, ltkI, 'protoV1'>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , !Ltk(I, ltkI)
+  , !Pk(R, pkR)
+  ]
+  --[ Test1() ]->
+  [ Out(<I, R, 'msg1', hkI>)
+  , St_I_1(I, R, ltkI, exI)
+  ]
+
+rule Responder_Send_Message2:
+  let exR = h1(<~eskR, ltkR, 'protoV1'>)
+      hkR = 'g'^exR
+      kR = h2(<dh_exp(pkI, exR), dh_recv(X, ltkR), I, R>)
+  in
+  [ In(<I, R, 'msg1', X>)
+  , Fr(~eskR)
+  , !Ltk(R, ltkR)
+  , !Pk(I, pkI)
+  ]
+  --[ Test2()
+    , Secret(R, I, kR)
+    ]->
+  [ Out(<R, I, 'msg2', hkR>)
+  ]
+
+rule Initiator_Receive_Message2:
+  let kI = h2(<dh_recv(Y, ltkI), dh_exp(pkR, exI), I, R>)
+  in
+  [ St_I_1(I, R, ltkI, exI)
+  , In(<R, I, 'msg2', Y>)
+  , !Pk(R, pkR)
+  ]
+  --[ Test3()
+    , Secret(I, R, kI)
+    ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B k #i.
+     Secret(A, B, k) @ #i
+   ==>
+       not (Ex #j. K(k) @ #j)
+     | (Ex #r. LtkReveal(A) @ #r)
+     | (Ex #r. LtkReveal(B) @ #r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

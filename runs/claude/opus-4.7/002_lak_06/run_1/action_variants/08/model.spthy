@@ -1,0 +1,134 @@
+theory LAK06_ActionVariant08
+begin
+
+builtins: hashing, xor
+
+functions: bar/1
+
+// Setup: provision a long-term symmetric key k shared between R and T.
+rule Setup_Pair:
+  [ Fr(~k) ]
+  --[ Create($R, $T) ]->
+  [ !Ltk($R, $T, ~k) ]
+
+// Adversary may reveal a long-term key.
+rule Reveal_Ltk:
+  [ !Ltk($R, $T, k) ]
+  --[ LtkReveal($R), LtkReveal($T) ]->
+  [ Out(k) ]
+
+// Action block 1: Reader draws a fresh r0 and transmits R0.
+rule Reader_Send_Challenge:
+  [ Fr(~r0)
+  , !Ltk($R, $T, k)
+  ]
+  --[ Test1()
+    ]->
+  [ Out(~r0)
+  , St_R_1($R, $T, ~r0, k)
+  ]
+
+// Action block 2: Tag receives R0, draws r1, computes the local
+// fingerprint bar(r1) (kept on Tag, never transmitted) and the
+// outbound tag_mac, then transmits T1 = (r1, tag_mac).
+rule Tag_Respond:
+  let tag_mac = h(r0 XOR ~r1 XOR k)
+      local_fp = bar(~r1)
+  in
+  [ In(r0)
+  , Fr(~r1)
+  , !Ltk($R, $T, k)
+  ]
+  --[ Test2()
+    , Running($T, $R, <'ReaderAgree', r0, ~r1>)
+    ]->
+  [ Out(<~r1, tag_mac>)
+  , St_T_1($R, $T, r0, ~r1, k, local_fp)
+  ]
+
+// Action block 3: Reader receives T1, verifies tag_mac against its
+// own r0 and the observed r1, and on success transmits R1.
+rule Reader_Verify_Respond:
+  let expected = h(~r0 XOR r1 XOR k)
+      reader_mac = h(expected XOR k XOR ~r0)
+  in
+  [ St_R_1($R, $T, ~r0, k)
+  , In(<r1, expected>)
+  ]
+  --[ Test3()
+    , Commit($R, $T, <'ReaderAgree', ~r0, r1>)
+    , Running($R, $T, <'TagAgree', ~r0, r1>)
+    , Secret($R, $T, k)
+    , Honest($R)
+    , Honest($T)
+    ]->
+  [ Out(reader_mac)
+  ]
+
+// Action block 4: Tag receives R1 and verifies reader_mac against
+// the same triple (r0, r1, k) it contributed to.  Terminal block.
+rule Tag_Verify:
+  let tag_mac = h(r0 XOR ~r1 XOR k)
+      expected = h(tag_mac XOR k XOR r0)
+  in
+  [ St_T_1($R, $T, r0, ~r1, k, local_fp)
+  , In(expected)
+  ]
+  --[ Test4()
+    , Commit($T, $R, <'TagAgree', r0, ~r1>)
+    , Secret($T, $R, k)
+    , Honest($R)
+    , Honest($T)
+    ]->
+  [ ]
+
+// -----------------------------------------------------------------
+// Safety lemmas
+// -----------------------------------------------------------------
+
+// 8.1: Secrecy of the long-term shared key k.
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 8.2: Non-injective agreement at the Tag.  When the Tag commits
+// at the end of its run, the Reader was running with the matching
+// (r0, r1) pair.  Expected to verify: the outer hash in reader_mac
+// binds r0 directly, defeating the XOR-offset trick on this side.
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'TagAgree', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'TagAgree', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// 8.3: Non-injective agreement at the Reader.  When the Reader
+// commits after verifying tag_mac, the Tag should have been
+// running with the same (r0, r1) pair.  Expected to falsify: an
+// attacker may inject offset Delta into r0 over the air and the
+// matching offset into r1 on the way back, which leaves tag_mac
+// unchanged so the Reader still accepts.
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, <'ReaderAgree', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'ReaderAgree', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// -----------------------------------------------------------------
+// Executable witness: chain Test1..Test4 in protocol order.
+// -----------------------------------------------------------------
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2
+     & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

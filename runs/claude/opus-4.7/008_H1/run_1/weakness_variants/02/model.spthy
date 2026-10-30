@@ -1,0 +1,87 @@
+theory H1_SBR_WeaknessVariant02
+begin
+
+builtins: signing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Register_Ltk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+rule Reveal_Ltk:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+// Action Block 1: Initiator creates mI = sign(<I,R>, ltkI) and sends it
+rule Init_1:
+  [ !Ltk($I, ~ltkI) ]
+  --[ Test1(),
+      Create($I, <$I, $R>),
+      Running($I, $R, <'initiator', $I, $R>) ]->
+  [ Out(sign(<$I, $R>, ~ltkI)),
+    St_I_1($I, $R) ]
+
+// Action Block 2: Responder verifies mI, creates mR = sign(R, ltkR), sends it
+rule Resp_1:
+  [ !Pk($I, pkI), In(mI), !Ltk($R, ~ltkR) ]
+  --[ Eq(verify(mI, <$I, $R>, pkI), true),
+      Test2(),
+      Create($R, <$I, $R>),
+      Running($R, $I, <'initiator', $I, $R>) ]->
+  [ Out(sign($R, ~ltkR)) ]
+
+// Action Block 3: Initiator verifies mR and accepts
+rule Init_2:
+  [ St_I_1($I, $R), !Pk($R, pkR), In(mR) ]
+  --[ Eq(verify(mR, $R, pkR), true),
+      Test3(),
+      Commit($I, $R, <'initiator', $I, $R>),
+      Honest($I), Honest($R) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

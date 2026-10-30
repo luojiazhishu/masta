@@ -1,0 +1,73 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule RuleStep1:
+  [
+    Fr(~r0)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0),
+    !StR1(~r0)
+  ]
+
+rule RuleStep2:
+  [
+    In(~r0),
+    Fr(~r1),
+    Fr(~k)
+  ]
+  --[ Test2(), Running('Tag', 'Reader', <~r0, ~r1>), Secret(~k), Honest('Tag') ]->
+  [
+    Out(<~r1, h(~r0 ⊕ ~r1 ⊕ ~k), ~k>),
+    !StT1(~r1, h(~r0 ⊕ ~r1 ⊕ ~k), ~k)
+  ]
+
+rule RuleStep3:
+  [
+    In(<~r1, tm, ~k>),
+    !StR1(~r0),
+    Fr(~k2)
+  ]
+  --[ Test3(), Commit('Reader', 'Tag', <~r0, ~r1, ~k>), Running('Reader', 'Tag', <~r0, ~r1, ~k>), Honest('Reader') ]->
+  [
+    Out(h(tm ⊕ ~k ⊕ ~r0))
+  ]
+
+rule RuleStep4:
+  [
+    In(rm),
+    !StT1(~r1, tm, ~k),
+    !StR1(~r0)
+  ]
+  --[ Test4(), Commit('Tag', 'Reader', <~r0, ~r1, ~k>) ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: secrecy
+lemma secrecy_long_term_tag_identifier:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)"
+
+end

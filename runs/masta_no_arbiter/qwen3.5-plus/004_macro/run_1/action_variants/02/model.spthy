@@ -1,0 +1,55 @@
+theory bsktsn begin
+
+builtins: asymmetric-encryption, hashing
+
+rule SetupServer:
+  [ Fr(~skS) ]
+  --[ Setup($S, ~skS) ]->
+  [ !Pk($S, pk(~skS)), !Ltk($S, ~skS), Out(pk(~skS)) ]
+
+rule RuleStep1:
+  let
+      m1 = aenc(~k, pkS)
+  in
+  [ Fr(~k), !Pk($S, pkS) ]
+  --[ Test1(), Secret($C, $S, ~k), Honest($C), Honest($S) ]->
+  [ Out(m1) ]
+
+rule RuleStep2:
+  let
+      k = adec(m1, ~skS)
+      digest = h(k)
+      m2 = <digest, ~rs>
+  in
+  [ In(m1), !Ltk($S, ~skS), Fr(~rs) ]
+  --[ Test2(), Running($S, $C, k) ]->
+  [ Out(m2) ]
+
+rule RuleStep3:
+  let
+      received_digest = fst(m2)
+      received_rs = snd(m2)
+      expected_digest = h(~k)
+  in
+  [ In(m2), Fr(~k) ]
+  --[ Test3(), Verify($C, ~k, received_rs), Commit($C, $S, ~k) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

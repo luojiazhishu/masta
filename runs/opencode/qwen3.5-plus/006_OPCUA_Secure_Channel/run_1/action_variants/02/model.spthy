@@ -1,0 +1,68 @@
+theory OPCUA_Secure_Channel
+begin
+
+builtins: hashing, signing
+
+rule Setup_Keys:
+  [ Fr(~skC), Fr(~skS) ]
+  --[ ]->
+  [ !Ltk(~skC), !Ltk(~skS), !Pk(~skC, pk(~skC)), !Pk(~skS, pk(~skS)), !ClientCert(~skC), !ServerCert(~skS) ]
+
+rule Client_GetEndpoints:
+  [ Fr(~r1) ]
+  --[ Test1() ]->
+  [ Out(< 'GEReq' >), St_C1(~r1) ]
+
+rule Server_GetEndpoints:
+  [ In(< 'GEReq' >), !Ltk(skS), !Pk(skS, pkS), !ServerCert(skS), Fr(~DiscoveryCorrelator) ]
+  --[ Test2() ]->
+  [ Out(< <'GERes', pkS, 'Sign', 'SecurityPolicy', 'UserTokenPolicy'>, ~DiscoveryCorrelator >), St_S1(skS, ~DiscoveryCorrelator) ]
+
+rule Client_OpenSecureChannel:
+  [ St_C1(~r1), !Ltk(skC), !Pk(skC, pkC), !ClientCert(skC), !ServerCert(skS), !Pk(skS, pkS), Fr(~Nc) ]
+  --[ Test3(), Secret(pkC, pkS, ~Nc) ]->
+  [ Out(< pkC, <'OSCReq', pkC, ~Nc>, sign(h(< 'OSCReq', pkC, ~Nc >), skC), h(< 'OSCReq', pkC, ~Nc >) >), St_C2(~r1, ~Nc, pkC, skS) ]
+
+rule Server_OpenSecureChannel:
+  [ St_S1(skS, ~DiscoveryCorrelator), In(< ClientPub, <'OSCReq', ClientPub, ClientNonce>, ReqSig, ReqDigest >), !Ltk(skS), !Pk(skS, pkS), !ServerCert(skS), Fr(~Ns), Fr(~TTL) ]
+  --[ Test4(), Running(pkS, ClientPub, <'server', pkS, ClientPub, ~Ns>), Secret(pkS, ClientPub, ~Ns) ]->
+  [ Out(< pkS, <'OSCRes', ~Ns, h(<pkS, ClientPub, ClientNonce, ~Ns>), ~TTL>, sign(h(< 'OSCRes', ~Ns, h(<pkS, ClientPub, ClientNonce, ~Ns>), ~TTL >), skS), h(< 'OSCRes', ~Ns, h(<pkS, ClientPub, ClientNonce, ~Ns>), ~TTL >) >), St_S2(skS, ~Ns, ClientPub, ClientNonce) ]
+
+rule Client_Verify:
+  [ St_C2(~r1, ~Nc, pkC, skS), In(< pkS, <'OSCRes', ServerNonce, SecurityToken, TokenLifetime>, RespSig, RespDigest >), !Ltk(skC), !Pk(skC, pkC), !ServerCert(skS), !Pk(skS, pkS) ]
+  --[ Test5(), Commit(pkC, pkS, <'client', pkC, pkS, ~Nc, ServerNonce>), Honest(pkC) ]->
+  [ ]
+
+rule LtkReveal_C:
+  [ !Ltk(skC) ]
+  --[ LtkReveal(skC) ]->
+  [ Out(skC) ]
+
+rule LtkReveal_S:
+  [ !Ltk(skS) ]
+  --[ LtkReveal(skS) ]->
+  [ Out(skS) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b nc sn #i.
+     Commit(a, b, <'client', a, b, nc, sn>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server', b, a, sn>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b nc sn #i.
+     Commit(a, b, <'client', a, b, nc, sn>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'server', b, a, sn>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

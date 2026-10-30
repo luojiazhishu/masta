@@ -1,0 +1,43 @@
+- role: GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~n_c
+  - send:
+    - '''GEReq'''
+    - pk_c
+- role: GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+    - pk_c
+  - generate_nonces:
+    - ~n_s
+  - send:
+    - '''GERes'''
+    - pk_s
+    - '''Sign'''
+- role: OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - pk_s
+    - '''Sign'''
+  - generate_nonces:
+    - ~token
+    - ~ttl
+  - send:
+    - pk_c
+    - <'OSCReq', pk_c, ~n_c>
+    - sign(h(<'OSCReq', pk_c, ~n_c>), ~sk_c)
+    - h(<'OSCReq', pk_c, ~n_c>)
+- role: OpenSecureChannelResponse
+  operations:
+  - receive:
+    - pk_c
+    - <'OSCReq', pk_c, nc>
+    - reqsig
+    - reqhash
+  - generate_nonces:
+    - ~token
+    - ~ttl
+  - send: <END>

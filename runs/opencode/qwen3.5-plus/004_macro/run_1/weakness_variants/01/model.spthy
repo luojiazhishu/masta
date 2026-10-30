@@ -1,0 +1,78 @@
+theory Bsktstatic
+begin
+
+builtins: asymmetric-encryption, hashing
+
+// Setup rule: create long-term keys and fixed shared secret
+rule Setup:
+  [ Fr(~skS), Fr(~k_fixed) ]
+  --[ ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), !KFixed(~k_fixed) ]
+
+// Action block 1: Client sends encrypted k_fixed
+rule Client_Send:
+  [ !KFixed(k_fixed), !Pk($S, pkS), Fr(~tidC) ]
+  --[ Test1(), Create($C, ~tidC), Running($C, $S, <'client', ~tidC, k_fixed>) ]->
+  [ Out(aenc(k_fixed, pkS)), St_C_1(~tidC, k_fixed) ]
+
+// Action block 2: Server receives and decrypts
+rule Server_Receive:
+  [ !Ltk($S, skS), In(ciphertext), Fr(~tidS) ]
+  --[ Test2(), Create($S, ~tidS), Running($S, $C, <'server', ~tidS, adec(ciphertext, skS)>) ]->
+  [ St_S_1(~tidS, adec(ciphertext, skS)) ]
+
+// Action block 3: Server sends hash confirmation
+rule Server_Send:
+  [ St_S_1(tidS, k) ]
+  --[ Test3(), Running($S, $C, <'server', tidS, k>), Honest($S) ]->
+  [ Out(h(k)) ]
+
+// Action block 4: Client verifies confirmation
+rule Client_Verify:
+  [ St_C_1(tidC, k_fixed), In(digest) ]
+  --[ Test4(), Commit($C, $S, <'client', tidC, k_fixed>), Secret($C, $S, k_fixed) ]->
+  [ ]
+
+// Long-term key reveal rule
+rule Reveal_Ltk:
+  [ !Ltk(A, skA) ]
+  --[ LtkReveal(A) ]->
+  [ Out(skA) ]
+
+// Secrecy lemma
+// category: secrecy
+lemma secrecy_key:
+  "All C S k #i.
+     Secret(C, S, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Non-injective agreement lemma
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All c s t #i.
+     Commit(c, s, t) @ i
+   ==>
+       (Ex #j. Running(s, c, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Injective agreement lemma
+// category: injective_agreement
+lemma injective_agreement:
+  "All c s t #i.
+     Commit(c, s, t) @ i
+   ==>
+       ( (Ex #j. Running(s, c, t) @ j
+             & j < i
+             & not (Ex c2 s2 #i2. Commit(c2, s2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

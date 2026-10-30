@@ -1,0 +1,30 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~tid_R
+  - send:
+    - $R
+    - $S
+    - ~n_R
+- role: RuleStep2
+  operations:
+  - receive:
+    - $R
+    - $S
+    - n_R
+  - generate_nonces:
+    - ~k_1
+  - send:
+    - $S
+    - $R
+    - f(~k_1)
+    - sign(<f(~k_1), n_R>, ~ltk_S)
+    - '''commit_response'''
+- role: RuleStep3
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+    - ~k_1
+  - send: <END>

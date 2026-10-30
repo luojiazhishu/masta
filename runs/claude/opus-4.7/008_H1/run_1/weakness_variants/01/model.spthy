@@ -1,0 +1,76 @@
+theory MutualIdentitySigAuthUnverifiedReply
+begin
+
+builtins: signing
+
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+/* Action Block 1: Initiator constructs mI = sign(<I,R>, ltkI) and sends it */
+rule Initiator_Send:
+  let
+    mI = sign(<$I, $R>, ~ltkI)
+  in
+  [ !Ltk($I, ~ltkI), Fr(~tid) ]
+  --[ Test1(), Create($I, ~tid), Running($I, $R, <$I, $R>) ]->
+  [ St_I($I, $R, ~tid), Out(mI) ]
+
+/* Action Block 2: Responder verifies mI, constructs mR = sign(<I,R>, ltkR), sends it */
+rule Responder_Step:
+  let
+    mR = sign(<$I, $R>, ~ltkR)
+  in
+  [ !Pk($I, pkI), !Ltk($R, ~ltkR), Fr(~tid), In(mI) ]
+  --[ Test2(), Eq(verify(mI, <$I, $R>, pkI), true), Create($R, ~tid), Running($R, $I, <$I, $R>) ]->
+  [ Out(mR) ]
+
+/* Action Block 3: Initiator receives m without verification and accepts */
+rule Initiator_Receive:
+  [ St_I($I, $R, ~tid), In(m) ]
+  --[ Test3(), Commit($I, $R, <$I, $R>), Honest($I), Honest($R) ]->
+  [ ]
+
+restriction Equality:
+  "All a b #i. Eq(a, b) @ i ==> a = b"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

@@ -1,0 +1,29 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~na
+    - ~tid
+  - compute:
+    - tag_audit_I = com(~na, ~na)
+  - send:
+    - ~na
+- role: RuleStep2
+  operations:
+  - receive:
+    - na
+  - generate_nonces:
+    - ~nb
+    - ~tid
+  - send:
+    - h(na XOR k XOR ~nb)
+    - ~nb
+- role: RuleStep3
+  operations:
+  - receive:
+    - tag
+    - nb
+  - compute:
+    - t_prime = h(na XOR k XOR nb)
+  - assert:
+    - t_prime = tag
+  - send: <END>

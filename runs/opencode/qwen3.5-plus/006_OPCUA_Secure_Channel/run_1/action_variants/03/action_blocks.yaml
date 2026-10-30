@@ -1,0 +1,63 @@
+- role: Client_GetEndpoints
+  operations:
+  - generate_nonces:
+    - ~cid
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpoints_Response
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - certS
+    - '''Sign'''
+    - '''OPCUA-Sign'''
+    - '''Anonymous'''
+- role: Client_OpenSecureChannel
+  operations:
+  - receive:
+    - '''GERes'''
+    - serverCert
+    - '''Sign'''
+    - policy
+    - tokenPolicy
+  - generate_nonces:
+    - ~nC
+    - ~reqId
+  - send:
+    - '''ClientOSCReq'''
+    - certC
+    - pkC
+    - ~nC
+    - sign(<'OSCReq', pkC, ~nC>, ~ltkC)
+    - ~reqId
+- role: Server_OpenSecureChannel_Response
+  operations:
+  - receive:
+    - '''ClientOSCReq'''
+    - clientCert
+    - pkC
+    - nC
+    - reqSig
+    - reqId
+  - generate_nonces:
+    - ~nS
+    - ~ST
+  - send:
+    - '''ServerOSCRes'''
+    - certS
+    - ~nS
+    - ~ST
+    - '''3600'''
+    - sign(<'OSCRes', ~nS, ~ST, '3600'>, ~ltkS)
+- role: Client_Verify_Response
+  operations:
+  - receive:
+    - '''ServerOSCRes'''
+    - serverCert
+    - nS
+    - ST
+    - TTL
+    - respSig
+  - send: <END>

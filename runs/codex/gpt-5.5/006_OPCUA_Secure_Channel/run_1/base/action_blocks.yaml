@@ -1,0 +1,69 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(ltkS)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - spk
+    - '''Sign'''
+    - policy
+    - userpolicy
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - reqbody = <'OSCReq', pk(ltkC), ~Nc>
+    - reqdigest = h(<'OSCReq', pk(ltkC), ~Nc>)
+  - send:
+    - pk(ltkC)
+    - reqbody
+    - sign(reqdigest, ltkC)
+    - reqdigest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - cpk
+    - reqbody
+    - sigC
+    - reqdigest
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+  - compute:
+    - reqbody = <'OSCReq', cpk, Nc>
+    - reqdigest = h(<'OSCReq', cpk, Nc>)
+    - resbody = <'OSCRes', ~Ns, ~ST, 'TokenLifetime'>
+    - resdigest = h(<'OSCRes', ~Ns, ~ST, 'TokenLifetime'>)
+    - channel = h(<Nc, ~Ns>)
+  - assert:
+    - verify(sigC, reqdigest, cpk) = true
+  - send:
+    - pk(ltkS)
+    - resbody
+    - sign(resdigest, ltkS)
+    - resdigest
+- role: Client_AcceptOpenSecureChannel
+  operations:
+  - receive:
+    - spk
+    - resbody
+    - sigS
+    - resdigest
+  - compute:
+    - resbody = <'OSCRes', Ns, ST, TTL>
+    - resdigest = h(<'OSCRes', Ns, ST, TTL>)
+    - channel = h(<Nc, Ns>)
+  - assert:
+    - verify(sigS, resdigest, spk) = true
+  - send: <END>

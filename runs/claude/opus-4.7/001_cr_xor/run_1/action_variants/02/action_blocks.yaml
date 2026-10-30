@@ -1,0 +1,27 @@
+- role: I_send
+  operations:
+  - generate_nonces:
+    - ~na
+  - send:
+    - ~na
+    - '''Init'''
+- role: R_respond
+  operations:
+  - receive:
+    - na
+    - '''Init'''
+  - generate_nonces:
+    - ~nb
+  - send:
+    - h(na XOR k XOR ~nb)
+    - ~nb
+- role: I_finish
+  operations:
+  - receive:
+    - t
+    - nb
+  - compute:
+    - tprime = h(~na XOR k XOR nb)
+  - assert:
+    - t = tprime
+  - send: <END>

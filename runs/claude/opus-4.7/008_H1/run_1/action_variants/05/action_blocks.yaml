@@ -1,0 +1,20 @@
+- role: I_Send
+  operations:
+  - send:
+    - sign(<$I, $R>, ~ltkI)
+    - bar($I)
+- role: R_Process
+  operations:
+  - receive:
+    - sig
+  - assert:
+    - verify(sig, <$I, $R>, pkI) = true
+  - send:
+    - sign(<$I, $R>, ~ltkR)
+- role: I_Finish
+  operations:
+  - receive:
+    - sigR
+  - assert:
+    - verify(sigR, <$I, $R>, pkR) = true
+  - send: <END>

@@ -1,0 +1,64 @@
+theory CR_XOR_RMK begin
+
+builtins: hashing, xor
+
+// Pre-shared key establishment (not a protocol step, but needed for the model)
+rule SetupKey:
+  [ Fr(~k) ]
+  -->
+  [ !SharedKey($I, $R, ~k) ]
+
+// Key reveal rule for compromised long-term key (per threat model)
+rule KeyReveal:
+  [ !SharedKey($A, $B, k) ]
+  --[ KeyReveal($A, $B) ]->
+  [ Out(k) ]
+
+// RuleStep1: Initiator generates nonce na and sends it
+rule RuleStep1:
+  [ Fr(~na), !SharedKey($I, $R, ~k) ]
+  --[ Test1() ]->
+  [ Out(~na), !StateI1($I, $R, ~k, ~na) ]
+
+// RuleStep2: Responder receives na, generates nb, computes tag, sends response
+// TagGen action records that the responder generated this specific tag value
+rule RuleStep2:
+  let tag_val = h(~na ⊕ ~k ⊕ ~nb)
+  in
+  [ In(~na), Fr(~nb), !SharedKey($I, $R, ~k) ]
+  --[ Test2(), Running($R, $I, tag_val), TagGen($R, tag_val) ]->
+  [ Out(<tag_val, ~nb, 'Resp'>) ]
+
+// RuleStep3: Initiator receives response, verifies marker and tag
+rule RuleStep3:
+  let t_prime = h(~na ⊕ ~k ⊕ ~nb)
+  in
+  [ In(<tag, ~nb, marker>), !StateI1($I, $R, ~k, ~na) ]
+  --[ Test3(), Verified($I, $R, ~na, ~nb), Commit($I, $R, tag) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: aliveness
+// Per document Section 6: protocol provides aliveness of entity holding k
+// If initiator commits to a tag, the responder generated that tag at some point (or key compromised)
+lemma aliveness_responder:
+  "All I R tag #i.
+     Commit(I, R, tag) @ i
+   ==>
+       (Ex #j. TagGen(R, tag) @ j)
+     | (Ex A B #r. KeyReveal(A, B) @ r)"
+
+// category: noninjective_agreement
+// Per document Section 8.2: when initiator accepts tag, responder computed same tag value
+// This holds even if session parameters (nonces) don't match due to XOR vulnerability
+lemma noninjective_agreement_verification_tag:
+  "All I R tag #i.
+     Commit(I, R, tag) @ i
+   ==>
+       (Ex #j. TagGen(R, tag) @ j)
+     | (Ex A B #r. KeyReveal(A, B) @ r)"
+
+end

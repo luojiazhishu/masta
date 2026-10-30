@@ -1,0 +1,159 @@
+{
+  "generated_at": "2026-10-30T08:40:50+00:00",
+  "systems": [
+    "masta_backbone"
+  ],
+  "summary": {
+    "total": 9,
+    "scored": 9,
+    "not_scored": 0
+  },
+  "runs": [
+    {
+      "system": "masta_backbone",
+      "label": "claude-sonnet-4-6",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9,
+      "m2": 0.75,
+      "m3": 0.5,
+      "m4": 0.9166666666666666,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "claude-sonnet-4-6",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.8333333333333334,
+      "m2": 0.6176470588235294,
+      "m3": 1.0,
+      "m4": 0.8250000000000001,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "claude-sonnet-4-6",
+      "protocol": "008_H1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.7142857142857143,
+      "m2": 0.7419287211740042,
+      "m3": 0.6666666666666666,
+      "m4": 0.7750841750841752,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "gpt-5-mini",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.8777777777777778,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "gpt-5-mini",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.0,
+      "m2": 1.0,
+      "m3": 0.0,
+      "m4": 0.5539682539682539,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "gpt-5-mini",
+      "protocol": "008_H1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.7142857142857143,
+      "m2": 0.0,
+      "m3": 0.0,
+      "m4": 0.763888888888889,
+      "m5": 0.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "qwen3.5-plus",
+      "protocol": "001_cr_xor",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 0.9,
+      "m2": 0.39655172413793105,
+      "m3": 0.5214285714285715,
+      "m4": 0.9055555555555556,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "qwen3.5-plus",
+      "protocol": "003_pattern_matching_and_destructors",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 1.0,
+      "m2": 0.6785714285714286,
+      "m3": 0.625,
+      "m4": 1.0,
+      "m5": 1.0
+    },
+    {
+      "system": "masta_backbone",
+      "label": "qwen3.5-plus",
+      "protocol": "008_H1",
+      "run": "run_1",
+      "status": "scored",
+      "m1": 1.0,
+      "m2": 0.8524871355060034,
+      "m3": 0.6666666666666666,
+      "m4": 0.9629629629629629,
+      "m5": 1.0
+    }
+  ],
+  "means": [
+    {
+      "system": "masta_backbone",
+      "model": "claude-sonnet-4-6",
+      "protocol_count": 3,
+      "m1": 0.815873015873016,
+      "m2": 0.7031919266658445,
+      "m3": 0.7222222222222222,
+      "m4": 0.8389169472502807,
+      "m5": 1.0,
+      "correctness": 0.7470957215870276,
+      "completeness": 0.9194584736251403
+    },
+    {
+      "system": "masta_backbone",
+      "model": "gpt-5-mini",
+      "protocol_count": 3,
+      "m1": 0.5380952380952381,
+      "m2": 0.3333333333333333,
+      "m3": 0.0,
+      "m4": 0.7318783068783068,
+      "m5": 0.3333333333333333,
+      "correctness": 0.2904761904761905,
+      "completeness": 0.53260582010582
+    },
+    {
+      "system": "masta_backbone",
+      "model": "qwen3.5-plus",
+      "protocol_count": 3,
+      "m1": 0.9666666666666667,
+      "m2": 0.6425367627384544,
+      "m3": 0.6043650793650793,
+      "m4": 0.9561728395061729,
+      "m5": 1.0,
+      "correctness": 0.7378561695900668,
+      "completeness": 0.9780864197530865
+    }
+  ]
+}

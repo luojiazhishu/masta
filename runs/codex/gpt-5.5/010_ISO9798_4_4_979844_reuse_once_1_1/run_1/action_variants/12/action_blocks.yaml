@@ -1,0 +1,45 @@
+- role: Responder_Challenge
+  operations:
+  - generate_nonces:
+    - ~rb
+    - ~text1
+  - send:
+    - ~rb
+    - ~text1
+- role: Initiator_Token
+  operations:
+  - receive:
+    - rb
+    - text1
+  - generate_nonces:
+    - ~text2
+    - ~text3
+  - compute:
+    - tagged1 = <'sid1_mut_cr', ra, rb, B, ~text2>
+    - mac1 = mac(<'sid1_mut_cr', ra, rb, B>, k)
+    - token = <ra, ~text3, <'sid1_mut_cr', ra, rb, B, ~text2>, mac(<'sid1_mut_cr',
+      ra, rb, B>, k)>
+  - send:
+    - token
+    - token
+- role: Responder_Token
+  operations:
+  - receive:
+    - ra
+    - text3
+    - <'sid1_mut_cr', ra, rb, B, text2>
+    - mac(<'sid1_mut_cr', ra, rb, B>, k)
+  - generate_nonces:
+    - ~text4
+    - ~text5
+  - compute:
+    - mac2 = mac(<'sid2_mut_cr', rb, ra>, k)
+  - send:
+    - ~text5
+    - mac2
+- role: Initiator_Finish
+  operations:
+  - receive:
+    - text5
+    - mac(<'sid2_mut_cr', rb, ra>, k)
+  - send: <END>

@@ -1,0 +1,72 @@
+theory TeslaScheme1WeakProfile begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Register_Sender:
+  [ Fr(~skS) ]
+--[ Create($S, pk(~skS)), Honest($S) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Receiver_Setup_Request:
+  [ Fr(~nR) ]
+--[ Test1() ]->
+  [ Out(<$R, $S, ~nR>), SetupNonce($R, $S, ~nR) ]
+
+rule Sender_Setup_Response:
+  let c1 = h(~k1)
+      c2 = h(~k2)
+      sig = sign(<c1, nR>, ~skS)
+  in
+  [ !Ltk($S, ~skS), In(<$R, $S, nR>), Fr(~k1), Fr(~k2) ]
+--[ Test2(), Running($S, $R, <'setup', c1, nR>) ]->
+  [ Out(<$S, $R, c1, sig>), SenderState($S, $R, ~k1, ~k2, c2) ]
+
+rule Receiver_Accepts_Setup:
+  [ SetupNonce($R, $S, nR), !Pk($S, pkS), In(<$S, $R, c1, sig>) ]
+--[ Test3(), Commit($R, $S, <'setup', c1, nR>) ]->
+  [ ReceiverExpect($R, $S, c1), Eq(verify(sig, <c1, nR>, pkS), true) ]
+
+rule Sender_First_Stream:
+  let d1 = <~m1, c2>
+      tag1 = mac(k1, d1)
+      c3 = h(~k3)
+  in
+  [ SenderState($S, $R, k1, k2, c2), Fr(~m1), Fr(~k3) ]
+--[ Test4(), Running($S, $R, <'payload', d1>) ]->
+  [ Out(<d1, tag1>), SenderNext($S, $R, k2, ~k3, c3), SentPayload($S, d1) ]
+
+rule Receiver_Cache_First_Stream:
+  [ ReceiverExpect($R, $S, c1), In(<d1, tag1>) ]
+--[ Test5() ]->
+  [ ReceiverCached($R, $S, c1, d1, tag1) ]
+
+rule Sender_Next_Stream_Disclose:
+  let d2 = <~m2, c3, k2>
+      tag2 = mac(k2, d2)
+  in
+  [ SenderNext($S, $R, k2, k3, c3), Fr(~m2) ]
+--[ Test6(), Running($S, $R, <'disclose', h(k2)>), Secret(k2) ]->
+  [ Out(<d2, tag2>), SenderDisclosed($S, $R, k2), SentPayload($S, d2) ]
+
+rule Receiver_Accepts_Cached_Without_Mac_Check:
+  [ ReceiverCached($R, $S, h(k_disclosed), d1, tag1), In(<<m2, c3, k_disclosed>, tag2>) ]
+--[ Test7(), Commit($R, $S, <'payload', d1>), Accepted($R, $S, d1) ]->
+  [ ReceiverExpect($R, $S, c3) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+// category: noninjective_agreement
+lemma broadcast_payload_authenticity:
+  "All r s d #i.
+     Commit(r, s, <'payload', d>) @ #i
+   ==>
+     (Ex #j. Running(s, r, <'payload', d>) @ #j & #j < #i)"
+
+end

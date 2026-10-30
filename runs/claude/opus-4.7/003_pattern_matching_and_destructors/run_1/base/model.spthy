@@ -1,0 +1,79 @@
+theory SK_PMD
+begin
+
+builtins: symmetric-encryption
+
+// Out-of-band establishment of the shared symmetric key k between
+// initiator $I and responder $R. The key is persistent and shared.
+rule SetupSharedKey:
+  [ Fr(~k) ]
+  --[ KeySetup($I, $R, ~k) ]->
+  [ !SharedKey($I, $R, ~k), !SharedKey($R, $I, ~k) ]
+
+// Adversary may compromise the long-term shared key out of band.
+// Both endpoints holding k are flagged as revealed.
+rule RevealSharedKey:
+  [ !SharedKey($I, $R, k) ]
+  --[ LtkReveal($I), LtkReveal($R) ]->
+  [ Out(k) ]
+
+// Action block 1 (Initiator):
+//   draw fresh sec and pub, form <sec, pub>, encrypt under k, send.
+rule I_Send:
+  [ Fr(~sec)
+  , Fr(~pub)
+  , !SharedKey($I, $R, k)
+  ]
+  --[ Test1()
+    , Sent(~sec, ~pub, k)
+    , Secret($I, $R, ~sec)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(senc(<~sec, ~pub>, k)) ]
+
+// Action block 2 (Responder):
+//   receive msg, perform the two destructor checks (encSucc and isPair)
+//   by pattern-matching the inbound term as senc(<sec, pub>, k), then
+//   release pub into the public network.
+rule R_Recv:
+  [ In(senc(<sec, pub>, k))
+  , !SharedKey($R, $I, k)
+  ]
+  --[ Test2()
+    , Recv(sec, pub, k)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(pub) ]
+
+// Sources lemma: when the responder accepts senc(<sec, pub>, k), the
+// open variables sec and pub either came from an honest initiator run
+// (Sent fact) or were already known to the adversary.
+lemma sources [sources]:
+  "(All sec pub k #i.
+       Recv(sec, pub, k) @ i
+     ==>
+         (Ex #j. KU(sec) @ j & j < i)
+       | (Ex #j. Sent(sec, pub, k) @ j & j < i))
+   & (All sec pub k #i.
+       Recv(sec, pub, k) @ i
+     ==>
+         (Ex #j. KU(pub) @ j & j < i)
+       | (Ex #j. Sent(sec, pub, k) @ j & j < i))"
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

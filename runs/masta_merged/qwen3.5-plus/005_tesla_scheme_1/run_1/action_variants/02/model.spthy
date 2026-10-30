@@ -1,0 +1,70 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender S
+rule Generate_Key_S:
+  [ Fr(~sk_S) ]
+  --[ Create('S', ~sk_S) ]->
+  [ !Ltk('S', ~sk_S), !Pk('S', pk(~sk_S)), Out(pk(~sk_S)) ]
+
+// RuleStep1: Receiver sends setup request
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Running('R', 'S', <'SetupRequest', ~n_R>) ]->
+  [ Out(< 'R', 'S', ~n_R >), !StateR1(~tid_R, 'R', 'S', ~n_R) ]
+
+// RuleStep2: Sender receives request, generates key and tag, sends response
+rule RuleStep2:
+  [ In(< 'R', 'S', ~n_R >), Fr(~k_1), Fr(~stag_S), !Ltk('S', ~sk_S) ]
+  let commitment = f(~k_1)
+      signature = sign(<commitment, ~n_R>, ~sk_S)
+  in
+  --[ Test2(), Commit('S', 'R', <commitment, signature, ~stag_S>) ]->
+  [ Out(< 'S', 'R', commitment, signature, ~stag_S >), !StateS1('S', 'R', ~k_1, ~n_R) ]
+
+// RuleStep3: Receiver verifies signature
+rule RuleStep3:
+  [ In(< 'S', 'R', commitment, signature, stag_S >), !StateR1(~tid_R, 'R', 'S', ~n_R), !Pk('S', pk_S) ]
+  --[ Test3(), Verify('R', 'S', <commitment, ~n_R>) ]->
+  [ !StateR2(~tid_R, 'R', 'S', ~n_R, commitment) ]
+
+// RuleStep4: Sender sends first broadcast message
+rule RuleStep4:
+  [ !StateS1('S', 'R', ~k_1, ~n_R), Fr(~k_2), Fr(~m_1) ]
+  let next_commitment = f(~k_2)
+      mac_1 = MAC(~k_1, <~m_1, next_commitment>)
+  in
+  --[ Test4(), SendBroadcast('S', 'R', 1, ~m_1) ]->
+  [ Out(< ~m_1, next_commitment, mac_1 >), !StateS2('S', 'R', ~k_1, ~k_2) ]
+
+// RuleStep5: Receiver receives first broadcast message (cannot verify yet)
+rule RuleStep5:
+  [ In(< m_1, next_commitment, mac_1 >), !StateR2(~tid_R, 'R', 'S', ~n_R, commitment) ]
+  --[ Test5(), ReceiveBroadcast('R', 'S', 1, m_1) ]->
+  [ !StateR3(~tid_R, 'R', 'S', commitment, next_commitment, m_1, mac_1) ]
+
+// RuleStep6: Sender sends nth broadcast message (disclosing k_{n-1})
+rule RuleStep6:
+  [ !StateS2('S', 'R', ~k_prev, ~k_curr), Fr(~k_next), Fr(~m_n) ]
+  let next_commitment = f(~k_next)
+      mac_n = MAC(~k_curr, <~m_n, next_commitment, ~k_prev>)
+  in
+  --[ Test6(), SendBroadcast('S', 'R', 'n', ~m_n) ]->
+  [ Out(< ~m_n, next_commitment, ~k_prev, mac_n >), !StateS2('S', 'R', ~k_curr, ~k_next) ]
+
+// RuleStep7: Receiver receives nth broadcast message and verifies with disclosed key
+rule RuleStep7:
+  [ In(< m_n, next_commitment, k_disclosed, mac_n >), !StateR3(~tid_R, 'R', 'S', commitment, expected_commitment, m_prev, mac_prev) ]
+  --[ Test7(), VerifyBroadcast('R', 'S', 'n', m_n) ]->
+  [ !StateR4(~tid_R, 'R', 'S', next_commitment, m_n) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

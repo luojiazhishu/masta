@@ -1,0 +1,39 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+// Persistent long-term key k
+rule SetupKey:
+  [
+    Fr(~k)
+  ]
+  --[ ]->
+  [
+    !K(~k)
+  ]
+
+rule RuleStep1:
+  [
+    Fr(~r0)
+  ]
+  --[ Test1() ]->
+  [
+    Out(~r0)
+  ]
+
+rule RuleStep2:
+  [
+    Fr(~r1),
+    In(~r0),
+    !K(~k)
+  ]
+  --[ Test2() ]->
+  [
+    Out(<~r1, h(~r0 XOR ~r1 XOR ~k)>)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

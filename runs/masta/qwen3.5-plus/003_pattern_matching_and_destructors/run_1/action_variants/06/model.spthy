@@ -1,0 +1,37 @@
+theory FAMED_SK_PMD begin
+
+builtins: symmetric-encryption
+
+rule SetupKey:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk('I', ~k) ]
+
+rule RuleStep1:
+  [ Fr(~sec), Fr(~pub), !Ltk('I', ~k) ]
+  --[ Test1(), Secret('I', 'R', ~sec), Honest('I') ]->
+  [ Out(senc(<~sec, ~pub>, ~k)), Out(senc(<~sec, ~pub>, ~k)) ]
+
+rule RuleStep2:
+  [ In(~msg) ]
+  --[ Test2() ]->
+  [ Out('END') ]
+
+rule LtkReveal:
+  [ !Ltk('I', ~k) ]
+  --[ LtkReveal('I') ]->
+  [ Out(~k) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+lemma secrecy_secrecy_of_encapsulated_secret:
+  // category: secrecy
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

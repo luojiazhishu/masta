@@ -1,0 +1,16 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+    - ~I
+    - ~R
+  - send:
+    - senc(<~sec, ~pub>, k)
+    - $tag
+- role: RuleStep2
+  operations:
+  - receive:
+    - senc(<~sec, ~pub>, k)
+    - $tag
+  - send: <END>

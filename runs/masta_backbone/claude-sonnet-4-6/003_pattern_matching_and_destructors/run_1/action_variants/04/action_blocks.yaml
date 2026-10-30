@@ -1,0 +1,14 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~k
+  - send:
+    - senc(<~sec, ~sec>, ~k)
+- role: RuleStep2
+  operations:
+  - receive:
+    - senc(<sec, pub>, k)
+  - compute:
+    - auxr = tag_aux(sec, pub)
+  - send: <END>

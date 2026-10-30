@@ -1,0 +1,111 @@
+theory FAMED_ISO9798_4 begin
+
+builtins: hashing
+
+functions: mac/2
+
+// Public constants for protocol identifiers
+functions: sid1_mut_cr/0, sid2_mut_cr/0, mac1_tag/0, IdA/0, IdB/0
+
+// Persistent fact for the pre-shared symmetric key
+rule SetupKey:
+  [ Fr(~kAB) ]
+  -->
+  [ !SharedKey(IdA, IdB, ~kAB) ]
+
+// RuleStep1: Responder sends Challenge1 = <RB, Text1>
+rule RuleStep1:
+  [ Fr(~RB), Fr(~Text1) ]
+  --[ Test1(), Honest(IdB) ]->
+  [ Out(<~RB, ~Text1>), !RespState(~RB) ]
+
+// RuleStep2: Initiator receives Challenge1, generates nonces, computes mac1, sends TokenAB
+rule RuleStep2:
+  let
+    mac1 = mac(<sid1_mut_cr, ~RA, RB, IdB, mac1_tag>, kAB)
+  in
+  [ In(<RB, Text1>),
+    Fr(~RA), Fr(~Text2), Fr(~Text3),
+    !SharedKey(IdA, IdB, kAB) ]
+  --[ Test2(), Running(IdA, IdB, <~RA, RB>), Honest(IdA), Secret(IdA, IdB, kAB) ]->
+  [ Out(<~RA, ~Text3, <sid1_mut_cr, ~RA, RB, IdB, ~Text2>, mac1>), !InitState(~RA, RB) ]
+
+// RuleStep3: Responder receives TokenAB, verifies mac1, computes mac2, sends TokenBA
+rule RuleStep3:
+  let
+    expected_mac1 = mac(<sid1_mut_cr, RA, RB, IdB, mac1_tag>, kAB)
+    mac2 = mac(<sid2_mut_cr, RB, RA>, kAB)
+  in
+  [ In(<RA, Text3, <sid1_mut_cr, RA, RB, IdB, Text2>, mac1>),
+    Fr(~Text5),
+    !RespState(RB),
+    !SharedKey(IdA, IdB, kAB) ]
+  --[ Test3(), Running(IdB, IdA, <RA, RB>), Commit(IdB, IdA, <RA, RB>), Honest(IdB) ]->
+  [ Out(<~Text5, mac2>) ]
+
+// RuleStep4: Initiator receives TokenBA, verifies mac2, completes session
+rule RuleStep4:
+  let
+    expected_mac2 = mac(<sid2_mut_cr, RB, RA>, kAB)
+  in
+  [ In(<Text5, mac2>),
+    !InitState(RA, RB),
+    !SharedKey(IdA, IdB, kAB) ]
+  --[ Test4(), Commit(IdA, IdB, <RA, RB>), Honest(IdA) ]->
+  [ ]
+
+// Long-term key reveal rule for kAB compromise
+rule SharedKeyReveal:
+  [ !SharedKey(IdA, IdB, kAB) ]
+  --[ LtkReveal(IdA) ]->
+  [ Out(kAB) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_initiator:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==> ( (Ex #j. Running(b, a, t) @j
+              & j < i
+              & not (Ex a2 b2 #i2. Commit(a2, b2, t) @i2
+                                 & not (#i2 = #i))) )
+          | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_injective_agreement_responder:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==> ( (Ex #j. Running(b, a, t) @j
+              & j < i
+              & not (Ex a2 b2 #i2. Commit(a2, b2, t) @i2
+                                 & not (#i2 = #i))) )
+          | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_initiator:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==> (Ex #j. Running(b, a, t) @j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_noninjective_agreement_responder:
+  "All a b t #i.
+    Commit(a, b, t) @i
+    ==> (Ex #j. Running(b, a, t) @j)
+      | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_long_term_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

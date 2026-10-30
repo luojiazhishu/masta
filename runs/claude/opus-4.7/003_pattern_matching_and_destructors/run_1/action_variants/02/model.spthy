@@ -1,0 +1,67 @@
+theory FamedSkPmdV02
+begin
+
+builtins: symmetric-encryption
+
+// Long-term shared symmetric key between an initiator and a responder.
+rule SetupSharedKey:
+  [ Fr(~k) ]
+  -->
+  [ !SharedKey($I, $R, ~k) ]
+
+// Reveal of the shared symmetric key to the adversary.
+rule RevealSharedKey:
+  [ !SharedKey($I, $R, ~k) ]
+  --[ LtkReveal($I), LtkReveal($R) ]->
+  [ Out(~k) ]
+
+// Action block 1: Initiator selects $tag, draws sec and pub, forms
+// msg = senc(<sec, pub>, k), and transmits <msg, $tag>.
+rule Init_Send:
+  let m = senc(<~sec, ~pub>, ~k)
+  in
+  [ Fr(~sec)
+  , Fr(~pub)
+  , !SharedKey($I, $R, ~k)
+  , In($tag)
+  ]
+  --[ Test1()
+    , InitSent(m)
+    , Secret($I, $R, ~sec)
+    , Honest($I)
+    , Honest($R)
+    ]->
+  [ Out(<m, $tag>) ]
+
+// Action block 2: Responder binds the inbound pair into msg and a tag
+// variable that is otherwise unused, applies the destructor checks of
+// the base profile against msg under k, and releases pub to the network.
+rule Resp_Recv:
+  [ In(<senc(<sec, pub>, ~k), tag>)
+  , !SharedKey($I, $R, ~k)
+  ]
+  --[ Test2(), RespRecv(senc(<sec, pub>, ~k), pub) ]->
+  [ Out(pub) ]
+
+lemma typing [sources]:
+  "All m x #i.
+     RespRecv(m, x) @ i
+   ==>
+       (Ex #j. KU(x) @ j & j < i)
+     | (Ex #j. InitSent(m) @ j & j < i)"
+
+// category: secrecy
+lemma secrecy_sec:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

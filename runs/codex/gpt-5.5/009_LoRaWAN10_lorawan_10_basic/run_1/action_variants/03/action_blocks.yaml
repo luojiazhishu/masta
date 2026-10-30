@@ -1,0 +1,60 @@
+- role: Device_JoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - compute:
+    - req_body = <'JoinRequest', deveui, joineui, ~devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', deveui, joineui, ~devnonce>)
+  - send:
+    - '''JoinRequest'''
+    - deveui
+    - joineui
+    - ~devnonce
+    - req_mac
+- role: Server_JoinAccept
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - deveui
+    - joineui
+    - devnonce
+    - req_mac
+  - generate_nonces:
+    - ~joinnonce
+  - compute:
+    - req_body = <'JoinRequest', deveui, joineui, devnonce>
+    - req_mac = mac(appkey, <'JoinRequest', deveui, joineui, devnonce>)
+    - appskey = senc(<'cst1', devnonce, ~joinnonce>, appkey)
+    - nwkskey = senc(<'cst2', devnonce, ~joinnonce>, appkey)
+    - resp_body = <'JoinAcceptBody', deveui, joineui, devaddr, devnonce, ~joinnonce,
+      mac(appkey, <'JoinAcceptBody', deveui, joineui, devaddr, devnonce, ~joinnonce>)>
+    - ciphertext = senc(<'JoinAcceptBody', deveui, joineui, devaddr, devnonce, ~joinnonce,
+      mac(appkey, <'JoinAcceptBody', deveui, joineui, devaddr, devnonce, ~joinnonce>)>,
+      appkey)
+    - tuple = <appkey, devnonce, ~joinnonce>
+    - keys = <senc(<'cst1', devnonce, ~joinnonce>, appkey), senc(<'cst2', devnonce,
+      ~joinnonce>, appkey)>
+  - send:
+    - ciphertext
+    - '''LoRa-1.0'''
+- role: Device_JoinAccept
+  operations:
+  - receive:
+    - ciphertext
+    - '''LoRa-1.0'''
+  - compute:
+    - resp_mac = mac(appkey, <'JoinAcceptBody', deveui, joineui, devaddr, accepted_devnonce,
+      joinnonce>)
+    - resp_body = <'JoinAcceptBody', deveui, joineui, devaddr, accepted_devnonce,
+      joinnonce, mac(appkey, <'JoinAcceptBody', deveui, joineui, devaddr, accepted_devnonce,
+      joinnonce>)>
+    - ciphertext = senc(<'JoinAcceptBody', deveui, joineui, devaddr, accepted_devnonce,
+      joinnonce, mac(appkey, <'JoinAcceptBody', deveui, joineui, devaddr, accepted_devnonce,
+      joinnonce>)>, appkey)
+    - appskey = senc(<'cst1', accepted_devnonce, joinnonce>, appkey)
+    - nwkskey = senc(<'cst2', accepted_devnonce, joinnonce>, appkey)
+    - tuple = <appkey, devnonce, joinnonce>
+    - server_tuple = <appkey, accepted_devnonce, joinnonce>
+    - keys = <senc(<'cst1', accepted_devnonce, joinnonce>, appkey), senc(<'cst2',
+      accepted_devnonce, joinnonce>, appkey)>
+  - send: <END>

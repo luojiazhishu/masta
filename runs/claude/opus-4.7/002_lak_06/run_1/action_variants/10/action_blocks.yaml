@@ -1,0 +1,37 @@
+- role: Reader_1
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_1
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(r0 XOR ~r1 XOR ~k)
+- role: Reader_2
+  operations:
+  - receive:
+    - r1
+    - recv_tag_mac
+  - compute:
+    - expected_tag_mac = h(~r0 XOR r1 XOR ~k)
+    - reader_mac = h(<recv_tag_mac, ~k, ~r0, 'CONFIRM'>)
+  - assert:
+    - recv_tag_mac = expected_tag_mac
+  - send:
+    - reader_mac
+- role: Tag_2
+  operations:
+  - receive:
+    - recv_reader_mac
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR ~k)
+    - expected_reader_mac = h(<h(r0 XOR ~r1 XOR ~k), ~k, r0, 'CONFIRM'>)
+  - assert:
+    - recv_reader_mac = expected_reader_mac
+  - send: <END>

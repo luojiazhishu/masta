@@ -1,0 +1,28 @@
+- role: Setup
+  operations:
+  - generate_nonces:
+    - ~n_R
+    - ~k_1
+  - send:
+    - '''S'''
+    - '''R'''
+    - h(~k_1)
+    - sign(<h(~k_1), ~n_R>, sk_s)
+    - '''S'''
+    - '''R'''
+    - h(~k_1)
+    - sign(<h(~k_1), ~n_R>, sk_s)
+- role: Stream1
+  operations:
+  - generate_nonces:
+    - ~m_1
+    - ~k_2
+  - send:
+    - <~m_1, h(~k_2)>
+    - mac(k_1, <~m_1, h(~k_2)>)
+- role: Receive1
+  operations:
+  - receive:
+    - D
+    - mac_val
+  - send: <END>

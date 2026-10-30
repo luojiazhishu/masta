@@ -1,0 +1,6 @@
+// ---------- 4. Non-injective agreement ----------
+lemma noninjectiveagreementTAG[use_induction]:
+  "All t #i.
+     Commit('T', 'R', t) @ i
+   ==>
+       (Ex #j. Running('R', 'T', t) @ j)"

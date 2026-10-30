@@ -1,0 +1,73 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~Cid
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse_Duplicate
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(SkS)
+    - '''Sign'''
+    - '''Policy'''
+    - '''UserTokenPolicy'''
+    - '''GERes'''
+    - pk(SkS)
+    - '''Sign'''
+    - '''Policy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - '''GERes'''
+    - ServerCert
+    - '''Sign'''
+    - Policy
+    - UserTokenPolicy
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - Body = <'OSCReq', pk(SkC), ~Nc>
+    - Digest = h(<'OSCReq', pk(SkC), ~Nc>)
+    - Sig = sign(h(<'OSCReq', pk(SkC), ~Nc>), SkC)
+  - send:
+    - pk(SkC)
+    - Body
+    - Sig
+    - Digest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - ClientPk
+    - RequestBody
+    - sign(RequestDigest, SkC)
+    - RequestDigest
+  - generate_nonces:
+    - ~Ns
+  - compute:
+    - RequestBody = <'OSCReq', ClientPk, Nc>
+    - RequestDigest = h(<'OSCReq', ClientPk, Nc>)
+    - ResponseBody = <'OSCRes', ~Ns, token(~Ns), 'TTL'>
+    - ResponseDigest = h(<'OSCRes', ~Ns, token(~Ns), 'TTL'>)
+    - ResponseSig = sign(h(<'OSCRes', ~Ns, token(~Ns), 'TTL'>), SkS)
+    - ChannelKey = h(<Nc, ~Ns>)
+  - send:
+    - pk(SkS)
+    - ResponseBody
+    - ResponseSig
+    - ResponseDigest
+- role: Client_Validate_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - ServerCert
+    - ResponseBody
+    - sign(ResponseDigest, SkS)
+    - ResponseDigest
+  - compute:
+    - ResponseBody = <'OSCRes', Ns, ST, TTL>
+    - ResponseDigest = h(<'OSCRes', Ns, ST, TTL>)
+    - ChannelKey = h(<Nc, Ns>)
+  - send: <END>

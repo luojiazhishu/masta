@@ -1,0 +1,62 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~dc
+  - send:
+    - <'GERes', pkS, 'Sign', 'Policy', 'UserTokenPolicy'>
+    - ~dc
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - receive:
+    - <'GERes', server_cert, 'Sign', policy, user_policy>
+    - dc
+  - generate_nonces:
+    - ~nc
+  - compute:
+    - req_body = <'OSCReq', pkC, ~nc>
+    - req_digest = h(<'OSCReq', pkC, ~nc>)
+  - send:
+    - pkC
+    - req_body
+    - sign(req_digest, ltkC)
+    - req_digest
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - receive:
+    - pk(ltkC)
+    - req_body
+    - sign(req_digest, ltkC)
+    - req_digest
+  - generate_nonces:
+    - ~ns
+    - ~st
+    - ~ttl
+  - compute:
+    - req_body = <'OSCReq', pk(ltkC), nc>
+    - req_digest = h(<'OSCReq', pk(ltkC), nc>)
+    - res_body = <'OSCRes', ~ns, ~st, ~ttl>
+    - res_digest = h(<'OSCRes', ~ns, ~st, ~ttl>)
+    - cb = h(<nc, ~ns>)
+  - send:
+    - pk(ltkS)
+    - res_body
+    - sign(res_digest, ltkS)
+    - res_digest
+- role: Client_Finish
+  operations:
+  - receive:
+    - pk(ltkS)
+    - res_body
+    - sign(res_digest, ltkS)
+    - res_digest
+  - compute:
+    - res_body = <'OSCRes', ns, st, ttl>
+    - res_digest = h(<'OSCRes', ns, st, ttl>)
+    - cb = h(<nc, ns>)
+  - send: <END>

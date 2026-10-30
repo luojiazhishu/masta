@@ -1,0 +1,68 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: f/1
+
+rule Reveal_Ltk:
+  [ !Ltk(sk) ]
+  --[ LtkReveal(sk) ]->
+  [ Out(sk) ]
+
+rule Step1:
+  [ Fr(~rid), Fr(~sid), Fr(~n_R), Fr(~sk_S) ]
+  --[ Test1(), Create(~rid, ~rid), !Ltk(~sk_S), !Pk(~sid, ~sk_S), !St(~rid, ~sid, 'step1', ~n_R) ]->
+  [ ]
+
+rule Step2:
+  [ !St(rid, sid, 'step1', n_R), !Ltk(sk_S), Fr(~k_1) ]
+  --[ Test2(), Create(sid, sid), Running(sid, rid, 'setup', sid, n_R, f(~k_1)), Honest(sid), !St(rid, sid, 'step2', n_R, ~k_1) ]->
+  [ ]
+
+rule Step3:
+  [ !St(rid, sid, 'step2', n_R, k_1), Fr(~k_2), Fr(~m_1) ]
+  --[ Test3(), Running(sid, rid, 'msg1', sid, rid, <~m_1, f(~k_2)>), Honest(sid), !St(rid, sid, 'step3', n_R, k_1, ~k_2, ~m_1) ]->
+  [ ]
+
+rule Step4:
+  [ !St(rid, sid, 'step2', n_R, k_1) ]
+  --[ Test4(), Running(rid, sid, 'setup', sid, n_R, f(k_1)), Honest(rid), !St(rid, sid, 'step4', n_R, k_1) ]->
+  [ ]
+
+rule Step5:
+  [ !St(rid, sid, 'step3', n_R, k_1, k_2, m_1), !St(rid, sid, 'step4', n_R, k_1) ]
+  --[ Test5(), Commit(rid, sid, 'msg1', m_1, f(k_2), h(<k_1, m_1, f(k_2)>)), Honest(rid) ]->
+  [ ]
+
+// category: aliveness
+lemma aliveness_sender:
+  "All r s role d1 d2 d3 #i.
+     Commit(r, s, role, d1, d2, d3) @ i
+   ==>
+       (Ex id #j. Create(s, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_setup:
+  "All r s pk nr comm #i.
+     Running(r, s, 'setup', pk, nr, comm) @ i
+   ==>
+       (Ex pk2 nr2 comm2 #j. Running(s, r, 'setup', pk2, nr2, comm2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_msg1:
+  "All r s d1 d2 d3 #i.
+     Commit(r, s, 'msg1', d1, d2, d3) @ i
+   ==>
+       (Ex d12 d22 d32 #j. Running(s, r, 'msg1', d12, d22, d32) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+end

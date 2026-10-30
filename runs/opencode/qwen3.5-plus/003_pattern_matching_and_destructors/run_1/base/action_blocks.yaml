@@ -1,0 +1,13 @@
+- role: Initiator_Send
+  operations:
+  - generate_nonces:
+    - ~k
+    - ~sec
+    - ~pub
+  - send:
+    - senc(<~sec, ~pub>, ~k)
+- role: Responder_Receive
+  operations:
+  - receive:
+    - senc(<sec, pub>, k)
+  - send: <END>

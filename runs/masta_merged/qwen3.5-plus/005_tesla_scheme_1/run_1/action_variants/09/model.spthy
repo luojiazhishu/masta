@@ -1,0 +1,52 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: aux/1, mac/2
+
+// PKI Setup: Sender has long-term signing key
+rule Setup_Sender:
+  [ Fr(~sk_S) ]
+  --[ Setup(S) ]->
+  [ !Ltk($S, ~sk_S), !Pk($S, pk(~sk_S)), Out(pk(~sk_S)) ]
+
+// Receiver generates nonce and starts session
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Start_R(~tid_R, $R, $S, ~n_R) ]->
+  [ Out(<$R, $S, ~n_R>), !State_R(~tid_R, $R, $S, ~n_R) ]
+
+// Sender receives nonce, generates keys and payload, signs commitment, sends Msg 0b
+rule RuleStep2:
+  [
+    In(<$R, $S, ~n_R>),
+    !Ltk($S, ~sk_S),
+    Fr(~k_1),
+    Fr(~k_2),
+    Fr(~m_1)
+  ]
+  let
+    f_k1 = h(~k_1)
+    sig_data = <f_k1, ~n_R>
+    signature = sign(sig_data, ~sk_S)
+  in
+  --[ Test2(), Send_0b($S, $R, f_k1, signature), Audit_Log($S, aux(~m_1)) ]->
+  [ Out(<$S, $R, f_k1, signature>), !State_S_1($S, $R, ~k_1, ~k_2, ~m_1, ~n_R) ]
+
+// Sender sends Msg 1 (D_1, mac_1)
+rule RuleStep3:
+  [ !State_S_1($S, $R, ~k_1, ~k_2, ~m_1, ~n_R) ]
+  let
+    D_1 = <~m_1, h(~k_2)>
+    mac_1 = mac(~k_1, D_1)
+  in
+  --[ Test3(), Send_1($S, $R, D_1, mac_1) ]->
+  [ Out(<D_1, mac_1>), !State_S_2($S, $R, ~k_1, ~k_2, ~m_1, ~n_R) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

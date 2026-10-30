@@ -1,0 +1,99 @@
+theory naxos_simplified begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1, tag/1 [private]
+
+// Long-term key generation
+rule Generate_DH_key_pair:
+  [ Fr(~x) ]
+  -->
+  [ !Pk($A, 'g'^~x)
+  , Out('g'^~x)
+  , !Ltk($A, ~x)
+  , Honest($A)
+  ]
+
+// RuleStep1: Initiator sends Message 1 (hkI)
+rule RuleStep1:
+  let
+      exI = h1(<~eskI, ~lkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , Fr(~tid)
+  , !Ltk($I, ~lkI)
+  ]
+  --[ Test1(), Honest($I), Create($I, ~tid) ]->
+  [ Out(hkI)
+  , !InitState1(~tid, $I, ~lkI, exI)
+  ]
+
+// RuleStep2: Responder receives hkI, sends hkR
+rule RuleStep2:
+  let
+      exR = h1(<~eskR, ~lkR>)
+      hkR = 'g'^exR
+      kR = h2(<pkI^exR, X^~lkR, $I, $R>)
+  in
+  [ In(X)
+  , Fr(~eskR)
+  , Fr(~tid)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), SessionKey(~tid, $R, $I, kR), Secret(kR), Honest($R), Create($R, ~tid), Running($R, $I, ~tid) ]->
+  [ Out(hkR)
+  , !RespState1(~tid, $R, $I, ~lkR, exR, X)
+  ]
+
+// RuleStep3: Initiator receives hkR, computes session key
+rule RuleStep3:
+  let
+      kI = h2(<Y^~lkI, pkR^exI, $I, $R>)
+      peerTag = tag(pkR)
+  in
+  [ In(Y)
+  , !InitState1(~tid, $I, ~lkI, exI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3(), SessionKey(~tid, $I, $R, kI), Secret(kI), Honest($I), Commit($I, $R, ~tid) ]->
+  [ ]
+
+// Long-term key reveal rule
+rule LtkReveal:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma aliveness_responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_mutual_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

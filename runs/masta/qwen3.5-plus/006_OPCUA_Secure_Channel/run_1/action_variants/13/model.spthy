@@ -1,0 +1,143 @@
+theory OPCUA_SecureChannel begin
+
+builtins: hashing, signing
+
+functions: cert/2
+
+// Public configuration constants
+functions: SecurityPolicy/0, UserTokenPolicy/0, SecurityToken/0, TokenLifetime/0
+
+// Key generation for Server - Honest emitted as action fact
+rule GenerateKeyServer:
+  [ Fr(~Spriv) ]
+  --[ Honest($S) ]->
+  [ !Pk($S, pk(~Spriv))
+  , !Ltk($S, ~Spriv)
+  , Out(pk(~Spriv))
+  ]
+
+// Key generation for Client - Honest emitted as action fact
+rule GenerateKeyClient:
+  [ Fr(~Cpriv) ]
+  --[ Honest($C) ]->
+  [ !Pk($C, pk(~Cpriv))
+  , !Ltk($C, ~Cpriv)
+  , Out(pk(~Cpriv))
+  ]
+
+// LtkReveal rules for long-term key compromise
+rule LtkRevealServer:
+  [ !Ltk($S, ~Spriv) ]
+  --[ LtkReveal($S) ]->
+  [ Out(~Spriv) ]
+
+rule LtkRevealClient:
+  [ !Ltk($C, ~Cpriv) ]
+  --[ LtkReveal($C) ]->
+  [ Out(~Cpriv) ]
+
+// RuleStep1: Client sends GetEndpointsRequest
+rule RuleStep1:
+  [ ]
+  --[ Test1() ]->
+  [ Out(< 'GEReq' >) ]
+
+// RuleStep2: Server receives GEReq, sends GERes
+rule RuleStep2:
+  [ In(< 'GEReq' >)
+  , !Ltk($S, ~Spriv)
+  , !Pk($S, pk(~Spriv)) ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', cert($S, pk(~Spriv)), 'Sign', SecurityPolicy(), UserTokenPolicy() >) ]
+
+// RuleStep3: Server sends duplicate GERes
+rule RuleStep3:
+  [ In(< 'GEReq' >)
+  , !Ltk($S, ~Spriv)
+  , !Pk($S, pk(~Spriv)) ]
+  --[ Test3() ]->
+  [ Out(< 'GERes', cert($S, pk(~Spriv)), 'Sign', SecurityPolicy(), UserTokenPolicy() >) ]
+
+// RuleStep4: Client receives GERes, generates nonce, sends OSCReq with Running action
+rule RuleStep4:
+  let
+    RequestBody = <'OSCReq', pk(~Cpriv), ~Nc>
+    RequestBodyDigest = h(RequestBody)
+    RequestSignature = sign(RequestBodyDigest, ~Cpriv)
+  in
+  [ In(< 'GERes', cert($S, pk($Spub)), 'Sign', SecurityPolicy(), UserTokenPolicy() >)
+  , !Ltk($C, ~Cpriv)
+  , !Pk($C, pk(~Cpriv))
+  , Fr(~Nc) ]
+  --[ Test4(), Running($C, $S, ~Nc) ]->
+  [ Out(< cert($C, pk(~Cpriv)), RequestBody, RequestSignature, RequestBodyDigest >)
+  , !ClientState($C, ~Nc) ]
+
+// RuleStep5: Server receives OSCReq, verifies, sends OSCRes with Commit action
+rule RuleStep5:
+  let
+    ResponseBody = <'OSCRes', ~Ns, SecurityToken(), TokenLifetime()>
+    ResponseBodyDigest = h(ResponseBody)
+    ResponseSignature = sign(ResponseBodyDigest, ~Spriv)
+  in
+  [ In(< cert($C, pk($Cpub)), <'OSCReq', pk($Cpub), ~Nc>, RequestSignature, RequestBodyDigest >)
+  , !Ltk($S, ~Spriv)
+  , !Pk($S, pk(~Spriv))
+  , Fr(~Ns) ]
+  --[ Test5(), Commit($S, $C, ~Nc), Running($S, $C, ~Ns) ]->
+  [ Out(< cert($S, pk(~Spriv)), ResponseBody, ResponseSignature, ResponseBodyDigest >)
+  , !ServerState($S, ~Ns) ]
+
+// RuleStep6: Client receives OSCRes, verifies, computes channel binding with Commit and Secret
+rule RuleStep6:
+  let
+    ChannelBinding = h(<~Nc, ~Ns>)
+  in
+  [ In(< cert($S, pk($Spub)), <'OSCRes', ~Ns, SecurityToken(), TokenLifetime()>, ResponseSignature, ResponseBodyDigest >)
+  , !Ltk($C, ~Cpriv)
+  , !Pk($C, pk(~Cpriv))
+  , !ClientState($C, ~Nc)
+  , !ServerState($S, ~Ns) ]
+  --[ Test6(), Commit($C, $S, ChannelBinding), Secret(ChannelBinding) ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & #t4 < #t5 & #t5 < #t6"
+
+// category: secrecy
+// SECURITY FINDING: Falsified - This is the correct result.
+// Per document.txt Section 6, ClientNonce and ServerNonce travel in the clear
+// in Sign-Sign mode, allowing an on-path attacker to compute h(<Nc, Ns>).
+// The channel binding secrecy property does NOT hold for this protocol.
+lemma secrecy_channel_session_key:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)"
+
+// category: noninjective_agreement
+// SECURITY FINDING: Falsified - Server Commit does not guarantee Client Running
+// due to message replay attacks on GetEndpointsResponse.
+lemma noninjective_agreement_client_nonce:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+// SECURITY FINDING: Falsified - Client Commit does not guarantee Server Running
+// due to lack of binding between nonces in the protocol messages.
+lemma noninjective_agreement_server_nonce:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

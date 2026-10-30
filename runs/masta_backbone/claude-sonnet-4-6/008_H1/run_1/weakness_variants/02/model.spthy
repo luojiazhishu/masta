@@ -1,0 +1,90 @@
+theory NaxosSBR
+begin
+
+builtins: diffie-hellman
+
+functions: h1/1, h2/1
+
+rule Generate_DH_key_pair:
+  [ Fr(~x) ]
+  -->
+  [ !Pk($A, 'g'^~x)
+  , Out('g'^~x)
+  , !Ltk($A, ~x)
+  ]
+
+rule RuleStep1:
+  let exI = h1(<~eskI, ~lkI>)
+      hkI = 'g'^exI
+  in
+  [ Fr(~eskI)
+  , !Ltk($I, ~lkI)
+  ]
+  --[ Test1(), Create($I, ~eskI), Running($I, $R, <'I', 'R', $I, $R>) ]->  
+  [ Out(hkI)
+  , Init_1($I, $R, ~lkI, exI)
+  ]
+
+rule RuleStep2:
+  let exR = h1(<~eskR, ~lkR>)
+      hkR = 'g'^exR
+      kR = h2(<pkI^exR, X^~lkR, X^exR, $I, $R>)
+  in
+  [ In(X)
+  , Fr(~eskR)
+  , !Ltk($R, ~lkR)
+  , !Pk($I, pkI)
+  ]
+  --[ Test2(), Create($R, ~eskR), Running($R, $I, <'R', 'I', $I, $R>) ]->  
+  [ Out(hkR)
+  ]
+
+rule RuleStep3:
+  let kI = h2(<Y^~lkI, pkR^exI, Y^exI, $I, $R>)
+  in
+  [ In(Y)
+  , Init_1($I, $R, ~lkI, exI)
+  , !Pk($R, pkR)
+  ]
+  --[ Test3(), Commit($I, $R, <'I', 'R', $I, $R>), Honest($I), Honest($R) ]->  
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk($A, ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement_responder_participation:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_participant_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_participant_identities:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

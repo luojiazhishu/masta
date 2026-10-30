@@ -1,0 +1,36 @@
+theory sk_pmd begin
+
+builtins: symmetric-encryption
+
+functions: aux/1 [private]
+
+rule RuleStep1:
+  [
+    Fr(~sec),
+    Fr(~pub),
+    Fr(~k)
+  ]
+  --[ Test1(), AuxComputed(aux(~sec)) ]->
+  [
+    Out(senc(<~sec, ~pub>, ~k))
+  ]
+
+rule RuleStep2:
+  [
+    In(m),
+    Fr(~k)
+  ]
+  let
+    dec = sdec(m, ~k)
+    sec = fst(dec)
+    pub = snd(dec)
+  in
+  --[ Test2() ]->
+  [
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2. Test1() @ #t1 & Test2() @ #t2 & #t1 < #t2"
+
+end

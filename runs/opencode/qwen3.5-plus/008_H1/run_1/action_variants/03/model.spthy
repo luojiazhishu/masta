@@ -1,0 +1,74 @@
+theory MutualIdentitySignatureAuth begin
+
+builtins: signing
+
+// Setup rules create persistent Ltk/Pk facts
+rule Setup_Agent:
+  [ Fr(~ltk), Fr(~id) ]
+  --[ Create(~id, ~ltk) ]->
+  [ !Ltk(~id, ~ltk), !Pk(~id, pk(~ltk)) ]
+
+// Initiator starts a session with a specific responder
+rule Initiator_Start:
+  [ !Ltk(I, ltkI), !Pk(R, pkR), Fr(~sid) ]
+  --[ Test1(), Running(I, R, <I, R>) ]->
+  [ Out(<sign(<I, R>, ltkI), 'init'>), St_I_Wait(I, R, ~sid) ]
+
+// Responder receives, verifies tag and signature, then responds
+rule Responder_Receive:
+  [ In(<sig, 'init'>), !Ltk(R, ltkR), !Pk(I, pkI), Fr(~sid) ]
+  --[ Test2(), Eq(verify(sig, <I, R>, pkI), true), Running(R, I, <I, R>) ]->
+  [ Out(sign(<I, R>, ltkR)), St_R_Done(R, I, ~sid) ]
+
+// Initiator verifies responder's signature
+rule Initiator_Verify:
+  [ St_I_Wait(I, R, ~sid), In(sig), !Pk(R, pkR) ]
+  --[ Test3(), Eq(verify(sig, <I, R>, pkR), true), Commit(I, R, <I, R>), Honest(I) ]->
+  [ ]
+
+// Responder completes (no further action needed)
+rule Responder_Commit:
+  [ St_R_Done(R, I, ~sid) ]
+  --[ Commit(R, I, <I, R>), Honest(R) ]->
+  [ ]
+
+// Key reveal rule for adversary
+rule LtkReveal:
+  [ !Ltk(X, ltk) ]
+  --[ LtkReveal(X) ]->
+  [ Out(ltk) ]
+
+// Safety properties
+
+// category: aliveness
+lemma aliveness_init_to_resp:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: weak_agreement
+lemma weak_agreement_init_to_resp:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_init_to_resp:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// Executable lemma - must witness all Test facts in order
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+end

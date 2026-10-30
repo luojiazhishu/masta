@@ -1,0 +1,110 @@
+theory ISO9798_4_ReuseMechanism
+begin
+
+functions: mac/2
+
+/* Long-term shared key between A and B */
+rule Setup_LTK:
+  [ Fr(~kAB) ]
+  --[ ]->
+  [ !LTK($A, $B, ~kAB) ]
+
+rule LTK_Reveal:
+  [ !LTK($A, $B, ~kAB) ]
+  --[ LtkReveal($A), LtkReveal($B) ]->
+  [ Out(~kAB) ]
+
+/* Normal fresh RA (consumed once) */
+rule Setup_Fresh_RA:
+  [ Fr(~ra) ]
+  --[ ]->
+  [ LinearRA(~ra) ]
+
+/* Reusable RA: two tokens of the same value — models reuse_once */
+rule Setup_Reusable_RA:
+  [ Fr(~ra) ]
+  --[ ]->
+  [ LinearRA(~ra), LinearRA(~ra) ]
+
+/* Action block 1: Responder B generates challenge RB */
+rule Responder_Challenge:
+  [ !LTK($A, $B, ~kAB), Fr(~RB), Fr(~Text1) ]
+  --[ Test1() ]->
+  [ St_B_1($A, $B, ~kAB, ~RB), Out(<~RB, ~Text1>) ]
+
+/* Action block 2: Initiator A receives RB, generates RA, sends TokenAB */
+rule Initiator_Response:
+  [ !LTK($A, $B, ~kAB), In(<RB, Text1>), LinearRA(RA), Fr(~Text3) ]
+  --[ Test2(), Running($A, $B, <'initiator', RA, RB>) ]->
+  [ St_A_1($A, $B, ~kAB, RA, RB), Out(<RA, ~Text3>) ]
+
+/* Action block 3: Responder B accepts TokenAB without MAC check, computes mac2 */
+rule Responder_Auth:
+  let mac2 = mac(<'sid2_mut_cr', ~RB, RA>, ~kAB)
+  in
+  [ St_B_1($A, $B, ~kAB, ~RB), In(<RA, Text3>), Fr(~Text5) ]
+  --[ Test3(),
+      Running($B, $A, <'responder', RA, ~RB>),
+      Commit($B, $A, <'responder', RA, ~RB>),
+      Honest($A), Honest($B) ]->
+  [ Out(<~Text5, mac2>) ]
+
+/* Action block 4: Initiator A verifies mac2, commits */
+rule Initiator_Finish:
+  let mac2 = mac(<'sid2_mut_cr', RB, RA>, ~kAB)
+  in
+  [ St_A_1($A, $B, ~kAB, RA, RB), In(<Text5, mac2>) ]
+  --[ Test4(),
+      Commit($A, $B, <'initiator', RA, RB>),
+      Honest($A), Honest($B) ]->
+  [ ]
+
+/* Non-injective agreement at A: A commits after MAC verification — should VERIFY */
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'responder', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* Injective agreement at A: falsified by RA reuse — should FALSIFY */
+// category: injective_agreement
+lemma injective_agreement_A:
+  "All a b ra rb #i.
+     Commit(a, b, <'initiator', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'responder', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'initiator', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* Non-injective agreement at B: Responder accepts without MAC check — should FALSIFY */
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'responder', ra, rb>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+/* Injective agreement at B: also falsified — should FALSIFY */
+// category: injective_agreement
+lemma injective_agreement_B:
+  "All a b ra rb #i.
+     Commit(a, b, <'responder', ra, rb>) @ i
+   ==>
+       ( (Ex #j. Running(b, a, <'initiator', ra, rb>) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, <'responder', ra, rb>) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

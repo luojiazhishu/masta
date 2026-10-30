@@ -1,0 +1,151 @@
+theory LoRaWAN_Join begin
+
+builtins: symmetric-encryption
+
+functions: mac/2, verif_mac/3, true/0, cst1/0, cst2/0
+
+equations: verif_mac(mac(m, k), m, k) = true
+
+// Persistent facts for pre-provisioned device credentials
+rule Provision_Device:
+  [ Fr(~AppKey), Fr(~DevEUI), Fr(~JoinEUI), Fr(~DevAddr) ]
+  -->
+  [ !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr)
+  , Out(~DevEUI)
+  , Out(~JoinEUI)
+  , Out(~DevAddr)
+  ]
+
+// RuleStep1: Device sends JoinRequest
+rule RuleStep1:
+  let
+      RequestMAC = mac(~AppKey, <'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, 'protoV1'>)
+  in
+  [ Fr(~DevNonce)
+  , !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr)
+  ]
+  --[ Test1()
+    , Honest('Device')
+    , Running('Device', 'Server', <~DevEUI, ~JoinEUI, ~DevNonce>)
+    ]->
+  [ Out(< 'JoinRequest', ~DevEUI, ~JoinEUI, ~DevNonce, RequestMAC >)
+  ]
+
+// RuleStep2: Server receives JoinRequest, verifies MAC, sends JoinAccept
+rule RuleStep2:
+  let
+      ResponseMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, ~DevAddr>)
+      JoinAcceptBody = <'JoinAccept', ~JoinNonce, ~DevAddr, ResponseMAC>
+      EncryptedJoinAccept = senc(JoinAcceptBody, ~AppKey)
+  in
+  [ In(< 'JoinRequest', DevEUI, JoinEUI, DevNonce, RequestMAC >)
+  , !DeviceKeys(DevEUI, JoinEUI, ~AppKey, ~DevAddr)
+  , Fr(~JoinNonce)
+  ]
+  --[ Test2()
+    , Honest('Server')
+    , Running('Server', 'Device', <DevEUI, JoinEUI, DevNonce, ~JoinNonce>)
+    , Commit('Server', 'Device', <DevEUI, JoinEUI, DevNonce, ~JoinNonce>)
+    ]->
+  [ Out(EncryptedJoinAccept)
+  ]
+
+// RuleStep3: Device receives JoinAccept, decrypts, verifies, computes session keys
+rule RuleStep3:
+  let
+      JoinAcceptBody = sdec(EncryptedJoinAccept, ~AppKey)
+      JoinNonce = snd(snd(fst(JoinAcceptBody)))
+      ResponseMAC = snd(snd(JoinAcceptBody))
+      AppSKey = senc(<cst1, DevNonce, JoinNonce>, ~AppKey)
+      NwkSKey = senc(<cst2, DevNonce, JoinNonce>, ~AppKey)
+  in
+  [ In(EncryptedJoinAccept)
+  , !DeviceKeys(~DevEUI, ~JoinEUI, ~AppKey, ~DevAddr)
+  , Fr(DevNonce)
+  ]
+  --[ Test3()
+    , SessionKeysComputed(~DevEUI, DevNonce, JoinNonce, AppSKey, NwkSKey)
+    , Honest('Device')
+    , Commit('Device', 'Server', <~DevEUI, ~JoinEUI, DevNonce, JoinNonce>)
+    , Secret(AppSKey)
+    , Secret(NwkSKey)
+    ]->
+  [ Out(< 'END' >)
+  ]
+
+// LtkReveal rule for AppKey compromise
+rule AppKeyReveal:
+  [ !DeviceKeys(DevEUI, JoinEUI, ltk, DevAddr) ]
+  --[ LtkReveal(DevEUI) ]->
+  [ Out(ltk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: injective_agreement
+lemma injective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_device:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement_session_keys:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_session_keys:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: secrecy
+lemma secrecy_session_keys:
+  "All x #i.
+     Secret(x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

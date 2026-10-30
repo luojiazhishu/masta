@@ -1,0 +1,51 @@
+theory CrXorDiscK
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ Test1() ]->
+  [ !SharedKey(~k), Out(~k) ]
+
+rule Initiator_Send:
+  [ Fr(~na), !SharedKey(k) ]
+  --[ Test2(), Create('I', ~na) ]->
+  [ Out(~na), St_I_1('I', 'R', k, ~na) ]
+
+rule Responder_Reply:
+  let tag = h(na XOR k XOR ~nb) in
+  [ Fr(~nb), !SharedKey(k), In(na) ]
+  --[ Test3(), Create('R', ~nb), Running('R', 'I', <'tag', tag>) ]->
+  [ Out(<tag, ~nb>) ]
+
+rule Initiator_Verify:
+  let tag = h(na XOR k XOR nb) in
+  [ St_I_1('I', 'R', k, na), In(<received_tag, nb>) ]
+  --[ Test4(), Eq(received_tag, tag), Commit('I', 'R', <'tag', tag>), Honest('I'), Honest('R') ]->
+  [ ]
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex id #j. Create(b, id) @ #j)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ #i
+   ==>
+       (Ex #j. Running(b, a, t) @ #j)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

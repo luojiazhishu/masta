@@ -1,0 +1,103 @@
+theory opcua_sign_sign begin
+
+builtins: hashing, signing
+
+functions: ServerCertificate/0, SecurityPolicy/0, UserTokenPolicy/0, ClientCertificate/0, ClientPublicKey/0, SecurityToken/0, TokenLifetime/0, SecurityMode/0
+
+rule InitClient:
+  [ Fr(~sk_C) ]
+  --[ Create('Client', ~sk_C) ]->
+  [ !Ltk('Client', ~sk_C), !Pk('Client', pk(~sk_C)) ]
+
+rule InitServer:
+  [ Fr(~sk_S) ]
+  --[ Create('Server', ~sk_S) ]->
+  [ !Ltk('Server', ~sk_S), !Pk('Server', pk(~sk_S)) ]
+
+rule RuleStep1:
+  [ Fr(~tid) ]
+  --[ Test1() ]->
+  [ Out('GEReq') ]
+
+rule RuleStep2:
+  [ In('GEReq'), Fr(~tid) ]
+  --[ Test2() ]->
+  [ Out(< 'GERes', ServerCertificate, 'Sign', SecurityPolicy, UserTokenPolicy >) ]
+
+rule RuleStep3:
+  let
+      RequestBody = <'OSCReq', ClientPublicKey, ~Nc>
+      RequestBodyDigest = h(RequestBody)
+      RequestSignature = sign(RequestBodyDigest, ~sk_C)
+  in
+  [ In(< 'GERes', ServerCertificate, SecurityMode, SecurityPolicy, UserTokenPolicy >),
+    Fr(~Nc),
+    Fr(~sk_C),
+    Fr(~tid),
+    !Ltk('Client', ~sk_C) ]
+  --[ Test3(), Running('Client', 'Server', ~Nc), Honest('Client') ]->
+  [ Out(< ClientCertificate, RequestBody, RequestSignature, RequestBodyDigest >),
+    !ClientState(~tid, ~Nc, ServerCertificate) ]
+
+rule RuleStep4:
+  let
+      ResponseBody = <'OSCRes', ~Ns, SecurityToken, TokenLifetime>
+      ResponseBodyDigest = h(ResponseBody)
+      ResponseSignature = sign(ResponseBodyDigest, ~sk_S)
+  in
+  [ In(< ClientCertificate, <'OSCReq', ClientPublicKey, Nc>, RequestSignature, RequestBodyDigest >),
+    Fr(~Ns),
+    Fr(~sk_S),
+    Fr(~tid),
+    !Ltk('Server', ~sk_S) ]
+  --[ Test4(), Commit('Server', 'Client', Nc), Running('Server', 'Client', ~Ns), Honest('Server'), Secret('Server', 'Client', SecurityToken) ]->
+  [ Out(< ServerCertificate, ResponseBody, ResponseSignature, ResponseBodyDigest >) ]
+
+rule RuleStep5:
+  let
+      ChannelBinding = h(<Nc, Ns>)
+  in
+  [ In(< ServerCertificate, <'OSCRes', Ns, SecurityToken, TokenLifetime>, ResponseSignature, ResponseBodyDigest >),
+    !ClientState(~tid, Nc, ServerCertificate) ]
+  --[ Test5(), Commit('Client', 'Server', Ns), Secret('Client', 'Server', ChannelBinding) ]->
+  [ Out('<END>') ]
+
+rule ClientLtkReveal:
+  [ !Ltk('Client', sk_C) ]
+  --[ LtkReveal('Client') ]->
+  [ Out(sk_C) ]
+
+rule ServerLtkReveal:
+  [ !Ltk('Server', sk_S) ]
+  --[ LtkReveal('Server') ]->
+  [ Out(sk_S) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+// category: secrecy
+lemma secrecy_channel_session_key:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_client_nonce:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_server_nonce:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

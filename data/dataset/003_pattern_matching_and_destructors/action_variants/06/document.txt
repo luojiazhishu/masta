@@ -1,0 +1,98 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+    A Symmetric-Key Encapsulation Profile with Repeated Initiator Output
+                  draft-famed-sk-pmd-v06-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the initiator transmits the ciphertext twice.
+   Both transmissions carry identical contents.  The responder
+   processes the first valid instance and treats the second as a
+   duplicate.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+1.  Introduction
+
+   This profile follows the structure of the base symmetric-key
+   encapsulation.  Implementations of this profile transmit the
+   single ciphertext message twice, in order to improve robustness
+   against single-packet loss on the path between the initiator
+   and the responder.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174].
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1a.  msg                                          |
+         |---------------------------------------------------->|
+         |   1b.  msg                                          |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+   where msg = senc(<sec, pub>, k).
+
+4.  Message Format
+
+   The on-wire ciphertext is the same fixed-format value
+
+      msg = senc(<sec, pub>, k)
+
+   transmitted twice.  Both transmissions MUST carry identical
+   contents.
+
+5.  Processing Rules
+
+   The initiator emits msg twice with identical contents and a
+   single set of locally drawn nonces (sec, pub).  The responder
+   SHOULD process the first valid instance and SHOULD silently
+   drop the second; the latter does not advance the responder's
+   state.
+
+6.  Security Considerations
+
+   Duplicating msg does not introduce additional secret material
+   and does not change the secrecy properties of the
+   encapsulation.  An adversary that receives both copies of msg
+   has no advantage over an adversary that observes only one.
+   Implementations SHOULD ensure that processing the second copy
+   never causes a second release of pub or any other duplicated
+   side effect.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

@@ -1,0 +1,41 @@
+- role: Client_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~sid
+  - send:
+    - '''GEReq'''
+- role: Server_GetEndpointsResponse
+  operations:
+  - send:
+    - '''GERes'''
+    - S
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: Client_OpenSecureChannelRequest
+  operations:
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - C
+    - <'OSCReq', C, ~Nc>
+    - sign(h(<'OSCReq', C, ~Nc>), skC)
+    - h(<'OSCReq', C, ~Nc>)
+- role: Server_OpenSecureChannelResponse
+  operations:
+  - generate_nonces:
+    - ~Ns
+    - ~ST
+    - ~TTL
+  - assert:
+    - verify(sigC, h(<'OSCReq', C, Nc>), C) = true
+  - send:
+    - S
+    - <'OSCRes', ~Ns, ~ST, ~TTL>
+    - sign(h(<'OSCRes', ~Ns, ~ST, ~TTL>), skS)
+    - h(<'OSCRes', ~Ns, ~ST, ~TTL>)
+- role: Client_ValidateResponse
+  operations:
+  - assert:
+    - verify(sigS, h(<'OSCRes', Ns, ST, TTL>), S) = true
+  - send: <END>

@@ -1,0 +1,91 @@
+theory BSKTD begin
+
+builtins: asymmetric-encryption, hashing
+
+rule Generate_key_pair:
+  [ Fr(~sk) ]
+  --[ Honest($S) ]->
+  [ !Pk($S, pk(~sk))
+  , !Ltk($S, ~sk)
+  , Out(pk(~sk))
+  ]
+
+rule LtkReveal:
+  [ !Ltk($S, sk) ]
+  --[ LtkReveal($S) ]->
+  [ Out(sk) ]
+
+rule RuleStep1:
+  let
+      m1 = aenc(~k, pkS)
+  in
+  [ Fr(~k)
+  , !Pk($S, pkS)
+  ]
+  --[ Test1()
+    , Secret('C', $S, ~k)
+  ]->
+  [ Out(m1)
+  , !ClientState($S, ~k)
+  ]
+
+rule RuleStep2:
+  let
+      k = adec(m1, sk)
+      m2 = <h(k), 'done'>
+  in
+  [ In(m1)
+  , !Ltk($S, sk)
+  ]
+  --[ Test2()
+    , Running($S, 'C', k)
+  ]->
+  [ Out(m2)
+  ]
+
+rule RuleStep3:
+  let
+      received_hash = fst(m2)
+      received_marker = snd(m2)
+  in
+  [ In(m2)
+  , !ClientState($S, ~k)
+  ]
+  --[ Test3()
+    , Commit('C', $S, ~k)
+  ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma secrecy_session_key_secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

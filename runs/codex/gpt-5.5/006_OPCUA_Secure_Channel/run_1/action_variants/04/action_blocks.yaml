@@ -1,0 +1,62 @@
+- role: Client_Send_GetEndpointsRequest
+  operations:
+  - generate_nonces:
+    - ~sid
+  - send:
+    - '''GetEndpointsRequest'''
+    - '''Client'''
+    - '''Server'''
+    - ~sid
+- role: Server_Send_GetEndpointsResponse
+  operations:
+  - send:
+    - '''GetEndpointsResponse'''
+    - '''Server'''
+    - '''Client'''
+    - sid
+    - pkS
+    - '''OPCUA-1.04'''
+- role: Client_Check_Endpoint_And_Send_OSC_Request
+  operations:
+  - generate_nonces:
+    - ~nc
+  - compute:
+    - body = <'OSCReq', pkC, ~nc>
+    - digest = h(<'OSCReq', pkC, ~nc>)
+    - sigC = sign(h(<'OSCReq', pkC, ~nc>), ltkC)
+  - send:
+    - '''OpenSecureChannelRequest'''
+    - pkC
+    - body
+    - sigC
+    - digest
+- role: Server_Verify_OSC_Request
+  operations:
+  - compute:
+    - body = <'OSCReq', pkC, nc>
+    - digest = h(<'OSCReq', pkC, nc>)
+  - send: []
+- role: Server_Generate_OSC_Response
+  operations:
+  - generate_nonces:
+    - ~ns
+    - ~token
+    - ~lifetime
+  - compute:
+    - response_body = <'OSCRes', ~ns, ~token, ~lifetime>
+    - response_digest = h(<'OSCRes', ~ns, ~token, ~lifetime>)
+    - response_sig = sign(h(<'OSCRes', ~ns, ~token, ~lifetime>), ltkS)
+    - key = h(<nc, ~ns>)
+  - send:
+    - '''OpenSecureChannelResponse'''
+    - pkS
+    - response_body
+    - response_sig
+    - response_digest
+- role: Client_Verify_OSC_Response_And_Bind_Channel
+  operations:
+  - compute:
+    - response_body = <'OSCRes', ns, token, lifetime>
+    - response_digest = h(<'OSCRes', ns, token, lifetime>)
+    - key = h(<nc, ns>)
+  - send: <END>

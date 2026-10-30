@@ -1,0 +1,14 @@
+- role: Initiator_Send_Encapsulation
+  operations:
+  - generate_nonces:
+    - ~sec
+    - ~pub
+  - send:
+    - senc(<~sec, ~pub>, k)
+- role: Responder_Process_Encapsulation
+  operations:
+  - receive:
+    - senc(<sec, pub>, k)
+  - compute:
+    - auxr = tag_aux(sec, pub)
+  - send: <END>

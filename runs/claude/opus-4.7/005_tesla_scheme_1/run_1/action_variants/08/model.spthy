@@ -1,0 +1,98 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+functions: mac/2
+
+/* Long-term key registration */
+rule Register_pk:
+  [ Fr(~ltk) ]
+  --[ ]->
+  [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+rule Reveal_ltk:
+  [ !Ltk($A, ~ltk) ]
+  --[ LtkReveal($A) ]->
+  [ Out(~ltk) ]
+
+/* Block 1: Receiver sends setup request (Msg 0a) */
+rule R_Setup_Send:
+  [ Fr(~nR), !Pk($S, pkS) ]
+  --[ Test1(), Create($R, ~nR) ]->
+  [ Out(<$R, $S, ~nR>),
+    St_R_1($R, $S, ~nR, pkS) ]
+
+/* Block 2: Sender responds to setup (Msg 0b) */
+rule S_Setup_Respond:
+  [ !Ltk($S, ~ltk), Fr(~k1), Fr(~k2), In(<$R, $S, nR>) ]
+  --[ Test2(),
+      Running($S, $R, <'sender', h(~k1), nR>) ]->
+  [ Out(<$S, $R, h(~k1), sign(<h(~k1), nR>, ~ltk)>),
+    St_S_1($S, $R, ~ltk, ~k1, ~k2) ]
+
+/* Block 3: Receiver verifies setup response */
+rule R_Verify_Setup:
+  [ St_R_1($R, $S, ~nR, pkS),
+    In(<$S, $R, fk1, sig>) ]
+  --[ Test3(),
+      Eq(verify(sig, <fk1, ~nR>, pkS), true) ]->
+  [ St_R_2($R, $S, ~nR, fk1) ]
+
+/* Block 4: Sender broadcasts first stream message (Msg 1, no channel_tag) */
+rule S_Send_Msg1:
+  [ St_S_1($S, $R, ~ltk, ~k1, ~k2), Fr(~m1), Fr(~k3) ]
+  --[ Test4(),
+      Running($S, $R, <'sender', ~m1, h(~k2), ~k1>) ]->
+  [ Out(<<~m1, h(~k2)>, mac(~k1, <~m1, h(~k2)>)>),
+    St_S_2($S, $R, ~k1, ~k2, ~k3) ]
+
+/* Block 5: Receiver caches first stream message */
+rule R_Recv_Msg1:
+  [ St_R_2($R, $S, ~nR, fk1),
+    In(<D1, mac1>) ]
+  --[ Test5(), Msg1Cached($R, $S) ]->
+  [ St_R_3($R, $S, fk1, D1, mac1) ]
+
+/* Block 6: Sender broadcasts second stream message (Msg 2, with channel_tag) */
+rule S_Send_Msg2:
+  [ St_S_2($S, $R, ~k1, ~k2, ~k3), Fr(~m2), Fr(~k4) ]
+  --[ Test6(), K1Disclosed($S, $R) ]->
+  [ Out(<<~m2, h(~k3), ~k1>, mac(~k2, <~m2, h(~k3), ~k1>), $channel_tag>),
+    St_S_3($S, $R, ~k2, ~k3, ~k4) ]
+
+/* Block 7: Receiver processes Msg 2, retroactively verifies Msg 1 */
+rule R_Recv_Msg2:
+  [ St_R_3($R, $S, fk1, <m1, fk2>, mac1),
+    In(<<m2, fk3, k1disc>, mac2, channel_tag>) ]
+  --[ Test7(),
+      Eq(h(k1disc), fk1),
+      Eq(mac(k1disc, <m1, fk2>), mac1),
+      Commit($R, $S, <'sender', m1, fk2, k1disc>),
+      Honest($S) ]->
+  [ ]
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* TESLA timing constraint: Msg 1 must be cached before k1 is disclosed */
+restriction K1DisclosedAfterMsg1Cached:
+  "All R S #t1 #t2.
+     Msg1Cached(R, S) @ t1 & K1Disclosed(S, R) @ t2
+   ==> t1 < t2"
+
+// category: noninjective_agreement
+lemma auth_broadcast:
+  "All R S m1 fk2 k1 #i.
+     Commit(R, S, <'sender', m1, fk2, k1>) @ i
+   ==>
+       (Ex #j. Running(S, R, <'sender', m1, fk2, k1>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 &
+       Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

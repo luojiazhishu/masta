@@ -1,0 +1,43 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+    - ~R
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+    - ~T
+    - ~R
+  - send:
+    - r0
+    - h(xor_op(xor_op(xor_op(r0, ~r1), k), 'TAG_TAG'))
+- role: Reader_VerifyTag
+  operations:
+  - receive:
+    - r0
+    - tag_mac
+  - send: []
+- role: Reader_SendConfirm
+  operations:
+  - generate_nonces:
+    - ~T
+  - compute:
+    - reader_mac = h(xor_op(xor_op(tag_mac, k), r0))
+  - send:
+    - reader_mac
+- role: Tag_VerifyReader
+  operations:
+  - receive:
+    - expected
+  - generate_nonces:
+    - ~R
+  - compute:
+    - tag_mac = h(xor_op(xor_op(xor_op(r0, r1), k), 'TAG_TAG'))
+    - expected = h(xor_op(xor_op(h(xor_op(xor_op(xor_op(r0, r1), k), 'TAG_TAG')),
+      k), r0))
+  - send: <END>

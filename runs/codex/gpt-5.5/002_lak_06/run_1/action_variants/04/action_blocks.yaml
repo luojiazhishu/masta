@@ -1,0 +1,40 @@
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - '''INIT'''
+    - ~r0
+- role: Tag_Send_T1
+  operations:
+  - receive:
+    - '''INIT'''
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = tagmac(r0, ~r1, k)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Send_R1
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - compute:
+    - expected = tagmac(r0, r1, k)
+    - reader_mac = readermac(tag_mac, k, r0)
+  - assert:
+    - tag_mac = expected
+  - send:
+    - reader_mac
+- role: Tag_Accept_R1
+  operations:
+  - receive:
+    - reader_mac
+  - compute:
+    - expected = readermac(tag_mac, k, r0)
+  - assert:
+    - reader_mac = expected
+  - send: <END>

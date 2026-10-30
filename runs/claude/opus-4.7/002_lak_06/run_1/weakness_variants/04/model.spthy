@@ -1,0 +1,102 @@
+theory LAK06Weak
+begin
+
+builtins: hashing, xor
+
+/*
+  LAK06 weakness variant 04: Reader's confirmation MAC is computed as
+  reader_mac = h(tag_mac XOR r0), without re-binding the long-term key k.
+  An attacker who observes T1 = (r1, tag_mac) can recompute reader_mac
+  itself and replay it to the Tag, defeating Tag-side authentication of
+  the Reader (non-injective agreement at the Tag is falsified).
+
+  Messages:
+    R0:  r0
+    T1:  r1, h(r0 XOR r1 XOR k)
+    R1:  h(h(r0 XOR r1 XOR k) XOR r0)
+*/
+
+restriction Eq:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ Setup($R, $T, ~k) ]->
+  [ !Ltk($R, $T, ~k) ]
+
+rule LtkReveal:
+  [ !Ltk($R, $T, ~k) ]
+  --[ LtkReveal($R), LtkReveal($T) ]->
+  [ Out(~k) ]
+
+rule Reader_1:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1(),
+      Create($R, ~r0) ]->
+  [ St_R_1($R, $T, k, ~r0), Out(~r0) ]
+
+rule Tag_1:
+  [ In(r0), Fr(~r1), !Ltk($R, $T, k) ]
+  --[ Test2(),
+      Create($T, ~r1),
+      Running($T, $R, <'tag_to_reader', r0, ~r1>) ]->
+  [ St_T_1($R, $T, k, r0, ~r1),
+    Out(<~r1, h(r0 XOR ~r1 XOR k)>) ]
+
+rule Reader_2:
+  let tag_mac = h(~r0 XOR r1 XOR k)
+      reader_mac = h(tag_mac XOR ~r0)
+  in
+  [ St_R_1($R, $T, k, ~r0), In(<r1, mac>) ]
+  --[ Test3(),
+      Eq(mac, tag_mac),
+      Commit($R, $T, <'tag_to_reader', ~r0, r1>),
+      Running($R, $T, <'reader_to_tag', ~r0, r1>),
+      Honest($R), Honest($T),
+      Secret($R, $T, k) ]->
+  [ Out(reader_mac) ]
+
+rule Tag_2:
+  let tag_mac = h(r0 XOR ~r1 XOR k)
+      reader_mac = h(tag_mac XOR r0)
+  in
+  [ St_T_1($R, $T, k, r0, ~r1), In(mac) ]
+  --[ Test4(),
+      Eq(mac, reader_mac),
+      Commit($T, $R, <'reader_to_tag', r0, ~r1>),
+      Honest($R), Honest($T),
+      Secret($T, $R, k) ]->
+  [ ]
+
+// category: secrecy
+lemma secrecy_k:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_tag:
+  "All a b t #i.
+     Commit(a, b, <'reader_to_tag', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'reader_to_tag', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_reader:
+  "All a b t #i.
+     Commit(a, b, <'tag_to_reader', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'tag_to_reader', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4
+     & not (Ex X #r. LtkReveal(X) @ r)"
+
+end

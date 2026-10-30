@@ -1,0 +1,9 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.coding_agent_model --document data/dataset/009_LoRaWAN10_lorawan_10_basic/weakness_variants/02/document.txt --output-dir runs/codex/gpt-5.5/009_LoRaWAN10_lorawan_10_basic/run_1/weakness_variants/02 --tool codex --model gpt-5.5 --skills-source /root/project/llm-tamarin/masta/experiments/coding_agent/skills --agent-timeout 3600 --label 009_LoRaWAN10_lorawan_10_basic run_1 weakness_variants/02 --provider openai --api-model gpt-5.5 --api-key <REDACTED> --base-url https://api.gpt.ge/v1
+
+==== MASTA coding_agent_model ====
+ document:   /root/project/llm-tamarin/masta/data/dataset/009_LoRaWAN10_lorawan_10_basic/weakness_variants/02/document.txt
+ output_dir: /root/project/llm-tamarin/masta/runs/codex/gpt-5.5/009_LoRaWAN10_lorawan_10_basic/run_1/weakness_variants/02
+ tool:       codex
+ provider:   openai / gpt-5.5 @ https://api.gpt.ge/v1
+ label:      009_LoRaWAN10_lorawan_10_basic run_1 weakness_variants/02
+[coding_agent] model written to: /root/project/llm-tamarin/masta/runs/codex/gpt-5.5/009_LoRaWAN10_lorawan_10_basic/run_1/weakness_variants/02/model.spthy

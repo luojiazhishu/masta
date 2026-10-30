@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/claude/opus-4.7/009_LoRaWAN10_lorawan_10_basic/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 009_LoRaWAN10_lorawan_10_basic --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/009_LoRaWAN10_lorawan_10_basic/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    009_LoRaWAN10_lorawan_10_basic
+
+==== Score ====
+ protocol: 009_LoRaWAN10_lorawan_10_basic
+ M1: 0.533
+ M2: 0.951
+ M3: 0.857
+ M4: 0.000  (no action variants supplied)
+ M5: 0.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/claude/opus-4.7/009_LoRaWAN10_lorawan_10_basic/run_1/base/score.json

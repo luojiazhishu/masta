@@ -1,0 +1,75 @@
+theory TeslaScheme1
+begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule Init:
+  [ Fr(~sk_s) ]
+  --[ ]->
+  [ !Ltk(~sk_s), !Pk('S', pk(~sk_s)) ]
+
+rule Setup:
+  [ Fr(~n_R), Fr(~k_1), !Ltk(sk_s), !Pk('S', pk(sk_s)) ]
+  --[ Test1(), Test2(), Test3()
+    , Running('S', 'R', <'setup', 'S', 'R', ~n_R, h(~k_1)>)
+    , Commit('R', 'S', <'setup', 'S', 'R', ~n_R, h(~k_1)>)
+    , Secret('S', 'R', ~k_1)
+    ]->
+  [ Out(<'S', 'R', h(~k_1), sign(<h(~k_1), ~n_R>, sk_s), 'S', 'R', h(~k_1), sign(<h(~k_1), ~n_R>, sk_s)>)
+    , StKey(~k_1)
+    ]
+
+rule Stream1:
+  [ StKey(k_1), Fr(~m_1), Fr(~k_2) ]
+  --[ Test4()
+    , Running('S', 'R', <'stream', '1', ~m_1, h(~k_2), mac(k_1, <~m_1, h(~k_2)>)>)
+    ]->
+  [ Out(<<~m_1, h(~k_2)>, mac(k_1, <~m_1, h(~k_2)>)>)
+    , StStream('S', 'R', '1', ~m_1, h(~k_2), mac(k_1, <~m_1, h(~k_2)>))
+    ]
+
+rule Receive1:
+  [ In(<D, mac_val>), StStream(s, r, idx, m, hk2, mac_val) ]
+  --[ Test5()
+    , Commit(r, s, <'stream', idx, <m, hk2>, mac_val>)
+    ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(sk) ]
+  --[ LtkReveal(sk) ]->
+  [ Out(sk) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & Test5() @ #t5
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5"
+
+lemma setup_auth:
+  // category: noninjective_agreement
+  "All r s n c #i.
+       Commit(r, s, <'setup', s, r, n, c>) @ i
+     ==>
+         (Ex #j. Running(s, r, <'setup', s, r, n, c>) @ j)
+       | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma stream_auth:
+  // category: noninjective_agreement
+  "All r s idx m hk2 mac_val #i.
+       Commit(r, s, <'stream', idx, <m, hk2>, mac_val>) @ i
+     ==>
+         (Ex #j. Running(s, r, <'stream', idx, m, hk2, mac_val>) @ j)
+       | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma key_secrecy:
+  // category: secrecy
+  "All A B k #i.
+       Secret(A, B, k) @ i
+     ==>
+         not (Ex #j. K(k) @ j)
+       | (Ex X #r. LtkReveal(X) @ r)"
+
+end

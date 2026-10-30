@@ -1,0 +1,40 @@
+- role: Device_SendJoinRequest
+  operations:
+  - generate_nonces:
+    - ~DevNonce
+  - compute:
+    - reqMAC = mac(~AppKey, <'JoinRequest', $Dev, $Srv, ~DevNonce>)
+  - send:
+    - '''JoinRequest'''
+    - $Dev
+    - $Srv
+    - ~DevNonce
+    - reqMAC
+- role: Server_ProcessJoinRequest
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - $Dev
+    - $Srv
+    - devNonce
+    - reqMAC
+  - generate_nonces:
+    - ~JoinNonce
+  - compute:
+    - appSKey = senc(<'cst1', devNonce, ~JoinNonce>, ~AppKey)
+    - nwkSKey = senc(<'cst2', devNonce, ~JoinNonce>, ~AppKey)
+    - respMAC = mac(~AppKey, <'JoinAccept', ~JoinNonce, $DevAddr>)
+  - assert:
+    - reqMAC = mac(~AppKey, <'JoinRequest', $Dev, $Srv, devNonce>)
+  - send:
+    - senc(<'JoinAccept', ~JoinNonce, $DevAddr, respMAC>, ~AppKey)
+- role: Device_ProcessJoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinNonce, $DevAddr, respMAC>, ~AppKey)
+  - compute:
+    - appSKey = senc(<'cst1', ~DevNonce, joinNonce>, ~AppKey)
+    - nwkSKey = senc(<'cst2', ~DevNonce, joinNonce>, ~AppKey)
+  - assert:
+    - respMAC = mac(~AppKey, <'JoinAccept', joinNonce, $DevAddr>)
+  - send: <END>

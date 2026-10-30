@@ -1,0 +1,101 @@
+Network Working Group                                          A. Famed
+Internet-Draft                                                 B. Famed
+Intended status: Informational                                 C. Famed
+Expires: October 2026                                              FAMED
+                                                          26 April 2026
+
+
+    A Symmetric-Key Encapsulation Profile with Responder Auxiliary
+                  draft-famed-sk-pmd-v04-00
+
+
+Abstract
+
+   This document specifies a one-message symmetric-key encapsulation
+   profile in which the responder computes a binary auxiliary value
+   tag_aux(sec, pub) immediately after the destructor checks have
+   succeeded.  The auxiliary value is local to the responder and
+   does not appear on the wire.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on 26 October 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+1.  Introduction
+
+   This profile follows the structure of the base symmetric-key
+   encapsulation.  The responder, after recovering sec and pub
+   from the inbound ciphertext, evaluates tag_aux(sec, pub); the
+   resulting value is intended for responder-local bookkeeping
+   such as audit logging or per-session tracing.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+   NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+   "MAY", and "OPTIONAL" in this document are to be interpreted as
+   described in BCP 14 [RFC2119] [RFC8174].
+
+      tag_aux(x, y)
+                a binary function whose only operational use is to
+                produce a responder-local auxiliary value over the
+                recovered secret and public components.
+
+3.  Protocol Overview
+
+      Initiator (I)                                       Responder (R)
+         |                                                     |
+         |   1.  senc(<sec, pub>, k)                           |
+         |---------------------------------------------------->|
+         |                          (release of pub to network)|
+
+   In addition the responder evaluates auxr = tag_aux(sec, pub)
+   immediately after the destructor checks of step 5 have
+   succeeded.
+
+4.  Message Format
+
+   The on-wire artifact is unchanged from the base profile.  No
+   wire format is defined for tag_aux outputs.
+
+5.  Processing Rules
+
+   On reception, the responder computes body, sec, and pub as in
+   the base profile.  After the destructor checks have succeeded,
+   the responder evaluates
+
+      auxr = tag_aux(sec, pub)
+
+   The auxr value MUST NOT be transmitted on the wire.  The
+   responder then releases pub into the public network as in the
+   base profile.
+
+6.  Security Considerations
+
+   tag_aux is treated as opaque; observing or controlling its
+   output does not affect any secrecy property of the encapsulated
+   value sec.  Implementations SHOULD ensure that tag_aux does not
+   inadvertently leak sec through cache or timing side channels in
+   environments that share state with untrusted code.
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in
+              RFC 2119 Key Words", BCP 14, RFC 8174, May 2017.
+
+
+8. Analysis Targets
+
+8.1 Secrecy of the Encapsulated Secret Payload

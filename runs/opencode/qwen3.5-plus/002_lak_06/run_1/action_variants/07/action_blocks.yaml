@@ -1,0 +1,31 @@
+- role: Reader_Start
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - send:
+    - ~r1
+    - h(xoring(xoring(r0, ~r1), k))
+- role: Reader_Verify
+  operations:
+  - receive:
+    - r1
+    - tag_mac
+  - assert:
+    - tag_mac = h(xoring(xoring(r0, r1), k))
+  - send:
+    - h(xoring(xoring(tag_mac, k), r0))
+- role: Tag_Verify
+  operations:
+  - receive:
+    - reader_mac
+  - assert:
+    - reader_mac = h(xoring(xoring(tag_mac, k), r0))
+  - send: <END>

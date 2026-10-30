@@ -1,0 +1,18 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_protocol --run-dir runs/opencode/qwen3.5-plus/002_lak_06/run_1 --dataset-dir data/dataset --protocol-id 002_lak_06 --tamarin-timeout 300 --force
+
+==== MASTA score_protocol ====
+ run_dir:     /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/002_lak_06/run_1
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    002_lak_06
+ [av 12] model.spthy missing — counted as 0
+ [wv 02] model.spthy missing — counted as 0
+
+==== Score ====
+ protocol: 002_lak_06
+ M1: 0.786
+ M2: 0.333
+ M3: 0.334
+ M4: 0.745  (12/13 action variants present)
+ M5: 0.857  (6/7 weakness variants present)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/opencode/qwen3.5-plus/002_lak_06/run_1/score.json

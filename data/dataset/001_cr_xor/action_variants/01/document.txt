@@ -1,0 +1,241 @@
+Network Working Group                                           A. Famed
+Internet-Draft                                                  B. Famed
+Intended status: Informational                                  C. Famed
+Expires: October 28, 2026                                          FAMED
+                                                          April 26, 2026
+
+
+              A Challenge-Response Authentication Protocol
+                       with an Echoed Client Nonce
+                       draft-famed-crxor-echo-00
+
+
+Abstract
+
+   This document specifies CR-XOR-Echo, a two-flow challenge-response
+   authentication protocol intended for point-to-point links between
+   two endpoints that already share a long-term symmetric key.  In
+   addition to a hash-based responder tag built over an exclusive-or
+   combination of the two protocol nonces and the shared key, the
+   initiator includes a freshly generated client nonce that the
+   responder echoes back in its reply.  The initiator verifies the
+   echo before declaring the responder authenticated.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   This Internet-Draft will expire on October 28, 2026.
+
+Copyright Notice
+
+   Copyright (c) 2026 The FAMED Authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   2.  Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . 2
+   3.  Protocol Overview  . . . . . . . . . . . . . . . . . . . . . . 3
+   4.  Message Format . . . . . . . . . . . . . . . . . . . . . . . . 3
+   5.  Processing Rules . . . . . . . . . . . . . . . . . . . . . . . 4
+   6.  Security Considerations  . . . . . . . . . . . . . . . . . . . 5
+   7.  References . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+
+1.  Introduction
+
+   CR-XOR-Echo provides a compact mechanism by which an initiator
+   verifies that a peer holding a pre-shared key is reachable and
+   currently active.  The first flight carries the initiator's
+   challenge nonce together with a separate client nonce; the second
+   flight returns a hash tag, the responder's nonce, and the verbatim
+   client nonce.  The initiator concludes the protocol by checking
+   both the tag and the echoed client nonce.
+
+   The presence of the echoed nonce ties the responder's flight to
+   exactly one initiator request, which is useful in deployments
+   where multiple challenges may be in flight concurrently.
+
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+   The notation H(x), x XOR y, and <a, b> follows the conventions of
+   ordinary cryptographic specifications: H is a cryptographic hash
+   function, XOR is bitwise exclusive-or applied to equally sized
+   octet strings, and <a, b> is the concatenation of a and b in the
+   order shown.
+
+   The nonces are written na (initiator nonce), nb (responder nonce),
+   and r (client echo nonce).  The shared symmetric key is k.  The
+   roles I and R denote the initiator and the responder.
+
+
+3.  Protocol Overview
+
+   CR-XOR-Echo runs in a single round trip:
+
+      Initiator                                       Responder
+          |                                                |
+          |                  na, r                         |
+          |----------------------------------------------->|
+          |                                                |
+          |        H(na XOR k XOR nb), nb, r               |
+          |<-----------------------------------------------|
+          |                                                |
+          |  verify H tag and verify echoed r              |
+          |                                                |
+
+   The initiator generates two independent uniformly random nonces
+   na and r of length L_n.  The first flight transmits both.  Upon
+   receipt, the responder generates its own nonce nb of length L_n,
+   computes the tag
+
+         t = H(na XOR k XOR nb)
+
+   and transmits the triple <t, nb, r> in which r is copied without
+   modification from the incoming flight.  The initiator recomputes
+   t' = H(na XOR k XOR nb) from the values it holds, compares t' to
+   t, and checks that the echoed r equals the value it transmitted.
+
+
+4.  Message Format
+
+      struct {
+          opaque  challenge[L_n];
+          opaque  client_nonce[L_n];
+      } InitiatorFlight;
+
+      struct {
+          opaque  tag[L_h];
+          opaque  response_nonce[L_n];
+          opaque  echo_client_nonce[L_n];
+      } ResponderFlight;
+
+   The relative ordering of fields within each flight is significant
+   and reversing the order is treated as a malformed flight.
+
+
+5.  Processing Rules
+
+   The shared key k MUST be established out of band and kept secret
+   to both endpoints.
+
+   To start an authentication attempt, an implementation in role I
+   performs the following steps.
+
+   1.  Generate fresh nonces na and r of length L_n.  na and r MUST
+       NOT be reused across runs.
+
+   2.  Transmit InitiatorFlight{ challenge = na, client_nonce = r }
+       and retain (na, r) in protocol state.
+
+   3.  Wait for a ResponderFlight.  On receipt of <tag, nb, r_echo>:
+
+       a.  Verify that nb has length L_n and is non-zero.
+
+       b.  Compute t' = H(na XOR k XOR nb).
+
+       c.  Compare t' to tag in constant time.
+
+       d.  Verify that r_echo equals the retained r.
+
+       e.  If both checks succeed, declare the responder authenticated
+           for the current run; otherwise abort.
+
+   4.  Discard na and r after step 3 so that no subsequent flight can
+       re-use them.
+
+   An implementation in role R, on receipt of an InitiatorFlight that
+   decodes as <na, r>, MUST verify that na has length L_n and is
+   non-zero, generate a fresh nb of length L_n, compute t = H(na XOR
+   k XOR nb), and transmit ResponderFlight{ tag = t, response_nonce =
+   nb, echo_client_nonce = r }.
+
+
+6.  Security Considerations
+
+   CR-XOR-Echo is designed to convince the initiator that the holder
+   of k has reacted to the current challenge, and to bind the
+   reaction to a single in-flight request via the echoed client
+   nonce.  When both checks at step 5.3.c and step 5.3.d succeed,
+   the initiator can conclude that the responder has been active at
+   some point in time and is in possession of k, and that the
+   particular response was returned in reply to the initiator's
+   recent flight.  This property is sometimes referred to as
+   aliveness of the responder.
+
+   The hash function H provides the only cryptographic barrier
+   against forgery of the responder flight.  H MUST be selected so
+   that the work factor of preimage and collision attacks exceeds
+   the lifetime value of k.
+
+   The non-zero check on the nonces removes a trivial degenerate
+   case in which an active attacker submits the all-zeros nonce;
+   without the check, the algebraic identity x XOR x = 0 could be
+   exploited to drive the hash input into a state that is
+   independent of one of the nonces.
+
+   Implementers should be aware that the construction H(na XOR k
+   XOR nb) is bilinear with respect to its operands.  An active
+   attacker that observes one valid responder flight together with
+   the corresponding na' nonce, and that is in a position to reroute
+   traffic, can choose a fresh challenge na for an honest initiator
+   and deliver a crafted response_nonce nb' = na XOR na' XOR nb
+   together with the originally observed tag and the verbatim r;
+   under these circumstances the initiator's tag check succeeds even
+   though the responder did not react to na.  CR-XOR-Echo therefore
+   does not provide agreement on the per-session parameters; it
+   provides aliveness of the entity holding k together with binding
+   to the in-flight client nonce r, and nothing stronger.
+
+   The client nonce r adds no protection against the bilinear
+   reroute attack described above, because the attacker forwards r
+   unchanged.  Implementations that need agreement on session
+   parameters MUST compose CR-XOR-Echo with an additional layer
+   that derives a session key from t and protects subsequent
+   traffic with that key.
+
+   Compromise of k breaks all guarantees of CR-XOR-Echo, both for
+   past and for future runs.  Implementations SHOULD provide a
+   mechanism to rotate k.
+
+   Neither na nor r nor nb is encrypted on the wire and they MUST
+   NOT carry implicit information about the endpoints.  Deployments
+   operating over open networks SHOULD rate-limit incoming
+   InitiatorFlights at a lower layer to mitigate denial-of-service.
+
+
+7.  References
+
+7.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174,
+              DOI 10.17487/RFC8174, May 2017.
+
+7.2.  Informative References
+
+   [RFC4086]  Eastlake 3rd, D., Schiller, J., and S. Crocker,
+              "Randomness Requirements for Security", BCP 106,
+              RFC 4086, DOI 10.17487/RFC4086, June 2005.
+
+   [RFC6234]  Eastlake 3rd, D. and T. Hansen, "US Secure Hash
+              Algorithms (SHA and SHA-based HMAC and HKDF)",
+              RFC 6234, DOI 10.17487/RFC6234, May 2011.
+
+
+8. Analysis Targets
+
+8.1 Aliveness of the Responder
+8.2 Non-injective Agreement on the Verification Tag

@@ -1,0 +1,6 @@
+lemma agree_network_noninj:
+  "All a b t #i.
+     Commit(a, b, <'simple_n', t>) @ i
+   ==>
+       (Ex #j. Running(b, a, <'simple_n', t>) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

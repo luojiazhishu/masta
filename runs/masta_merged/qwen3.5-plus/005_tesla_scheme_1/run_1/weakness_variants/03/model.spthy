@@ -1,0 +1,74 @@
+theory TESLA_Scheme1 begin
+
+builtins: signing, hashing
+
+functions: f/1, MAC/2
+
+// Long-term key generation for Sender S
+rule Generate_Keys_S:
+  [ Fr(~sk_s) ]
+  --[ ]->
+  [ !Ltk($S, ~sk_s), !Pk($S, pk(~sk_s)), Out(pk(~sk_s)) ]
+
+// RuleStep1: Receiver R sends SetupRequest
+rule RuleStep1:
+  [ Fr(~n_R), Fr(~tid_R) ]
+  --[ Test1(), Start_R(~tid_R, $S, ~n_R) ]->
+  [ Out(<$R, $S, ~n_R>), !State_R_1(~tid_R, $S, ~n_R) ]
+
+// RuleStep2: Sender S receives SetupRequest and sends SetupResponse
+rule RuleStep2:
+  [ In(<$R, $S, n_R>), !Ltk($S, ~sk_s), !Pk($S, pk(~sk_s)), Fr(~k_1) ]
+  let f_k1 = f(~k_1)
+      sig = sign(n_R, ~sk_s)
+  in
+  --[ Test2(), Resp_S($S, $R, n_R, f_k1) ]->
+  [ Out(<$S, $R, f_k1, sig>), !State_S_1($S, $R, n_R, ~k_1) ]
+
+// RuleStep3: Receiver R receives SetupResponse and verifies signature
+// Verification is modeled by pattern matching on the signature structure in the premise.
+// The receiver only proceeds if the input matches the pattern sign(n_R, sk_s) where sk_s is the key associated with $S.
+// Since the adversary cannot forge sign(n_R, sk_s) without sk_s, receiving such a term implies valid verification.
+rule RuleStep3:
+  [ In(<$S, $R, commitment, sign(n_R, sk_s)>), !State_R_1(~tid_R, $S, ~n_R), !Ltk($S, sk_s) ]
+  --[ Test3(), Verify_R(~tid_R, $S, ~n_R, commitment) ]->
+  [ !State_R_2(~tid_R, $S, ~n_R, commitment) ]
+
+// RuleStep4: Sender S sends first broadcast message Msg 1
+rule RuleStep4:
+  [ !State_S_1($S, $R, n_R, ~k_1), Fr(~m_1), Fr(~k_2) ]
+  let D_1 = <~m_1, f(~k_2)>
+      mac_1 = MAC(~k_1, D_1)
+  in
+  --[ Test4(), Broadcast_S($S, 1, D_1, ~k_1) ]->
+  [ Out(<D_1, mac_1>), !State_S_2($S, $R, n_R, ~k_1, ~k_2) ]
+
+// RuleStep5: Receiver R receives first broadcast message Msg 1
+rule RuleStep5:
+  [ In(<D_1, mac_1>), !State_R_2(~tid_R, $S, ~n_R, expected_f_k1) ]
+  --[ Test5(), Receive_R(~tid_R, 1, D_1) ]->
+  [ !State_R_3(~tid_R, $S, ~n_R, expected_f_k1, D_1, mac_1) ]
+
+// RuleStep6: Sender S sends generic broadcast message Msg n (with key disclosure)
+rule RuleStep6:
+  [ !State_S_2($S, $R, n_R, ~k_prev, ~k_curr), Fr(~m_n), Fr(~k_next) ]
+  let D_n = <~m_n, f(~k_next), ~k_prev>
+      mac_n = MAC(~k_curr, D_n)
+  in
+  --[ Test6(), Broadcast_S($S, n, D_n, ~k_curr), Disclose_S($S, ~k_prev) ]->
+  [ Out(<D_n, mac_n>), !State_S_2($S, $R, n_R, ~k_curr, ~k_next) ]
+
+// RuleStep7: Receiver R receives generic broadcast message Msg n
+rule RuleStep7:
+  [ In(<D_n, mac_n>), !State_R_3(~tid_R, $S, ~n_R, expected_f_k_prev, D_prev, mac_prev) ]
+  --[ Test7(), Receive_R(~tid_R, n, D_n) ]->
+  [ !State_R_4(~tid_R, $S, ~n_R, D_n, mac_n) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6 #t7.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 &
+       Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6 & Test7() @ #t7
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6 & #t6 < #t7"
+
+end

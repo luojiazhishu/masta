@@ -1,0 +1,93 @@
+theory Simplified_NAXOS begin
+
+builtins: diffie-hellman
+functions: h1/1, h2/1
+
+rule Setup_Initiator:
+  [ Fr(~ltkI) ]
+  -->
+  [ !Ltk('I', ~ltkI)
+  , !Pk('I', h1(<'pk', ~ltkI>))
+  , Out(<'I', h1(<'pk', ~ltkI>)>)
+  ]
+
+rule Setup_Responder:
+  [ Fr(~ltkR) ]
+  -->
+  [ !Ltk('R', ~ltkR)
+  , !Pk('R', h1(<'pk', ~ltkR>))
+  , Out(<'R', h1(<'pk', ~ltkR>)>)
+  ]
+
+rule Reveal_ltk:
+  [ !Ltk(A, ltk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(ltk) ]
+
+rule Initiator_1:
+  let exI = h1(<~eskI, ltkI>)
+      X = h1(<'g_to', exI>)
+  in
+  [ Fr(~eskI)
+  , Fr(~tidI)
+  , !Ltk('I', ltkI)
+  , !Pk('R', pkR)
+  ]
+  --[ Test1()
+    , Create('I', ~tidI)
+    , Running('I', 'R', <'initiator', X, pkR, 'channelV1'>)
+    ]->
+  [ Out(X)
+  , St_I_1(~tidI, ltkI, exI, X, pkR)
+  ]
+
+rule Responder_2:
+  let exR = h1(<~eskR, ltkR>)
+      Y = h1(<'g_to', exR>)
+      kR = h2(<h1(<pkI, exR>), h1(<X, ltkR>), 'I', 'R', 'channelV1'>)
+  in
+  [ In(X)
+  , Fr(~eskR)
+  , Fr(~tidR)
+  , !Ltk('R', ltkR)
+  , !Pk('I', pkI)
+  ]
+  --[ Test2()
+    , Create('R', ~tidR)
+    , Running('R', 'I', <'responder', X, Y, 'I', 'R', 'channelV1'>)
+    , Commit('R', 'I', <'responder', X, Y, 'I', 'R', 'channelV1'>)
+    , Secret('I', 'R', kR)
+    , Honest('I')
+    , Honest('R')
+    ]->
+  [ Out(Y) ]
+
+rule Initiator_3:
+  let kI = h2(<h1(<Y, ltkI>), h1(<pkR, exI>), 'I', 'R', 'channelV1'>)
+  in
+  [ In(Y)
+  , St_I_1(tidI, ltkI, exI, X, pkR)
+  ]
+  --[ Test3()
+    , Commit('I', 'R', <'initiator', X, Y, 'I', 'R', 'channelV1'>)
+    , Secret('I', 'R', kI)
+    , Honest('I')
+    , Honest('R')
+    ]->
+  [ ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & #t1 < #t2 & #t2 < #t3"
+
+// category: secrecy
+lemma session_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

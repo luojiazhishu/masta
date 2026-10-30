@@ -1,0 +1,6 @@
+lemma authentic [use_induction]:
+  "All R S m #i.
+     Commit(R, S, <'broadcast', m>) @ i
+   ==>
+       (Ex #j. Running(S, S, <'broadcast', m>) @ j & j < i)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"

@@ -1,0 +1,75 @@
+theory CrXorRrtx
+begin
+
+builtins: hashing, xor
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+rule Generate_Shared_Key:
+  [ Fr(~k) ]
+  --[ Secret($I, $R, ~k), Honest($I), Honest($R) ]->
+  [ !SharedKey($I, $R, ~k) ]
+
+rule Reveal_Shared_Key_I:
+  [ !SharedKey($I, $R, k) ]
+  --[ LtkReveal($I) ]->
+  [ Out(k) ]
+
+rule Reveal_Shared_Key_R:
+  [ !SharedKey($I, $R, k) ]
+  --[ LtkReveal($R) ]->
+  [ Out(k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !SharedKey($I, $R, k) ]
+  --[ Test1(), Create($I, ~na) ]->
+  [ Out(~na), St_I_1($I, $R, ~na) ]
+
+rule Responder_First_Reply:
+  let tag = h(na XOR k XOR ~nb) in
+  [ In(na), Fr(~nb), !SharedKey($I, $R, k) ]
+  --[ Test2(), Create($R, ~nb), Running($R, $I, <'tag', tag>) ]->
+  [ Out(<tag, ~nb>), St_R_Retx($R, $I, na, ~nb, tag) ]
+
+rule Responder_Retransmit_Reply:
+  [ St_R_Retx($R, $I, na, nb, tag) ]
+  --[ Test3() ]->
+  [ Out(<tag, nb>) ]
+
+rule Initiator_Accept:
+  [ St_I_1($I, $R, na), In(<tag, nb>), !SharedKey($I, $R, k) ]
+  --[ Test4(), Eq(tag, h(na XOR k XOR nb)), Commit($I, $R, <'tag', tag>), Honest($I), Honest($R) ]->
+  [ ]
+
+// category: secrecy
+lemma shared_key_secrecy:
+  "All A B k #i.
+     Secret(A, B, k) @ i
+   ==>
+       not (Ex #j. K(k) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: aliveness
+lemma responder_aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex id #j. Create(b, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma tag_noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

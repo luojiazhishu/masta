@@ -1,0 +1,79 @@
+theory ISO9798_4_Mutual_Auth
+begin
+
+builtins: hashing
+
+rule Setup:
+  [ Fr(~kAB), Fr(~IdA), Fr(~IdB) ]
+  --[ Test1() ]->
+  [ !Ltk(~IdA, ~kAB), !Ltk(~IdB, ~kAB), STA_0(~IdA, ~IdB, ~kAB) ]
+
+rule B_Start:
+  [ !Ltk(IdB, kAB), !Ltk(IdA, kAB), Fr(~tidB), Fr(~RB) ]
+  --[ Test2(), Create(IdB, ~tidB) ]->
+  [ STB_1(IdB, IdA, kAB, ~tidB, ~RB), Out(<~tidB, ~RB>) ]
+
+rule A_Respond:
+  [ STA_0(IdA, IdB, kAB), In(<tidB, RB>), Fr(~tidA), Fr(~RA) ]
+  --[ Test3() ]->
+  [ STA_1(IdA, IdB, kAB, ~tidA, ~RA, RB, tidB),
+    Out(<~RA, h(<'sid1_mut_cr', ~RA, RB, IdB, kAB>)>) ]
+
+rule B_Verify_Respond:
+  [ STB_1(IdB, IdA, kAB, tidB, RB),
+    In(<RA, h(<'sid1_mut_cr', RA, RB, IdB, kAB>)>) ]
+  --[ Test4(),
+      Running(IdB, IdA, <tidB, RA, RB>),
+      Commit(IdB, IdA, <tidB, RA, RB>),
+      Secret(IdB, IdA, kAB) ]->
+  [ Out(<tidB, h(<'sid2_mut_cr', RB, RA, kAB>)>) ]
+
+rule A_Verify:
+  [ STA_1(IdA, IdB, kAB, tidA, RA, RB, tidB),
+    In(<tidB, h(<'sid2_mut_cr', RB, RA, kAB>)>) ]
+  --[ Running(IdA, IdB, <tidB, RA, RB>),
+      Commit(IdA, IdB, <tidB, RA, RB>),
+      Secret(IdA, IdB, kAB) ]->
+  [ ]
+
+rule LtkReveal_A:
+  [ !Ltk(IdA, kAB) ]
+  --[ LtkReveal(IdA) ]->
+  [ Out(kAB) ]
+
+rule LtkReveal_B:
+  [ !Ltk(IdB, kAB) ]
+  --[ LtkReveal(IdB) ]->
+  [ Out(kAB) ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_A:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_B:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(a, b, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: secrecy
+lemma secrecy_kAB:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

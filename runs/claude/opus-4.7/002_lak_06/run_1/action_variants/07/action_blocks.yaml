@@ -1,0 +1,45 @@
+- role: Reader_Enroll
+  operations:
+  - send: []
+- role: Tag_Enroll
+  operations:
+  - send: []
+- role: Reader_Send_R0
+  operations:
+  - generate_nonces:
+    - ~r0
+  - send:
+    - ~r0
+- role: Tag_Respond
+  operations:
+  - receive:
+    - r0
+  - generate_nonces:
+    - ~r1
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR ~k)
+  - send:
+    - ~r1
+    - tag_mac
+- role: Reader_Verify
+  operations:
+  - receive:
+    - r1
+    - mac
+  - compute:
+    - expected = h(~r0 XOR r1 XOR ~k)
+    - reader_mac = h(h(~r0 XOR r1 XOR ~k) XOR ~k XOR ~r0)
+  - assert:
+    - mac = expected
+  - send:
+    - reader_mac
+- role: Tag_Finish
+  operations:
+  - receive:
+    - rmac
+  - compute:
+    - tag_mac = h(r0 XOR ~r1 XOR ~k)
+    - expected = h(h(r0 XOR ~r1 XOR ~k) XOR ~k XOR r0)
+  - assert:
+    - rmac = expected
+  - send: <END>

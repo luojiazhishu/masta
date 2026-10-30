@@ -1,0 +1,85 @@
+theory TeslaScheme1DuplicatedRequest begin
+
+builtins: signing, hashing
+
+functions: mac/2
+
+restriction Equality:
+  "All x y #i. Eq(x,y) @ #i ==> x = y"
+
+rule Sender_Long_Term_Key:
+  [ Fr(~skS) ]
+  --[ Create($S, ~skS) ]->
+  [ !Ltk($S, ~skS), !Pk($S, pk(~skS)), Out(pk(~skS)) ]
+
+rule Reveal_Long_Term_Key:
+  [ !Ltk(A, sk) ]
+  --[ LtkReveal(A) ]->
+  [ Out(sk) ]
+
+rule Receiver_Send_SetupRequest:
+  [ Fr(~nr) ]
+  --[ Test1(), Create($R, ~nr) ]->
+  [ Out(<$R, $S, ~nr, $R, $S, ~nr>), St_R_Request($R, $S, ~nr) ]
+
+rule Sender_Verify_Request_Send_Response:
+  let commitment = h(~k1) in
+  [ In(<R, S, nr, R, S, nr>), !Ltk(S, skS), Fr(~k1), Fr(~k2) ]
+  --[ Test2(), Running(S, R, <'setup', R, S, nr, commitment>) ]->
+  [ Out(<S, R, commitment, sign(<commitment, nr>, skS)>),
+    !SetupRun(S, R, nr, commitment),
+    St_S_Stream(S, R, nr, ~k1, ~k2, commitment) ]
+
+rule Receiver_Verify_SetupResponse:
+  [ St_R_Request(R, S, nr), !Pk(S, pkS), In(<S, R, commitment, sig>), !SetupRun(S, R, nr, commitment) ]
+  --[ Test3(), Eq(verify(sig, <commitment, nr>, pkS), true),
+      Commit(R, S, <'setup', R, S, nr, commitment>), Honest(S), SetupComplete(R, S) ]->
+  [ St_R_Established(R, S, nr, commitment) ]
+
+rule Sender_Broadcast_Stream_Message:
+  let d1 = <~m1, h(k2)> in
+  [ St_S_Stream(S, R, nr, k1, k2, commitment), Fr(~m1) ]
+  --[ Test4(), Running(S, R, <'broadcast', R, S, nr, commitment, ~m1>) ]->
+  [ Out(<d1, mac(k1, d1)>),
+    St_S_Disclose(S, R, nr, k1, k2, commitment, ~m1),
+    St_R_StreamPending(R, S, nr, commitment, d1, mac(k1, d1)) ]
+
+rule Sender_Disclose_Previous_Key:
+  [ St_S_Disclose(S, R, nr, k1, k2, commitment, m1) ]
+  --[ Test5() ]->
+  [ Out(k1), St_S_Done(S, R, nr, k1, k2, commitment, m1) ]
+
+rule Receiver_Accept_Stream_Message:
+  [ St_R_Established(R, S, nr, commitment),
+    St_R_StreamPending(R, S, nr, commitment, <m1, next_commitment>, tag),
+    In(k1) ]
+  --[ Test6(), Eq(commitment, h(k1)), Eq(tag, mac(k1, <m1, next_commitment>)),
+      Commit(R, S, <'broadcast', R, S, nr, commitment, m1>), Honest(S) ]->
+  [ Accepted(R, S, nr, m1) ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4 #t5 #t6.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3
+     & Test4() @ #t4 & Test5() @ #t5 & Test6() @ #t6
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4 & #t4 < #t5 & #t5 < #t6"
+
+// category: noninjective_agreement
+lemma setup_noninjective_agreement:
+  "All R S t #i.
+     Commit(R, S, t) @ #i
+     & (Ex R2 S2 nr commitment. t = <'setup', R2, S2, nr, commitment>)
+   ==>
+       (Ex #j. Running(S, R, t) @ #j)
+     | (Ex #r. LtkReveal(S) @ #r & Honest(S) @ #i)"
+
+// category: noninjective_agreement
+lemma broadcast_authenticity:
+  "All R S t #i.
+     Commit(R, S, t) @ #i
+     & (Ex R2 S2 nr commitment m. t = <'broadcast', R2, S2, nr, commitment, m>)
+   ==>
+       (Ex #j. Running(S, R, t) @ #j)
+     | (Ex #r #c. LtkReveal(S) @ #r & SetupComplete(R, S) @ #c & #r < #c)"
+
+end

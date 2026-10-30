@@ -1,0 +1,86 @@
+theory FAMED_IAM begin
+
+builtins: signing
+
+functions: bar/1
+
+rule IReveal:
+  [ !Ltk($I, ltk) ]
+  --[ LtkReveal($I) ]->
+  [ Out(ltk) ]
+
+rule RReveal:
+  [ !Ltk($R, ltk) ]
+  --[ LtkReveal($R) ]->
+  [ Out(ltk) ]
+
+rule Generate_key_pair:
+  [ Fr(~ltk) ]
+  -->
+  [ !Pk($A, pk(~ltk))
+  , Out(pk(~ltk))
+  , !Ltk($A, ~ltk)
+  ]
+
+rule RuleStep1:
+  [ !Ltk($I, ~ltkI)
+  , !Pk($R, pkR)
+  , Fr(~tid)
+  ]
+  --[ Create($I, ~tid), Honest($I), Test1() ]->
+  [ Out(sign(<$I, $R>, ~ltkI))
+  , Out(bar($I))
+  , !InitState1(~tid, $I, $R, ~ltkI, pkR)
+  ]
+
+rule RuleStep2:
+  [ In(mI)
+  , !Ltk($R, ~ltkR)
+  , !Pk($I, pkI)
+  , Fr(~tidR)
+  ]
+  --[ Create($R, ~tidR), Honest($R), Running($R, $I, <'I','R'>), Test2() ]->
+  [ Out(sign(<$I, $R>, ~ltkR))
+  , !RespState1(~tidR, $I, $R, ~ltkR)
+  ]
+
+rule RuleStep3:
+  [ In(mR)
+  , !InitState1(~tid, $I, $R, ~ltkI, pkR)
+  ]
+  --[ Commit($I, $R, <'I','R'>), Test3() ]->
+  [ Out('<END>')
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & #t1 < #t2 & #t2 < #t3"
+
+// category: weak_agreement
+lemma weak_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex t2 #j. Running(b, a, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex #j. Running(b, a, t) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+// category: injective_agreement
+lemma injective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       ( (Ex #j. Running(b, a, t) @ j
+             & j < i
+             & not (Ex a2 b2 #i2. Commit(a2, b2, t) @ i2
+                                & not (#i2 = #i))) )
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+end

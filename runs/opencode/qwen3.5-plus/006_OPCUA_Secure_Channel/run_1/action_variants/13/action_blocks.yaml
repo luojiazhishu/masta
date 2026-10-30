@@ -1,0 +1,74 @@
+- role: Server_GetEndpoints_1
+  operations:
+  - send:
+    - $GERes
+    - serverCert
+    - $Sign
+    - $SecPol
+    - $UserTokPol
+- role: Server_GetEndpoints_2
+  operations:
+  - send:
+    - $GERes
+    - serverCert
+    - $Sign
+    - $SecPol
+    - $UserTokPol
+- role: Client_Receive_Endpoints
+  operations:
+  - receive:
+    - $GERes
+    - srvCert
+    - $Sign
+    - $SecPol
+    - $UserTokPol
+  - generate_nonces:
+    - ~tid
+  - send: []
+- role: Client_Send_OSCRequest
+  operations:
+  - generate_nonces:
+    - ~Nc
+  - send:
+    - clientCert
+    - $OSCReq
+    - clientPubKey
+    - ~Nc
+    - sign(h(<$OSCReq, clientPubKey, ~Nc>), ~clientPrivKey)
+    - h(<$OSCReq, clientPubKey, ~Nc>)
+- role: Server_Receive_OSCRequest_Send_Response
+  operations:
+  - receive:
+    - clientCert
+    - $OSCReq
+    - clientPubKey
+    - Nc
+    - reqSig
+    - reqHash
+  - generate_nonces:
+    - ~Ns
+  - assert:
+    - reqHash = h(<$OSCReq, clientPubKey, Nc>)
+    - verify(reqSig, reqHash, clientPubKey) = true
+  - send:
+    - serverCert
+    - $OSCRes
+    - ~Ns
+    - $SecTok
+    - $TTL
+    - sign(h(<$OSCRes, ~Ns, $SecTok, $TTL>), ~serverPrivKey)
+    - h(<$OSCRes, ~Ns, $SecTok, $TTL>)
+- role: Client_Receive_OSCResponse
+  operations:
+  - receive:
+    - srvCert
+    - $OSCRes
+    - Ns
+    - $SecTok
+    - $TTL
+    - respSig
+    - respHash
+  - assert:
+    - respHash = h(<$OSCRes, Ns, $SecTok, $TTL>)
+    - verify(respSig, respHash, srvPubKey) = true
+  - send: <END>

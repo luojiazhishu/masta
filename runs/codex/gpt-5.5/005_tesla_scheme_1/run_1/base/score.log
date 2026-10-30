@@ -1,0 +1,16 @@
+$ /root/project/llm-tamarin/masta/.venv/bin/python -m scripts.score_model --model runs/codex/gpt-5.5/005_tesla_scheme_1/run_1/base/model.spthy --dataset-dir data/dataset --protocol-id 005_tesla_scheme_1 --tamarin-timeout 300
+
+==== MASTA score_model ====
+ model:       /root/project/llm-tamarin/masta/supplementary_material/runs/codex/gpt-5.5/005_tesla_scheme_1/run_1/base/model.spthy
+ dataset_dir: /root/project/llm-tamarin/masta/supplementary_material/data/dataset
+ protocol:    005_tesla_scheme_1
+
+==== Score ====
+ protocol: 005_tesla_scheme_1
+ M1: 0.630
+ M2: 0.541
+ M3: 0.065
+ M4: 0.000  (no action variants supplied)
+ M5: 0.000  (no weakness variants supplied)
+
+ score saved to: /root/project/llm-tamarin/masta/supplementary_material/runs/codex/gpt-5.5/005_tesla_scheme_1/run_1/base/score.json

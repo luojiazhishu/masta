@@ -1,0 +1,29 @@
+- role: B_Start
+  operations:
+  - generate_nonces:
+    - ~RB
+  - send:
+    - ~RB
+- role: A_Init
+  operations:
+  - receive:
+    - RB
+  - generate_nonces:
+    - ~Text3
+  - send:
+    - RA
+    - ~Text3
+    - mac(<'sid1_mut_cr', RA, RB, $B, 'mac1_tag'>, kAB)
+- role: B_Respond
+  operations:
+  - receive:
+    - RA
+    - Text3
+    - mac(<'sid1_mut_cr', RA, ~RB, $B, 'mac1_tag'>, kAB)
+  - send:
+    - mac(<'sid2_mut_cr', ~RB, RA>, kAB)
+- role: A_Finish
+  operations:
+  - receive:
+    - mac(<'sid2_mut_cr', RB, RA>, kAB)
+  - send: <END>

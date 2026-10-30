@@ -1,0 +1,64 @@
+- role: RuleStep1
+  operations:
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - send:
+    - '''GERes'''
+    - pk(~ServerPrivKey)
+    - '''Sign'''
+    - '''SecurityPolicy'''
+    - '''UserTokenPolicy'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - $ServerCert
+    - '''Sign'''
+    - $SecurityPolicy
+    - $UserTokenPolicy
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - RequestBodyDigest = h(<'OSCReq', pk(~ClientPrivKey), ~Nc>)
+    - RequestSignature = sign(h(<'OSCReq', pk(~ClientPrivKey), ~Nc>), ~ClientPrivKey)
+  - send:
+    - pk(~ClientPrivKey)
+    - <'OSCReq', pk(~ClientPrivKey), ~Nc>
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - $ClientCert
+    - <'OSCReq', $ClientPubKey, ~Nc>
+    - $RequestSignature
+    - $RequestBodyDigest
+  - generate_nonces:
+    - ~Ns
+  - compute:
+    - RequestBodyDigest = h(<'OSCReq', $ClientPubKey, ~Nc>)
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, $SecurityToken, $TokenLifetime>)
+    - ResponseSignature = sign(h(<'OSCRes', ~Ns, $SecurityToken, $TokenLifetime>),
+      ~ServerPrivKey)
+  - send:
+    - pk(~ServerPrivKey)
+    - <'OSCRes', ~Ns, $SecurityToken, $TokenLifetime>
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - $ServerCert
+    - <'OSCRes', ~Ns, $SecurityToken, $TokenLifetime>
+    - $ResponseSignature
+    - $ResponseBodyDigest
+  - generate_nonces:
+    - ~Nc
+  - compute:
+    - ResponseBodyDigest = h(<'OSCRes', ~Ns, $SecurityToken, $TokenLifetime>)
+    - ChannelBinding = h(<~Nc, ~Ns>)
+  - send: <END>

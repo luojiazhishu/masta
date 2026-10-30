@@ -1,0 +1,69 @@
+- role: RuleStep1
+  operations:
+  - generate_nonces:
+    - ~tid1
+  - send:
+    - '''GEReq'''
+- role: RuleStep2
+  operations:
+  - receive:
+    - '''GEReq'''
+  - generate_nonces:
+    - ~tid2
+  - send:
+    - '''GERes'''
+    - pk(~server_ltk)
+    - '''Sign'''
+    - '''OPCUA-SignSign'''
+    - '''Anonymous'''
+- role: RuleStep3
+  operations:
+  - receive:
+    - '''GERes'''
+    - $ServerCert
+    - '''Sign'''
+    - $SecurityPolicy
+    - $UserTokenPolicy
+  - generate_nonces:
+    - ~client_nonce
+    - ~tid3
+  - compute:
+    - RequestBody = <'OSCReq', pk(~client_ltk), ~client_nonce>
+    - RequestBodyDigest = h(<'OSCReq', pk(~client_ltk), ~client_nonce>)
+    - RequestSignature = sign(h(<'OSCReq', pk(~client_ltk), ~client_nonce>), ~client_ltk)
+  - send:
+    - $ServerCert
+    - RequestBody
+    - RequestSignature
+    - RequestBodyDigest
+- role: RuleStep4
+  operations:
+  - receive:
+    - $ClientCert
+    - <'OSCReq', ClientPubKey, ClientNonce>
+    - RequestSignature
+    - RequestBodyDigest
+  - generate_nonces:
+    - ~server_nonce
+    - ~tid4
+  - compute:
+    - ResponseBody = <'OSCRes', ~server_nonce, 'SecurityToken123', '3600'>
+    - ResponseBodyDigest = h(<'OSCRes', ~server_nonce, 'SecurityToken123', '3600'>)
+    - ResponseSignature = sign(h(<'OSCRes', ~server_nonce, 'SecurityToken123', '3600'>),
+      ~server_ltk)
+  - send:
+    - pk(~server_ltk)
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+- role: RuleStep5
+  operations:
+  - receive:
+    - $ServerCert
+    - ResponseBody
+    - ResponseSignature
+    - ResponseBodyDigest
+  - compute:
+    - VerifyKeyTag = h($ServerCert)
+    - ChannelBinding = h(<~client_nonce, ~server_nonce>)
+  - send: <END>

@@ -1,0 +1,43 @@
+- role: DeviceSendJoinRequest
+  operations:
+  - generate_nonces:
+    - ~devnonce
+  - send:
+    - '''JoinRequest'''
+    - ~deveui
+    - ~joineui
+    - ~devnonce
+    - mac(~appkey, <'JoinRequest', ~deveui, ~joineui, ~devnonce>)
+- role: NetworkRecvJoinRequest
+  operations:
+  - receive:
+    - '''JoinRequest'''
+    - ~deveui
+    - ~joineui
+    - devnonce
+    - m_req
+  - generate_nonces:
+    - ~joinnonce
+    - ~devaddr
+  - compute:
+    - m_req = mac(~appkey, <'JoinRequest', ~deveui, ~joineui, devnonce>)
+    - m_acc = mac(~appkey, <'JoinAccept', ~joinnonce, ~devaddr>)
+    - appskey = senc(<'cst1', devnonce, ~joinnonce>, ~appkey)
+    - nwkskey = senc(<'cst2', devnonce, ~joinnonce>, ~appkey)
+  - send:
+    - senc(<'JoinAccept', ~joinnonce, ~devaddr, m_acc>, ~appkey)
+    - '''LoRa-1.0'''
+- role: DeviceRecvJoinAccept
+  operations:
+  - receive:
+    - senc(<'JoinAccept', joinnonce, devaddr, mm>, ~appkey)
+    - '''LoRa-1.0'''
+  - compute:
+    - mm = mac(~appkey, <'JoinAccept', joinnonce, devaddr>)
+  - send: []
+- role: DeviceDeriveKeys
+  operations:
+  - compute:
+    - appskey = senc(<'cst1', ~devnonce, joinnonce>, ~appkey)
+    - nwkskey = senc(<'cst2', ~devnonce, joinnonce>, ~appkey)
+  - send: <END>

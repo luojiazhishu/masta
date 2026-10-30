@@ -1,0 +1,73 @@
+theory TESLA_Scheme1_Profile begin
+
+builtins: hashing, signing
+
+functions: mac/2
+
+rule RuleStep1:
+  [
+    Fr(~n_R)
+  ]
+  --[ Test1() ]->
+  [
+    Out(<$R, $S, ~n_R>)
+  ]
+
+rule RuleStep2:
+  [
+    In(<$R, $S, n_R>),
+    Fr(~k_1)
+  ]
+  let
+    comm_1 = h(~k_1)
+    sig_1 = sign(<comm_1, n_R>, ~sk_S)
+  in
+  --[ Test2() ]->
+  [
+    Out(<$S, $R, comm_1, sig_1>),
+    !SentCommitment(1, comm_1),
+    !StoredKey(1, ~k_1)
+  ]
+
+rule RuleStep3:
+  [
+    !StoredKey(1, ~k_1),
+    Fr(~m_1),
+    Fr(~k_2)
+  ]
+  let
+    D_1 = <~m_1, h(~k_2)>
+    mac_1 = mac(~k_1, D_1)
+  in
+  --[ Test3() ]->
+  [
+    Out(<D_1, mac_1>),
+    !SentPayload(1, D_1, mac_1),
+    !StoredKey(2, ~k_2)
+  ]
+
+rule RuleStep4:
+  [
+    !StoredKey(2, ~k_2),
+    !StoredKey(1, ~k_1),
+    Fr(~m_2),
+    Fr(~k_3)
+  ]
+  let
+    D_2 = <~m_2, h(~k_3), ~k_1>
+    mac_2 = mac(~k_2, D_2)
+  in
+  --[ Test4() ]->
+  [
+    Out(<D_2, mac_2>),
+    !SentPayload(2, D_2, mac_2),
+    !StoredKey(3, ~k_3)
+  ]
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

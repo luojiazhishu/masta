@@ -1,0 +1,76 @@
+theory Iso979844ReuseOnce begin
+
+builtins: hashing
+
+rule Provision:
+  [ Fr(~kAB) ]
+  --[ Create('A', 'B'), Honest('A'), Honest('B') ]->
+  [ !Ltk('A', 'B', ~kAB) ]
+
+rule Responder_Send_Challenge:
+  [ Fr(~RB), Fr(~Text1), !Ltk('A', 'B', kAB) ]
+  --[ Test1() ]->
+  [ Out(<~RB, ~Text1, 'init_b'>), St_B_1('A', 'B', ~RB, kAB) ]
+
+rule Initiator_Send_Token:
+  let RA = 'duplicate_ra'
+      tagged1 = <'sid1_mut_cr', RA, RB, 'B', ~Text2>
+      mac1 = h(<'sid1_mut_cr', RA, RB, 'B', kAB>)
+  in
+  [ In(<RB, Text1, 'init_b'>), Fr(~Text2), Fr(~Text3), !Ltk('A', 'B', kAB) ]
+  --[ Test2(), RunningA('A', 'B', RA, RB) ]->
+  [ Out(<RA, ~Text3, tagged1, mac1>), St_A_1('A', 'B', RA, RB, kAB) ]
+
+rule Responder_Send_Response:
+  let tagged1 = <'sid1_mut_cr', RA, RB, 'B', Text2>
+      mac1 = h(<'sid1_mut_cr', RA, RB, 'B', kAB>)
+      mac2 = h(<'sid2_mut_cr', RB, RA, kAB>)
+  in
+  [ St_B_1('A', 'B', RB, kAB), In(<RA, Text3, tagged1, mac1>), Fr(~Text4), Fr(~Text5) ]
+  --[ Test3(), CommitB('B', 'A', RA, RB), RunningB('B', 'A', RB, RA) ]->
+  [ Out(<~Text5, mac2>) ]
+
+rule Initiator_Accept:
+  let mac2 = h(<'sid2_mut_cr', RB, RA, kAB>)
+  in
+  [ St_A_1('A', 'B', RA, RB, kAB), In(<Text5, mac2>) ]
+  --[ Test4(), CommitA('A', 'B', RB, RA) ]->
+  [ ]
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_a:
+  "All a b rb ra #i.
+     CommitA(a, b, rb, ra) @ #i
+   ==>
+     (Ex #j. RunningB(b, a, rb, ra) @ #j & #j < #i)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement_at_b:
+  "All b a ra rb #i.
+     CommitB(b, a, ra, rb) @ #i
+   ==>
+     (Ex #j. RunningA(a, b, ra, rb) @ #j & #j < #i)"
+
+// category: injective_agreement
+lemma injective_agreement_at_a:
+  "All a b rb ra #i.
+     CommitA(a, b, rb, ra) @ #i
+   ==>
+     (Ex #j. RunningB(b, a, rb, ra) @ #j & #j < #i
+       & not (Ex a2 b2 #i2. CommitA(a2, b2, rb, ra) @ #i2 & not (#i2 = #i)))"
+
+// category: injective_agreement
+lemma injective_agreement_at_b:
+  "All b a ra rb #i.
+     CommitB(b, a, ra, rb) @ #i
+   ==>
+     (Ex #j. RunningA(a, b, ra, rb) @ #j & #j < #i
+       & not (Ex b2 a2 #i2. CommitB(b2, a2, ra, rb) @ #i2 & not (#i2 = #i)))"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

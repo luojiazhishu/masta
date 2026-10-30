@@ -1,0 +1,40 @@
+theory LAK06 begin
+
+builtins: hashing, xor
+
+rule Provisioning:
+  [ Fr(~k) ]
+  --[ Provision() ]->
+  [ !Ltk($R, $T, ~k) ]
+
+rule RuleStep1:
+  [ Fr(~r0), !Ltk($R, $T, k) ]
+  --[ Test1() ]->
+  [ Out(<~r0, ~r0>), St_R1($R, $T, ~r0, k) ]
+
+rule RuleStep2:
+  [ In(<r0, r0>), !Ltk($R, $T, k), Fr(~r1) ]
+  --[ Test2() ]->
+  [ Out(<~r1, h(r0 XOR ~r1 XOR k)>), St_T1($R, $T, r0, ~r1, k) ]
+
+rule RuleStep3:
+  [
+    In(<r1, h(r0 XOR r1 XOR k)>),
+    St_R1($R, $T, r0, k)
+  ]
+  --[ Test3() ]->
+  [ Out(h(h(r0 XOR r1 XOR k) XOR k XOR r0)) ]
+
+rule RuleStep4:
+  [
+    In(h(h(r0 XOR r1 XOR k) XOR k XOR r0)),
+    St_T1($R, $T, r0, r1, k)
+  ]
+  --[ Test4() ]->
+  []
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4. Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4 & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end

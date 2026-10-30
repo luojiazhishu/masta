@@ -1,0 +1,59 @@
+theory SymmetricKeyEncapsulationAux
+begin
+
+builtins: symmetric-encryption
+
+functions: tag_aux/2
+
+// Setup of long-term shared symmetric key between I and R.
+rule Setup_SharedKey:
+    [ Fr(~k) ]
+  -->
+    [ !SharedKey($I, $R, ~k) ]
+
+// Reveal of the long-term shared symmetric key to the adversary.
+rule Reveal_SharedKey:
+    [ !SharedKey(I, R, k) ]
+  --[ LtkReveal(I), LtkReveal(R) ]->
+    [ Out(k) ]
+
+// Action block 1: Initiator generates sec and pub, encapsulates them
+// with the long-term shared key k, and sends the ciphertext.
+rule I_Send:
+    [ !SharedKey($I, $R, k), Fr(~sec), Fr(~pub) ]
+  --[ Test1()
+    , Create($I, ~sec)
+    , Honest($I), Honest($R)
+    , Secret($I, $R, ~sec)
+    ]->
+    [ Out(senc(<~sec, ~pub>, k)) ]
+
+// Action block 2: Responder receives the ciphertext, the destructor
+// checks (pattern matching of senc(<sec, pub>, k) under k) succeed,
+// then it computes the responder-local auxr = tag_aux(sec, pub) and
+// releases pub into the public network.
+rule R_Recv:
+  let auxr = tag_aux(sec, pub)
+  in
+    [ !SharedKey($I, $R, k), In(senc(<sec, pub>, k)) ]
+  --[ Test2()
+    , Honest($I), Honest($R)
+    , AuxComputed($R, auxr)
+    ]->
+    [ Out(pub) ]
+
+// category: secrecy
+lemma secrecy:
+  "All A B x #i.
+     Secret(A, B, x) @ i
+   ==>
+       not (Ex #j. K(x) @ j)
+     | (Ex X #r. LtkReveal(X) @ r & Honest(X) @ i)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2.
+       Test1() @ #t1 & Test2() @ #t2
+     & #t1 < #t2"
+
+end

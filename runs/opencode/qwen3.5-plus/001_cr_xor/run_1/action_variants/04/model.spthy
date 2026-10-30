@@ -1,0 +1,60 @@
+theory CR_XOR_IAudit
+begin
+
+builtins: xor, hashing
+
+functions: com/2
+
+rule Setup:
+  [ Fr(~k) ]
+  --[ ]->
+  [ !Ltk(~k) ]
+
+rule Initiator_Start:
+  [ Fr(~na), !Ltk(k) ]
+  --[ Test1(), Create($I, $I), Running($I, $R, <'init', $I, $R, ~na>) ]->
+  [ Out(~na), St_I_1($I, $R, ~na, k) ]
+
+rule Responder_Receive:
+  [ In(na), !Ltk(k) ]
+  --[ Test2(), Create($R, $R), Running($R, $I, <'resp', $R, $I, na>) ]->
+  [ St_R_1($R, $I, na, k) ]
+
+rule Responder_Send:
+  [ Fr(~nb), St_R_1($R, $I, na, k) ]
+  --[ Test3() ]->
+  [ Out(<h(na XOR k XOR ~nb), ~nb>) ]
+
+rule Initiator_Verify:
+  [ St_I_1($I, $R, ~na, k), In(<h(~na XOR k XOR ~nb), ~nb>) ]
+  --[ Test4(), Commit($I, $R, <'init', $I, $R, ~na>) ]->
+  [ ]
+
+rule LtkReveal:
+  [ !Ltk(k) ]
+  --[ LtkReveal($A) ]->
+  [ Out(k) ]
+
+// category: aliveness
+lemma aliveness:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex c id #j. Create(c, id) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+// category: noninjective_agreement
+lemma noninjective_agreement:
+  "All a b t #i.
+     Commit(a, b, t) @ i
+   ==>
+       (Ex c d t2 #j. Running(c, d, t2) @ j)
+     | (Ex X #r. LtkReveal(X) @ r)"
+
+lemma executable:
+  exists-trace
+  "Ex #t1 #t2 #t3 #t4.
+       Test1() @ #t1 & Test2() @ #t2 & Test3() @ #t3 & Test4() @ #t4
+     & #t1 < #t2 & #t2 < #t3 & #t3 < #t4"
+
+end
